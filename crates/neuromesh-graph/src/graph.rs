@@ -1134,6 +1134,23 @@ impl NeuralProjectGraph {
             return ids.into_iter().next();
         }
         if let Some(hint) = file_hint {
+            // `path_hint_matches` falls back to matching any path component
+            // longer than two characters, so the hint `engine/train.py` also
+            // accepts `engine/evaluate.py` — every `main` in the project stays
+            // ambiguous and the caller silently gives up on the symbol. Try the
+            // exact file first; only then widen.
+            let exact: Vec<NodeId> = ids
+                .iter()
+                .filter(|id| {
+                    data.mesh
+                        .node(id)
+                        .is_some_and(|n| same_file_path(&n.file_path, hint))
+                })
+                .cloned()
+                .collect();
+            if exact.len() == 1 {
+                return exact.into_iter().next();
+            }
             let hinted: Vec<NodeId> = ids
                 .iter()
                 .filter(|id| {
@@ -2847,6 +2864,21 @@ fn ranking_bonus(node: &ContextNode, query: &str) -> f32 {
 
 fn normalize_path_hint(value: &str) -> String {
     value.replace('\\', "/").replace('-', "_").to_lowercase()
+}
+
+/// Whether a hint names this exact file. Node paths are workspace-relative and
+/// a hint may be absolute, so either side is allowed to be the longer one — but
+/// only on a full path segment, so `train.py` never matches `pretrain.py`.
+fn same_file_path(path: &Path, hint: &str) -> bool {
+    let path = normalize_path_hint(&path.to_string_lossy());
+    let hint = normalize_path_hint(hint);
+    if path.is_empty() || hint.is_empty() {
+        return false;
+    }
+    let ends_on_segment = |long: &str, short: &str| {
+        long.ends_with(short) && long[..long.len() - short.len()].ends_with('/')
+    };
+    path == hint || ends_on_segment(&hint, &path) || ends_on_segment(&path, &hint)
 }
 
 /// Relative file paths (`theme/default/hello.twig`) must not match every
