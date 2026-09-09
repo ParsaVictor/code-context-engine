@@ -63,7 +63,9 @@ mod tests {
             .assert_single_project()
             .expect_err("project-a nodes must still be detectable after the switch");
         assert!(
-            foreign.iter().any(|(pid, path)| pid == "project-a" && path == "src/lib.rs"),
+            foreign
+                .iter()
+                .any(|(pid, path)| pid == "project-a" && path == "src/lib.rs"),
             "expected a project-a node at src/lib.rs, got {foreign:?}"
         );
     }
@@ -99,7 +101,10 @@ mod tests {
         assert_eq!(graph.enforce_single_project(), 1);
         let hashes = graph.file_hashes();
         assert!(hashes.contains_key("src/fresh.rs"), "current project kept");
-        assert!(!hashes.contains_key("src/stale.rs"), "foreign project dropped");
+        assert!(
+            !hashes.contains_key("src/stale.rs"),
+            "foreign project dropped"
+        );
     }
 
     /// P0-5: an authoritative workspace root must survive ingest.
@@ -118,7 +123,10 @@ mod tests {
         file.full_path = PathBuf::from("/guessed/elsewhere/src/main.rs");
         graph.ingest_workspace(&[(file, "pub fn main() {}\n".to_string())]);
 
-        assert_eq!(graph.workspace_root().as_deref(), Some(authoritative.as_path()));
+        assert_eq!(
+            graph.workspace_root().as_deref(),
+            Some(authoritative.as_path())
+        );
     }
 
     #[test]
