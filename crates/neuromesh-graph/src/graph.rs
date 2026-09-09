@@ -774,11 +774,23 @@ impl NeuralProjectGraph {
                 // that already touches everything — the chain stops meaning
                 // anything. Resolve both ends like a call instead.
                 other if other.is_artifact() => {
+                    // File-local first: the source is usually a def in this very
+                    // file, and that is the only reading that survives a name
+                    // like `main` existing in three modules. But it can also be
+                    // imported — `build_transforms` is named in train.py and
+                    // defined in dataset.py — so fall through to the same
+                    // import-aware resolution the target uses.
                     let source = self
-                        .resolve_unique(
-                            &rel.source_symbol,
-                            Some(&rel.source_file.to_string_lossy()),
-                        )
+                        .resolve_in_file(&rel.source_symbol, &rel.source_file.to_string_lossy())
+                        .or_else(|| {
+                            self.resolve_call_ranked(
+                                &rel.source_symbol,
+                                &rel.source_file,
+                                &imported_files,
+                                None,
+                            )
+                            .map(|(id, _)| id)
+                        })
                         .unwrap_or_else(|| file_id.clone());
                     let target = self
                         .resolve_call_ranked(
@@ -1134,23 +1146,6 @@ impl NeuralProjectGraph {
             return ids.into_iter().next();
         }
         if let Some(hint) = file_hint {
-            // `path_hint_matches` falls back to matching any path component
-            // longer than two characters, so the hint `engine/train.py` also
-            // accepts `engine/evaluate.py` — every `main` in the project stays
-            // ambiguous and the caller silently gives up on the symbol. Try the
-            // exact file first; only then widen.
-            let exact: Vec<NodeId> = ids
-                .iter()
-                .filter(|id| {
-                    data.mesh
-                        .node(id)
-                        .is_some_and(|n| same_file_path(&n.file_path, hint))
-                })
-                .cloned()
-                .collect();
-            if exact.len() == 1 {
-                return exact.into_iter().next();
-            }
             let hinted: Vec<NodeId> = ids
                 .iter()
                 .filter(|id| {
@@ -1166,6 +1161,36 @@ impl NeuralProjectGraph {
             return None;
         }
         None
+    }
+
+    /// Resolve a name to the symbol defined in exactly this file.
+    ///
+    /// `resolve_unique` narrows with `path_hint_matches`, which falls back to
+    /// accepting any path component longer than two characters — so the hint
+    /// `engine/train.py` also accepts `engine/evaluate.py`, and in a project
+    /// where two modules each define `main`, both candidates survive, the count
+    /// is not one, and the caller gives up on the symbol entirely. For an
+    /// artifact edge that means `main Produces runs/last.pt` degrades to
+    /// `train.py Produces runs/last.pt`, which is a hub, not a fact.
+    ///
+    /// Kept separate rather than folded into `resolve_unique`: that function is
+    /// on the `Calls` path for every language, and tightening it there shifts
+    /// call-graph shape across the whole project. This is the artifact layer's
+    /// own resolver, where the caller knows the symbol is file-local.
+    pub fn resolve_in_file(&self, name: &str, file: &str) -> Option<NodeId> {
+        let name_lower = name.to_lowercase();
+        let data = self.inner.read();
+        let ids = data.name_to_nodes.get(&name_lower)?;
+        let mut exact = ids.iter().filter(|id| {
+            data.mesh
+                .node(id)
+                .is_some_and(|n| same_file_path(&n.file_path, file))
+        });
+        let first = exact.next()?;
+        match exact.next() {
+            None => Some(first.clone()),
+            Some(_) => None,
+        }
     }
 
     pub fn resolve_file_hint(&self, hint: &str) -> Option<NodeId> {
