@@ -35,9 +35,6 @@ jobs:
       - name: Cross-project isolation gate
         run: cargo test -p neuromesh-context --test cross_project_isolation -- --nocapture
 
-      - name: ML artifact graph gate
-        run: cargo test -p neuromesh-context --test ml_artifact_graph -- --nocapture
-
       - name: Embedding feature tests
         run: cargo test -p neuromesh-context --features embeddings --verbose
 
