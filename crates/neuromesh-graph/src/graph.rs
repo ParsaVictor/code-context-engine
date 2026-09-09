@@ -2740,7 +2740,9 @@ impl NeuralProjectGraph {
 fn type_search_rank(node_type: &NodeType) -> u8 {
     match node_type {
         NodeType::Class | NodeType::Component | NodeType::Api | NodeType::DbModel => 3,
+        NodeType::Model | NodeType::Dataset | NodeType::TrainLoop | NodeType::EvalLoop => 3,
         NodeType::Function | NodeType::Symbol => 2,
+        NodeType::Metric | NodeType::Checkpoint | NodeType::Transform | NodeType::Layer => 2,
         NodeType::File => 0,
         _ => 1,
     }
@@ -2765,6 +2767,7 @@ fn ranking_bonus(node: &ContextNode, query: &str) -> f32 {
         | NodeType::Component
         | NodeType::Api
         | NodeType::DbModel => 8.0,
+        t if t.is_artifact() => 8.0,
         NodeType::Symbol if node.name.eq_ignore_ascii_case(query) => 8.0,
         NodeType::StyleToken => 6.0,
         NodeType::File => 1.0,

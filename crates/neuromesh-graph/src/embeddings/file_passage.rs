@@ -3,6 +3,7 @@
 //! Preserves full module docstrings and complete function signatures (no mid-line
 //! truncation). A line budget caps how many symbols are included, not signature width.
 
+use crate::embeddings::sketch::node_type_label;
 use crate::NeuralProjectGraph;
 use neuromesh_core::{ContextNode, EdgeType, NodeType};
 use neuromesh_embed::{format_document_for_model, EmbeddingModelId};
@@ -109,6 +110,7 @@ fn format_signature_line(node: &ContextNode) -> String {
         NodeType::Config => "config",
         NodeType::Test => "test",
         NodeType::DbModel => "model",
+        t if t.is_artifact() => node_type_label(t),
         _ => "sym",
     };
     let sig = node.signature.as_deref().unwrap_or("").trim();
@@ -143,6 +145,7 @@ fn symbol_score(graph: &NeuralProjectGraph, node: &ContextNode, file_stem: &str)
         .to_lowercase();
     let mut score = match node.node_type {
         NodeType::Function | NodeType::Class | NodeType::Component => 10.0,
+        t if t.is_artifact() => 10.0,
         NodeType::Api => 9.0,
         NodeType::DbModel | NodeType::Config => 7.0,
         NodeType::Test => 2.0,
