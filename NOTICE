@@ -1,0 +1,21 @@
+code-context-engine
+===================
+
+This project is an independent derivative work that continues and extends
+NeuroMesh.
+
+Upstream project:
+  NeuroMesh — https://github.com/pinoox/neuromesh
+  Copyright (c) 2026 yoosef alipour <yoosefalipour@gmail.com>
+  Licensed under the MIT License (see LICENSE).
+
+Baseline import point: NeuroMesh v0.9.0 (git tag `baseline-v0.9.0` in this
+repository corresponds to upstream commit fe65e18).
+
+Modifications and new work in this repository:
+  Copyright (c) 2026 Parsa (github.com/ParsaVictor) and contributors
+  Licensed under the MIT License (see LICENSE).
+
+All original MIT license and copyright notices from the upstream project are
+retained. See ATTRIBUTION.md for a component-by-component list of third-party
+code, algorithms, and ideas incorporated into this project.

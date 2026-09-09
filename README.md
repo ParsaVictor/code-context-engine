@@ -1,4 +1,30 @@
+<!-- ═══════════════════════════════════════════════════════════════════════
+     code-context-engine — independent derivative of NeuroMesh
+     ─────────────────────────────────────────────────────────────────────
+     This repository continues and extends NeuroMesh (https://github.com/pinoox/neuromesh,
+     MIT © 2026 yoosef alipour). Baseline: NeuroMesh v0.9.0 (tag `baseline-v0.9.0`).
 
+     Why the fork:  (1) real per-project isolation — no cross-project graph
+     contamination;  (2) universal support — not just web, but ML / PyTorch /
+     notebooks / configs.  See ROADMAP.md and docs/planning/ (Persian).
+
+     Full credit to the upstream author. P0 (isolation) work is intended to be
+     offered back upstream as pull requests.  See NOTICE and ATTRIBUTION.md.
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+# code-context-engine
+
+> Local-first MCP context engine that cuts AI coding-agent token cost by ~90% —
+> a per-project code graph + folding for **Cursor**, **Claude Code**, **Codex**,
+> and every MCP client. Built for **web *and* ML** codebases.
+> **Status:** early — building [P0: project isolation](ROADMAP.md) on top of the NeuroMesh v0.9.0 baseline.
+
+<sub>Derivative of **[NeuroMesh](https://github.com/pinoox/neuromesh)** by yoosef alipour (MIT). See [NOTICE](NOTICE) · [ATTRIBUTION.md](ATTRIBUTION.md) · [ROADMAP.md](ROADMAP.md).</sub>
+
+---
+
+<details>
+<summary>Upstream NeuroMesh README (baseline v0.9.0)</summary>
 
 # NeuroMesh
 
@@ -250,3 +276,5 @@ Index on that project: **340 files · 552 ms**. Methodology and multilingual hol
 
 
 MIT · [LICENSE](LICENSE)
+
+</details>
