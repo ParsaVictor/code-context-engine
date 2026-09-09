@@ -119,7 +119,6 @@ struct PyBlock {
     /// Byte range of the block body, header included.
     start: usize,
     end: usize,
-    indent: usize,
 }
 
 impl PyBlock {
@@ -183,7 +182,6 @@ fn collect_blocks(content: &str, re: &Regex, with_bases: bool) -> Vec<PyBlock> {
             line: line_of(content, start),
             start,
             end: block_end(content, start, indent),
-            indent,
         });
     }
     blocks
@@ -807,7 +805,6 @@ fn module_level_loop(
         line,
         start: 0,
         end: content.len(),
-        indent: 0,
     })
 }
 
