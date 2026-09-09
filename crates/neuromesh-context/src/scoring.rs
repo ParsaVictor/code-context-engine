@@ -148,6 +148,10 @@ impl ActivationScorer {
     fn compute_task_impact(&self, node: &ContextNode, signature: &TaskSignature) -> f32 {
         let base: f32 = match node.node_type {
             NodeType::Component | NodeType::Api => 0.95,
+            // On an ML codebase these are what the task is actually about, so
+            // they rank with Component/Api rather than falling to the default.
+            NodeType::Model | NodeType::Dataset | NodeType::TrainLoop | NodeType::EvalLoop => 0.95,
+            NodeType::Metric | NodeType::Checkpoint | NodeType::Transform => 0.90,
             NodeType::File => 0.90,
             NodeType::DbModel => 0.90,
             NodeType::Function | NodeType::Class => 0.85,

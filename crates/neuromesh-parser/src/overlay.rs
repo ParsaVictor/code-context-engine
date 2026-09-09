@@ -20,6 +20,7 @@ pub fn apply(path: &Path, content: &str, language: SourceLanguage, ast: &mut Ast
         SourceLanguage::Python => {
             django_overlay(path, content, ast);
             fastapi_overlay(content, ast);
+            crate::ml_overlay::pytorch_overlay(path, content, ast);
         }
         SourceLanguage::Ruby => rails_overlay(path, content, ast),
         SourceLanguage::Dart => flutter_overlay(content, ast),

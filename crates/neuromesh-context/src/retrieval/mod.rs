@@ -1,6 +1,7 @@
 //! Tiered retrieval orchestration, sufficiency estimation, and impact analysis.
 
 pub mod alias;
+pub mod artifact_seeds;
 pub mod budget;
 pub mod calibration;
 pub mod concept_expand;
@@ -21,6 +22,7 @@ pub mod task_profile;
 pub mod tier;
 
 pub use alias::{alias_seed_queries, expand_aliases, AliasEntry};
+pub use artifact_seeds::resolve_artifact_seeds;
 pub use budget::RetrievalBudget;
 pub use calibration::{CalibrationReport, EvalSuiteMetrics};
 pub use concept_seeds::resolve_concept_seeds;

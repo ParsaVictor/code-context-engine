@@ -122,6 +122,7 @@ pub struct ContextActivator {
     registry: Arc<ReversibleContextRegistry>,
     last_physarum: Mutex<PhysarumTelemetry>,
     last_packet: Mutex<Option<PacketSnapshot>>,
+    physarum_sidecar: bool,
 }
 
 impl ContextActivator {
@@ -131,7 +132,26 @@ impl ContextActivator {
             registry,
             last_physarum: Mutex::new(PhysarumTelemetry::default()),
             last_packet: Mutex::new(None),
+            physarum_sidecar: true,
         }
+    }
+
+    /// Drop the Physarum sidecar from this activator's packets.
+    ///
+    /// The sidecar is best-effort: the tube is solved, and its files are added
+    /// only if the solve came in under `PHYSARUM_SLA_MS`. That is the right
+    /// trade for a live session and the wrong one for a measurement — packet
+    /// composition then depends on how loaded the machine is, so the same
+    /// query on the same graph can answer differently between two runs.
+    ///
+    /// A quality harness needs a fixed packet to compare against gold, so it
+    /// measures the deterministic path and leaves the opportunistic stage out.
+    /// Per-activator rather than a global switch: the harness builds its own
+    /// activator, and a process-wide flag would leak into every other test
+    /// sharing the binary.
+    pub fn without_physarum_sidecar(mut self) -> Self {
+        self.physarum_sidecar = false;
+        self
     }
 
     pub fn registry(&self) -> &Arc<ReversibleContextRegistry> {
@@ -500,7 +520,7 @@ impl ContextActivator {
 
         let mut physarum_used = false;
         let mut physarum_ms = 0u64;
-        if seed_set.len() >= 2 && !call_graph_task {
+        if self.physarum_sidecar && seed_set.len() >= 2 && !call_graph_task {
             let started = Instant::now();
             let tube = graph.solve_physarum_tube(&seed_set, hops.min(2));
             physarum_ms = started.elapsed().as_millis() as u64;

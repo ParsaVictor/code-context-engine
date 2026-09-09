@@ -20,6 +20,18 @@ pub fn node_type_label(node_type: NodeType) -> &'static str {
         NodeType::Decision => "decision",
         NodeType::Memory => "memory",
         NodeType::StyleToken => "style_token",
+        NodeType::Dataset => "dataset",
+        NodeType::Transform => "transform",
+        NodeType::Model => "model",
+        NodeType::Layer => "layer",
+        NodeType::TrainLoop => "train_loop",
+        NodeType::EvalLoop => "eval_loop",
+        NodeType::Checkpoint => "checkpoint",
+        NodeType::Metric => "metric",
+        NodeType::Experiment => "experiment",
+        NodeType::Hyperparameter => "hyperparameter",
+        NodeType::Notebook => "notebook",
+        NodeType::NotebookCell => "notebook_cell",
     }
 }
 

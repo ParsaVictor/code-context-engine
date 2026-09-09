@@ -19,36 +19,44 @@ gaps block it from being a *general* project context engine:
 Goal: **Maximum task success per token**, with **cross-project leakage = 0**, on
 **web + ML** codebases alike.
 
-## P0 — Isolation first (stop the bug)
+## P0 — Isolation first (stop the bug) — **done**
 
-- [ ] Deterministic `ProjectId = blake3(canonical git root)`, persisted in `<ws>/.neuromesh/id`
-- [ ] Central `registry.sqlite` (id ↔ path ↔ slot ↔ lang profile)
-- [ ] Namespace graph keys by `(ProjectId, NodeId)` across all derived indexes
-- [ ] Mandatory `project_id` filter in `search` / `trace` / `spreading_activation` + `debug_assert` no cross-scope nodes in a `ContextView`
-- [ ] `graph.clear()` before every hot-swap; drop the unsafe `same_workspace_path` early-return when `project_id` differs; lock workspace root once per index
-- [ ] Monorepo / multi-root detection + `sub_projects` config
-- [ ] **Leakage benchmark in CI** — 4 scenarios, assert `cross_project_files == 0`
+- [x] Deterministic `ProjectId`, derived from the canonical project root (sha256, matching the managed-store slot naming — nothing written into the user's repo)
+- [ ] Central `registry.sqlite` (id ↔ path ↔ slot ↔ lang profile) — deferred; not needed to close the bug, it is P1 infrastructure
+- [x] Single-project invariant enforced on the live graph (`assert_single_project` / `evict_foreign_nodes`), rather than namespacing every derived index key
+- [x] `graph.clear()` before every hot-swap; the `same_workspace_path` early-return now also requires the same `project_id`; workspace root locked once per index
+- [ ] Monorepo / multi-root detection + `sub_projects` config — one repo is still one project
+- [x] **Leakage gate in CI** — two projects sharing a byte-identical file, assert zero cross-project files in the packet
+- [x] Ignore rules scoped to the project root, and a guessed workspace with no project marker is refused
 - [ ] (optional) `LruCache<ProjectId, ProjectContext>` for concurrent multi-project serving
 
-**Definition of done:** open project A (Rust web) then project B (Python CV) in one
+**Definition of done — met:** open project A (Rust web) then project B (Python CV) in one
 MCP process; every B query returns zero A files; CI proves it.
+Offered upstream as [pinoox/neuromesh#34](https://github.com/pinoox/neuromesh/pull/34).
 
 ## P1 — Universal Artifact Graph (grow the knowledge)
 
-- [ ] Add generic + ML `NodeType` / `EdgeType` (Artifact IR)
+- [x] Add generic + ML `NodeType` / `EdgeType` (Artifact IR)
 - [ ] tree-sitter grammars: C, C++, R, Julia, Scala, Lua, Bash, TOML
 - [ ] `tree-sitter-stack-graphs` name resolution (Python / JS / TS first)
 - [ ] SCIP index ingestion when present
 - [ ] `.ipynb` parser (ordered cells + cross-cell DEF-USE)
 - [ ] Config→Code layer (YAML / Hydra / argparse → `Hyperparameter` / `Parameterizes`)
-- [ ] **ML framework overlays — PyTorch object detection first** (`nn.Module`, `forward`, `DataLoader`, train loop, checkpoint, mAP metric)
+- [x] **ML framework overlays — PyTorch object detection first** (`nn.Module`, `forward`, `DataLoader`, train loop, checkpoint, mAP metric)
 - [ ] `tantivy` BM25 replaces hand-rolled lexical retrieval
 - [ ] Reranker + query-conditioned pruning
 - [ ] Gold dataset: 1 web + 1 NLP + 1 CV project; extend `neuromesh eval`
 
-**Killer demo:** *"Why did the model's mAP drop?"* → the engine walks
-`Metric(mAP) → EvalLoop → Model → Checkpoint → Transform → Dataset`, ~95% fewer
-tokens than opening the repo.
+**Killer demo — the walk exists,** gated in CI by
+`crates/neuromesh-context/tests/ml_artifact_graph.rs` over artifact edges only:
+
+```
+val/mAP <-Produces- evaluate -Evaluates-> Detector <-CheckpointOf- runs/last.pt
+        <-Produces- main -Consumes-> CocoDetection <-Transforms- build_transforms
+```
+
+Still to measure: the token saving against opening the repo, once the gold
+dataset and `neuromesh eval` cover a CV project.
 
 ## P2 — Deeper compression & knowledge
 

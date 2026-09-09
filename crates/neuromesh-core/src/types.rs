@@ -113,6 +113,51 @@ pub enum NodeType {
     Decision,
     Memory,
     StyleToken,
+    // --- Artifact layer: ML / data-pipeline vocabulary ---------------------
+    /// A dataset definition — a `Dataset` subclass, a loader, a data module.
+    Dataset,
+    /// A preprocessing or augmentation step applied to samples.
+    Transform,
+    /// A trainable model — an `nn.Module` subclass, a `from_pretrained` wrapper.
+    Model,
+    /// A named component *inside* a model: a backbone, a head, a block.
+    Layer,
+    /// The training loop that consumes a dataset and updates a model.
+    TrainLoop,
+    /// The evaluation / validation loop that scores a model.
+    EvalLoop,
+    /// A saved or loaded set of weights.
+    Checkpoint,
+    /// A quantity a loop reports: loss, accuracy, mAP.
+    Metric,
+    /// One configured run: a sweep entry, an experiment name, a tracked run.
+    Experiment,
+    /// A tunable value that parameterizes a model, loop, or transform.
+    Hyperparameter,
+    /// A notebook file as a whole.
+    Notebook,
+    /// One ordered cell inside a notebook.
+    NotebookCell,
+}
+
+impl NodeType {
+    /// Nodes that exist because a framework overlay recognised them, rather
+    /// than because the language parser found a symbol.
+    pub fn is_artifact(&self) -> bool {
+        matches!(
+            self,
+            NodeType::Dataset
+                | NodeType::Transform
+                | NodeType::Model
+                | NodeType::Layer
+                | NodeType::TrainLoop
+                | NodeType::EvalLoop
+                | NodeType::Checkpoint
+                | NodeType::Metric
+                | NodeType::Experiment
+                | NodeType::Hyperparameter
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -128,6 +173,25 @@ pub enum EdgeType {
     RelatedTo,
     UsedBy,
     PreviouslySuccessfulWith,
+    // --- Artifact layer: how ML artifacts relate --------------------------
+    /// A training loop trains a model.
+    Trains,
+    /// An evaluation loop scores a model.
+    Evaluates,
+    /// A loop or function emits an artifact: a checkpoint, a metric value.
+    Produces,
+    /// A loop or model reads an artifact: a dataset, a checkpoint.
+    Consumes,
+    /// A transform is applied to a dataset or a sample.
+    Transforms,
+    /// A checkpoint holds the weights of a model.
+    CheckpointOf,
+    /// A model's quality is reported by a metric.
+    MeasuredBy,
+    /// A hyperparameter configures a model, loop, or transform.
+    Parameterizes,
+    /// Ordering between notebook cells: an earlier cell precedes a later one.
+    Precedes,
 }
 
 impl EdgeType {
@@ -144,7 +208,36 @@ impl EdgeType {
             EdgeType::UsedBy => 0.65,
             EdgeType::TestedBy => 0.50,
             EdgeType::RelatedTo => 0.40,
+            // Artifact edges carry the "why did this metric move?" chain, and a
+            // metric sits six hops from the dataset that produced it, so they
+            // have to survive the walk the way Imports and DependsOn do.
+            EdgeType::Trains => 0.95,
+            EdgeType::Evaluates => 0.95,
+            EdgeType::Produces => 0.92,
+            EdgeType::Consumes => 0.92,
+            EdgeType::CheckpointOf => 0.90,
+            EdgeType::MeasuredBy => 0.90,
+            EdgeType::Transforms => 0.88,
+            EdgeType::Parameterizes => 0.85,
+            // Cell adjacency is real but weak: being the next cell says little.
+            EdgeType::Precedes => 0.60,
         }
+    }
+
+    /// Edges introduced by the artifact layer, as opposed to language-level
+    /// structure recovered from the AST.
+    pub fn is_artifact(&self) -> bool {
+        matches!(
+            self,
+            EdgeType::Trains
+                | EdgeType::Evaluates
+                | EdgeType::Produces
+                | EdgeType::Consumes
+                | EdgeType::Transforms
+                | EdgeType::CheckpointOf
+                | EdgeType::MeasuredBy
+                | EdgeType::Parameterizes
+        )
     }
 }
 
@@ -678,5 +771,57 @@ mod tests {
             false,
         );
         assert_eq!(report.claim, "bounded");
+    }
+}
+
+#[cfg(test)]
+mod artifact_ir_tests {
+    use super::*;
+
+    #[test]
+    fn artifact_edges_survive_the_metric_to_dataset_walk() {
+        // The killer query walks Metric -> EvalLoop -> Model -> Checkpoint ->
+        // Transform -> Dataset. Five hops of pure attenuation must not bury the
+        // dataset below the weakest language edge a single hop away.
+        let chain = [
+            EdgeType::MeasuredBy,
+            EdgeType::Evaluates,
+            EdgeType::CheckpointOf,
+            EdgeType::Consumes,
+            EdgeType::Transforms,
+        ];
+        let survived: f32 = chain.iter().map(|e| e.attenuation()).product();
+        assert!(
+            survived > EdgeType::RelatedTo.attenuation(),
+            "artifact chain attenuates to {survived}, below a single RelatedTo hop"
+        );
+    }
+
+    #[test]
+    fn artifact_predicates_agree_with_the_variant_lists() {
+        assert!(NodeType::Model.is_artifact());
+        assert!(NodeType::Metric.is_artifact());
+        // A notebook is a file on disk, not a recognised ML artifact.
+        assert!(!NodeType::Notebook.is_artifact());
+        assert!(!NodeType::NotebookCell.is_artifact());
+        assert!(!NodeType::Function.is_artifact());
+
+        assert!(EdgeType::Trains.is_artifact());
+        assert!(EdgeType::Parameterizes.is_artifact());
+        // Cell ordering is structural, not an artifact relation.
+        assert!(!EdgeType::Precedes.is_artifact());
+        assert!(!EdgeType::Calls.is_artifact());
+    }
+
+    #[test]
+    fn artifact_variants_serialize_as_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&NodeType::TrainLoop).unwrap(),
+            "\"train_loop\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EdgeType::CheckpointOf).unwrap(),
+            "\"checkpoint_of\""
+        );
     }
 }

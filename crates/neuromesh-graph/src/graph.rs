@@ -767,6 +767,70 @@ impl NeuralProjectGraph {
                         false
                     }
                 }
+                // Artifact edges are symbol-to-symbol by construction: the whole
+                // point of `EvalLoop -> Model` is that it names two symbols. The
+                // generic arm below anchors on the *file* node, which for a
+                // 3-file project makes every artifact edge run through a hub
+                // that already touches everything — the chain stops meaning
+                // anything. Resolve both ends like a call instead.
+                other if other.is_artifact() => {
+                    // File-local first: the source is usually a def in this very
+                    // file, and that is the only reading that survives a name
+                    // like `main` existing in three modules. But it can also be
+                    // imported — `build_transforms` is named in train.py and
+                    // defined in dataset.py — so fall through to the same
+                    // import-aware resolution the target uses.
+                    let source = self
+                        .resolve_in_file(&rel.source_symbol, &rel.source_file.to_string_lossy())
+                        .or_else(|| {
+                            self.resolve_call_ranked(
+                                &rel.source_symbol,
+                                &rel.source_file,
+                                &imported_files,
+                                None,
+                            )
+                            .map(|(id, _)| id)
+                        })
+                        .unwrap_or_else(|| file_id.clone());
+                    // Import-scoped only, deliberately. The global ranked search
+                    // used to run as a fallback here and reached across the
+                    // whole project for a name — on pytorch/examples it bound a
+                    // Python `generate` to a class called `Model` in a *C++*
+                    // file. An artifact relation has to be grounded in
+                    // something the source file can actually see.
+                    let target = self
+                        .resolve_call_ranked(
+                            &rel.target_symbol,
+                            &rel.source_file,
+                            &imported_files,
+                            rel.receiver_hint.as_deref(),
+                        )
+                        .or_else(|| {
+                            rel.target_file_hint
+                                .as_deref()
+                                .and_then(|hint| self.resolve_file_hint(hint))
+                                .map(|id| (id, EdgeConfidence::Likely))
+                        });
+                    // An artifact overlay reads one language, so its edges stay
+                    // inside it. Without this, a Python `generate` in
+                    // pytorch/examples bound to a class named `Model` in a
+                    // `.cpp` file — the name matched and nothing else objected.
+                    let target = target.filter(|(id, _)| {
+                        self.get_node(id).is_some_and(|node| {
+                            node.file_path.extension() == rel.source_file.extension()
+                        })
+                    });
+                    match target {
+                        Some((target, confidence)) if target != source => {
+                            self.add_edge_with_confidence(source, target, other, confidence);
+                            true
+                        }
+                        // A self-edge is not a failure — the symbol was found,
+                        // it just happens to be the one we started from.
+                        Some(_) => true,
+                        None => false,
+                    }
+                }
                 other => {
                     if let Some((target, confidence)) = self.resolve_ranked(
                         &rel.target_symbol,
@@ -911,6 +975,20 @@ impl NeuralProjectGraph {
     /// Lookup symbol node ids for a code-derived concept id.
     pub fn concept_nodes(&self, concept: &str) -> Vec<NodeId> {
         self.inner.read().concept_index.lookup(concept).to_vec()
+    }
+
+    /// Every node a framework overlay typed as an ML artifact, with its type.
+    ///
+    /// Retrieval asks by *kind* here rather than by name — "where is the
+    /// checkpoint saved" wants Checkpoint nodes whatever they happen to be
+    /// called — which no name index can answer.
+    pub fn artifact_nodes(&self) -> Vec<(NodeId, NodeType)> {
+        let data = self.inner.read();
+        data.mesh
+            .nodes()
+            .filter(|n| n.node_type.is_artifact())
+            .map(|n| (n.id.clone(), n.node_type))
+            .collect()
     }
 
     pub fn search_symbols(&self, query: &str, limit: usize) -> Vec<SearchHit> {
@@ -1111,6 +1189,36 @@ impl NeuralProjectGraph {
             return None;
         }
         None
+    }
+
+    /// Resolve a name to the symbol defined in exactly this file.
+    ///
+    /// `resolve_unique` narrows with `path_hint_matches`, which falls back to
+    /// accepting any path component longer than two characters — so the hint
+    /// `engine/train.py` also accepts `engine/evaluate.py`, and in a project
+    /// where two modules each define `main`, both candidates survive, the count
+    /// is not one, and the caller gives up on the symbol entirely. For an
+    /// artifact edge that means `main Produces runs/last.pt` degrades to
+    /// `train.py Produces runs/last.pt`, which is a hub, not a fact.
+    ///
+    /// Kept separate rather than folded into `resolve_unique`: that function is
+    /// on the `Calls` path for every language, and tightening it there shifts
+    /// call-graph shape across the whole project. This is the artifact layer's
+    /// own resolver, where the caller knows the symbol is file-local.
+    pub fn resolve_in_file(&self, name: &str, file: &str) -> Option<NodeId> {
+        let name_lower = name.to_lowercase();
+        let data = self.inner.read();
+        let ids = data.name_to_nodes.get(&name_lower)?;
+        let mut exact = ids.iter().filter(|id| {
+            data.mesh
+                .node(id)
+                .is_some_and(|n| same_file_path(&n.file_path, file))
+        });
+        let first = exact.next()?;
+        match exact.next() {
+            None => Some(first.clone()),
+            Some(_) => None,
+        }
     }
 
     pub fn resolve_file_hint(&self, hint: &str) -> Option<NodeId> {
@@ -2740,7 +2848,9 @@ impl NeuralProjectGraph {
 fn type_search_rank(node_type: &NodeType) -> u8 {
     match node_type {
         NodeType::Class | NodeType::Component | NodeType::Api | NodeType::DbModel => 3,
+        NodeType::Model | NodeType::Dataset | NodeType::TrainLoop | NodeType::EvalLoop => 3,
         NodeType::Function | NodeType::Symbol => 2,
+        NodeType::Metric | NodeType::Checkpoint | NodeType::Transform | NodeType::Layer => 2,
         NodeType::File => 0,
         _ => 1,
     }
@@ -2765,6 +2875,7 @@ fn ranking_bonus(node: &ContextNode, query: &str) -> f32 {
         | NodeType::Component
         | NodeType::Api
         | NodeType::DbModel => 8.0,
+        t if t.is_artifact() => 8.0,
         NodeType::Symbol if node.name.eq_ignore_ascii_case(query) => 8.0,
         NodeType::StyleToken => 6.0,
         NodeType::File => 1.0,
@@ -2806,6 +2917,21 @@ fn ranking_bonus(node: &ContextNode, query: &str) -> f32 {
 
 fn normalize_path_hint(value: &str) -> String {
     value.replace('\\', "/").replace('-', "_").to_lowercase()
+}
+
+/// Whether a hint names this exact file. Node paths are workspace-relative and
+/// a hint may be absolute, so either side is allowed to be the longer one — but
+/// only on a full path segment, so `train.py` never matches `pretrain.py`.
+fn same_file_path(path: &Path, hint: &str) -> bool {
+    let path = normalize_path_hint(&path.to_string_lossy());
+    let hint = normalize_path_hint(hint);
+    if path.is_empty() || hint.is_empty() {
+        return false;
+    }
+    let ends_on_segment = |long: &str, short: &str| {
+        long.ends_with(short) && long[..long.len() - short.len()].ends_with('/')
+    };
+    path == hint || ends_on_segment(&hint, &path) || ends_on_segment(&path, &hint)
 }
 
 /// Relative file paths (`theme/default/hello.twig`) must not match every
