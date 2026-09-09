@@ -11,14 +11,35 @@
 
 ## ۱. ریشه‌ی دقیق باگ (از روی کد baseline)
 
-| # | محل | مشکل |
-|---|---|---|
-| A | `crates/neuromesh-mcp/src/server.rs` → `adopt_workspace_from_initialize` | قبل از `load_persisted` + `reindex_incremental` **`graph.clear()` صدا زده نمی‌شود**. اگر پروژه‌ی جدید `graph.bin` نداشته باشد، `load_from` مقدار `false` برمی‌گرداند و گراف پروژه‌ی قبلی دست‌نخورده می‌ماند؛ بعد `reindex_incremental` فقط فایل‌های جدید را روی همان گراف اضافه می‌کند. |
-| B | `crates/neuromesh-graph/src/graph.rs` → `reindex_incremental` (حدود خط ۱۵۵۳) و `load_from`→`install_snapshot` | `install_snapshot` از `mesh.load_lists` استفاده می‌کند که `clear` می‌کند (خوب)، ولی فقط وقتی snapshot موجود باشد. `reindex_incremental` بر اساس `file_fingerprints` کار می‌کند و گره‌های «خارج از workspace فعلی» را حذف نمی‌کند. |
-| C | `crates/neuromesh-core/src/types.rs` → `NodeId` | `NodeId` صرفاً `file:<path>` یا `sym:<path>:<symbol>` است. هیچ پیشوند پروژه ندارد. `ContextNode.project_id` هست ولی جزو کلید `MeshStore.node_of` (`HashMap<NodeId, u32>`) و هیچ‌کدام از ایندکس‌های مشتق (`name_to_nodes`, `file_to_nodes`, `token_to_nodes`, `path_index`, `impl_index`, `export_index`, `concept_index`) نیست. |
-| D | `server.rs` → گارد `same_workspace_path` | اگر تشخیص workspace برای A و B به یک مسیر برسد (monorepo، نبود `rootUri`، بایند به `$HOME`)، زودخروج می‌کند و گراف A روی B سرو می‌شود. |
-| E | `graph.rs` → `reindex_incremental` حلقه‌ی `infer_workspace_root(file)` + `set_workspace(&root)` | `workspace_root` در حین ایندکس روی هر فایل عوض می‌شود؛ در monorepo نوسان می‌کند. |
-| F | `crates/neuromesh-mcp/src/tools.rs` → `McpToolHandler` یک `Arc<NeuralProjectGraph>` | یک گراف زنده در کل عمر پروسه؛ سرو هم‌زمان چند پروژه ممکن نیست. |
+> **تصحیح نسبت به نسخه‌ی اول این سند.** ادعای اولیه این بود که «اگر پروژه‌ی دوم
+> `graph.bin` نداشته باشد، گره‌های A و B در یک گراف قاطی می‌شوند». مطالعه‌ی
+> دقیق‌تر مسیر ingest نشان داد این ادعا **درست نیست**: `reindex_incremental` →
+> `ingest_scan_report` ابتدا `prune_absent_files(present)` را صدا می‌زند، و
+> `ScanReport.present` شامل **همه‌ی مسیرهای نسبی نگه‌داشته‌شده‌ی پروژه‌ی جدید**
+> است (نه فقط فایل‌های تغییرکرده). پس هر کلید `file_hashes` که در B نباشد
+> حذف می‌شود ⟹ حجم عمده‌ی گره‌های A پاک می‌شوند.
+>
+> نتیجه‌ی درست: **ایزوله‌سازی فعلی «تصادفی» است، نه «تضمین‌شده»** — به
+> حسابداری `file_hashes` و به تصادفی‌نبودن مسیرها/محتوا وابسته است، و سه مسیر
+> نشتی واقعی باقی می‌ماند (A2، D، G در جدول زیر). این دقیقاً همان چیزی است که
+> فاز ۰ باید به «تضمین‌شده» تبدیلش کند.
+
+| # | محل | مشکل | شدت |
+|---|---|---|---|
+| A1 | `mcp/server.rs` → `adopt_workspace_from_initialize` | قبل از `load_persisted` + `reindex_incremental` `graph.clear()` صدا زده نمی‌شود. در عمل `prune_absent_files` جبرانش می‌کند، ولی این یک **اثر جانبی** است نه یک ضمانت. | متوسط |
+| A2 | `graph.rs` → `ingest_file_keep` (early return) | `if file_hashes[rel] == new_hash { return }` — اگر A و B فایلی با **مسیر نسبی یکسان و محتوای بایت‌به‌بایت یکسان** داشته باشند (`LICENSE`، `.gitignore`، `__init__.py` خالی، `Cargo.toml` بویلرپلیت، `README` مشترک)، فایل B اصلاً ingest نمی‌شود و **گره‌های A با `project_id` خودِ A زنده می‌مانند**. | **نشتی واقعی** |
+| B | `graph.rs` → `load_from` → `install_snapshot` | `mesh.load_lists` درست `clear` می‌کند — این مسیر سالم است. | ✅ |
+| C | `core/types.rs` → `NodeId` | `NodeId` صرفاً `file:<path>` یا `sym:<path>:<symbol>` است، بدون پیشوند پروژه. `ContextNode.project_id` ذخیره می‌شود ولی **در هیچ کوئری فیلتر نمی‌شود** و جزو کلید `MeshStore.node_of` یا ایندکس‌های مشتق نیست. یعنی هیچ لایه‌ی دفاعی دومی وجود ندارد. | ساختاری |
+| D | `server.rs` → گارد `same_workspace_path` | اگر تشخیص workspace برای A و B به یک مسیر برسد (monorepo، نبود `rootUri`، بایند به `$HOME`)، **زودخروج می‌کند و کل گراف A روی B سرو می‌شود**. هیچ pruning‌ای اجرا نمی‌شود چون هیچ reindex‌ای اجرا نمی‌شود. | **نشتی کامل** |
+| E | `graph.rs` → `ingest_workspace_inner` | `if let Some((file, _)) = scanned.first() { set_workspace(infer_workspace_root(file)) }` — `workspace_root` که `reindex_incremental` تازه به‌درستی ست کرده بود، با حدسی از **اولین فایل بچ** بازنویسی می‌شود. (اصلاح: این «به‌ازای هر فایل در حلقه» نیست، فقط اولین فایل بچ است.) | متوسط |
+| G | `mcp/server.rs:158` و `cli/main.rs:164` | `ProjectId::new(&p_name)` که `p_name = path.file_name()` — **شناسه‌ی پروژه از نام پوشه ساخته می‌شود**. دو چک‌اوت متفاوت با نام `app`/`api`/`backend` یک شناسه می‌گیرند. `project_id` روی گره‌ها را بی‌اثر و هر مقایسه‌ی «همان پروژه است؟» را غلط می‌کند. | **نشتی واقعی** — با #1 حل شد |
+| F | `mcp/tools.rs` → `McpToolHandler` یک `Arc<NeuralProjectGraph>` | یک گراف زنده در کل عمر پروسه؛ سرو هم‌زمان چند پروژه ممکن نیست. | محدودیت |
+
+**پیامد برای طراحی:** چون A2 و D سناریوهای باریک ولی واقعی‌اند، تست نشتی (P0-8)
+نباید صرفاً «سوییچ کن و امیدوار باش» باشد؛ باید **عمداً** این حالت‌ها را بسازد:
+فایل‌های هم‌مسیر و هم‌محتوا بین دو فیکسچر، و سناریوی سوییچِ رد‌شده.
+و ارزش P0-3 (گارد ناوردا) بالاتر می‌رود: ایزوله‌سازی تصادفی را با استفاده از
+`project_id` که **از قبل روی هر گره ذخیره است** به ایزوله‌سازی تضمین‌شده تبدیل می‌کند.
 
 ---
 
@@ -79,24 +100,34 @@ struct Registry { projects: Vec<ProjectRecord> }
 
 **فایل:** `crates/neuromesh-graph/src/graph.rs`
 
+نکته‌ی کلیدی: `ContextNode.file_path` **نسبی** است (`src/main.rs`)، پس چک
+«زیر `workspace_root` است؟» برایش کار نمی‌کند. ولی `ContextNode.project_id`
+**از قبل روی هر گره ذخیره می‌شود** — پس گارد هم دقیق است و هم رایگان (`O(n)`
+بدون I/O):
+
 ```rust
 impl NeuralProjectGraph {
-    /// هر گره‌ای که file_path آن زیر workspace_root فعلی نیست = نشتی.
-    pub fn assert_single_project(&self) -> Result<(), Vec<String>> {
-        let data = self.inner.read();
-        let Some(root) = &data.workspace_root else { return Ok(()) };
-        let bad: Vec<String> = data.mesh.nodes()
-            .filter(|n| !path_is_within(&n.file_path, root))
-            .map(|n| n.file_path.to_string_lossy().into())
-            .collect();
-        if bad.is_empty() { Ok(()) } else { Err(bad) }
+    /// هر گره‌ای که project_id آن با پروژه‌ی فعلی گراف فرق دارد = نشتی.
+    /// خروجی: فهرست (project_id بیگانه، مسیر) برای گزارش.
+    pub fn foreign_nodes(&self) -> Vec<(String, String)> { … }
+
+    pub fn assert_single_project(&self) -> std::result::Result<(), Vec<(String, String)>> {
+        let foreign = self.foreign_nodes();
+        if foreign.is_empty() { Ok(()) } else { Err(foreign) }
     }
+
+    /// حذف هر گره‌ی بیگانه؛ تعداد حذف‌شده را برمی‌گرداند. مسیر self-heal.
+    pub fn evict_foreign_nodes(&self) -> usize { … }
 }
 ```
 
 - در build دیباگ: `debug_assert!` بعد از هر `reindex_*`.
-- در release: اگر گارد شکست → لاگ `error!` + `self.clear(Some(pid))` + reindex تمیز (self-heal).
-- `path_is_within`: مقایسه‌ی canonical prefix.
+- در release: اگر گارد شکست → `tracing::error!` با تعداد و نمونه‌ها +
+  `evict_foreign_nodes()` (self-heal بدون از دست دادن کل ایندکس).
+- این دقیقاً سناریوی A2 (فایل هم‌مسیر و هم‌محتوا) را می‌گیرد، چون آن گره‌ها
+  `project_id` پروژه‌ی قبلی را با خود دارند.
+- `path_is_within` (در `neuromesh-core::project_id`) برای مقایسه‌ی مسیرهای
+  **مطلق** می‌ماند — تشخیص workspace در P0-6.
 
 ### ۳.۴ سوییچ workspace تمیز
 
