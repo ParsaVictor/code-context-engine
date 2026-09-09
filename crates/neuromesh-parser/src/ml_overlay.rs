@@ -69,7 +69,7 @@ pub fn pytorch_overlay(content: &str, ast: &mut AstAnalysisResult) {
     push_layers(content, &classes, &model_classes, ast);
     retype_defs(content, &defs, &classes, &model_classes, ast);
 
-    link_loops(
+    link_artifacts(
         content,
         &defs,
         &bindings,
@@ -350,15 +350,17 @@ fn is_eval_loop(body: &str) -> bool {
     body.contains("no_grad") || body.contains("inference_mode") || body.contains(".eval()")
 }
 
+/// Only a `Compose(` counts. Matching on `transforms.` or `augment` looked
+/// tempting and turned every `main(..., augment=True)` into a Transform.
 fn is_transform_builder(body: &str) -> bool {
-    body.contains("Compose(") || body.contains("transforms.") || body.contains("augment")
+    body.contains("Compose(")
 }
 
 // ---------------------------------------------------------------------------
 // Linking
 // ---------------------------------------------------------------------------
 
-fn link_loops(
+fn link_artifacts(
     content: &str,
     defs: &[PyBlock],
     bindings: &HashMap<String, String>,
@@ -370,20 +372,52 @@ fn link_loops(
         let body = def.body(content);
         let train = is_train_loop(body);
         let eval = !train && is_eval_loop(body);
-        if !train && !eval {
-            continue;
+
+        // Only a loop trains or evaluates a model.
+        if train || eval {
+            let edge = if train {
+                EdgeType::Trains
+            } else {
+                EdgeType::Evaluates
+            };
+            for model in model_references(body, bindings, model_classes) {
+                push_relationship(ast, &def.name, &model, edge, None);
+            }
         }
-        let edge = if train {
-            EdgeType::Trains
-        } else {
-            EdgeType::Evaluates
-        };
-        for model in model_references(body, bindings, model_classes) {
-            push_relationship(ast, &def.name, &model, edge, None);
-        }
+
+        // But whoever builds the DataLoader consumes the dataset, and in every
+        // real script that is `main`, not the loop it hands the loader to.
+        // Restricting this to loops left the dataset unreachable from anything.
         for dataset in dataset_references(body, bindings, dataset_classes) {
             push_relationship(ast, &def.name, &dataset, EdgeType::Consumes, None);
         }
+    }
+
+    link_transforms(content, bindings, ast);
+}
+
+/// `CocoDetection(root, transforms=pipeline)` states, in one keyword argument,
+/// which transform pipeline shapes which dataset — the `Transform -> Dataset`
+/// link the mAP question needs, and the only place it is written down.
+fn link_transforms(content: &str, bindings: &HashMap<String, String>, ast: &mut AstAnalysisResult) {
+    static KWARG_RE: OnceLock<Regex> = OnceLock::new();
+    let re = KWARG_RE.get_or_init(|| {
+        Regex::new(
+            r"\b([A-Za-z_]\w*)[ \t]*\((?:[^()]|\([^()]*\))*?\btransforms?[ \t]*=[ \t]*([A-Za-z_]\w*)",
+        )
+        .unwrap()
+    });
+    for cap in re.captures_iter(content) {
+        let (ctor, value) = match (cap.get(1), cap.get(2)) {
+            (Some(c), Some(v)) => (c.as_str(), v.as_str()),
+            _ => continue,
+        };
+        if value == "None" {
+            continue;
+        }
+        let dataset = bindings.get(ctor).cloned().unwrap_or_else(|| ctor.into());
+        let transform = bindings.get(value).cloned().unwrap_or_else(|| value.into());
+        push_relationship(ast, &transform, &dataset, EdgeType::Transforms, None);
     }
 }
 
