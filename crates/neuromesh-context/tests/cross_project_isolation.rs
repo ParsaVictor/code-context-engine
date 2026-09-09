@@ -25,15 +25,40 @@ fn use_temp_neuromesh_home() {
     std::env::set_var("NEUROMESH_HOME", &home);
 }
 
-fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+/// Copy a fixture out of this repository into its own directory.
+///
+/// `stable_project_id` resolves to the nearest enclosing git repository, which
+/// is the behaviour we want — one repo is one project, and splitting a monorepo
+/// into sub-projects is a separate, explicit feature. It also means every
+/// fixture *inside* this repo shares this repo's id. Staging each fixture in
+/// its own directory outside any repository is what two real checkouts look
+/// like, and it keeps the test from writing anywhere in the source tree.
+fn staged_fixture(name: &str) -> PathBuf {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
         .join("tests")
         .join("fixtures")
-        .join(name)
-        .canonicalize()
-        .unwrap_or_else(|err| panic!("fixture {name} must exist: {err}"))
+        .join(name);
+    assert!(src.is_dir(), "fixture {name} must exist at {src:?}");
+
+    let dst = std::env::temp_dir().join(format!("nm-iso-{}-{}", name, std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    copy_tree(&src, &dst);
+    dst.canonicalize().expect("staged fixture path")
+}
+
+fn copy_tree(src: &Path, dst: &Path) {
+    std::fs::create_dir_all(dst).expect("create staged dir");
+    for entry in std::fs::read_dir(src).expect("read fixture dir") {
+        let entry = entry.expect("fixture entry");
+        let to = dst.join(entry.file_name());
+        if entry.file_type().expect("entry type").is_dir() {
+            copy_tree(&entry.path(), &to);
+        } else {
+            std::fs::copy(entry.path(), &to).expect("copy fixture file");
+        }
+    }
 }
 
 /// Exactly what `adopt_workspace_from_initialize` does on a workspace change.
@@ -82,12 +107,12 @@ fn file_node_project_id(graph: &NeuralProjectGraph, rel: &str) -> Option<String>
 fn switching_projects_leaks_nothing_into_the_next_packet() {
     use_temp_neuromesh_home();
 
-    let web = fixture("iso-web-rust");
-    let ml = fixture("iso-ml-python");
+    let web = staged_fixture("iso-web-rust");
+    let ml = staged_fixture("iso-ml-python");
     assert_ne!(
         stable_project_id(&web),
         stable_project_id(&ml),
-        "fixtures must be distinct projects"
+        "staged fixtures must be distinct projects ({web:?} vs {ml:?})"
     );
 
     let web_pid = stable_project_id(&web).to_string();
@@ -149,4 +174,7 @@ fn switching_projects_leaks_nothing_into_the_next_packet() {
     // ---- re-indexing the same project is a no-op for the invariant ----
     swap_to(&graph, &web);
     assert_eq!(graph.assert_single_project(), Ok(()));
+
+    let _ = std::fs::remove_dir_all(&web);
+    let _ = std::fs::remove_dir_all(&ml);
 }
