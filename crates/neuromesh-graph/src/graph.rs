@@ -767,6 +767,44 @@ impl NeuralProjectGraph {
                         false
                     }
                 }
+                // Artifact edges are symbol-to-symbol by construction: the whole
+                // point of `EvalLoop -> Model` is that it names two symbols. The
+                // generic arm below anchors on the *file* node, which for a
+                // 3-file project makes every artifact edge run through a hub
+                // that already touches everything — the chain stops meaning
+                // anything. Resolve both ends like a call instead.
+                other if other.is_artifact() => {
+                    let source = self
+                        .resolve_unique(
+                            &rel.source_symbol,
+                            Some(&rel.source_file.to_string_lossy()),
+                        )
+                        .unwrap_or_else(|| file_id.clone());
+                    let target = self
+                        .resolve_call_ranked(
+                            &rel.target_symbol,
+                            &rel.source_file,
+                            &imported_files,
+                            rel.receiver_hint.as_deref(),
+                        )
+                        .or_else(|| {
+                            self.resolve_ranked(
+                                &rel.target_symbol,
+                                rel.target_file_hint.as_deref(),
+                                Some(&imported_files),
+                            )
+                        });
+                    match target {
+                        Some((target, confidence)) if target != source => {
+                            self.add_edge_with_confidence(source, target, other, confidence);
+                            true
+                        }
+                        // A self-edge is not a failure — the symbol was found,
+                        // it just happens to be the one we started from.
+                        Some(_) => true,
+                        None => false,
+                    }
+                }
                 other => {
                     if let Some((target, confidence)) = self.resolve_ranked(
                         &rel.target_symbol,
