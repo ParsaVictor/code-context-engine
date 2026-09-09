@@ -147,8 +147,25 @@ impl NeuralProjectGraph {
 4. watcher قبلی را متوقف کن، watcher جدید برای p_buf
 ```
 
-- گارد `same_workspace_path` ➜ جایگزین با مقایسه‌ی `pid`.
-- **مشکل E:** در `reindex_incremental` حلقه‌ی `infer_workspace_root` + `set_workspace` حذف شود؛ `workspace_root` پارامتر ورودی و ثابت.
+- گارد `same_workspace_path` ➜ زودخروج فقط وقتی **هم `pid` یکی باشد و هم root**.
+- **مشکل E:** در `ingest_workspace_inner` حدس‌زدن root فقط وقتی انجام شود که هیچ
+  rootی ست نشده باشد؛ root معتبرِ `reindex_incremental` بازنویسی نشود.
+
+**آشتی‌دادن شناسه‌ی snapshot ذخیره‌شده (`reconcile_loaded_project_id`)**
+
+یک `graph.bin` ذخیره‌شده همیشه متعلق به **یک** پروژه است، ولی شناسه‌ای که ثبت
+کرده ممکن است قدیمی باشد (نوشته‌شده در دورانی که `ProjectId` از نام پوشه می‌آمد).
+اگر بدون آشتی مستقیم سراغ گارد برویم، کل ایندکس معتبر evict می‌شود و یک اسکن
+کامل بی‌دلیل تحمیل می‌شود. پس داخل خودِ `load_persisted`:
+
+| حالت snapshot | تصمیم |
+|---|---|
+| همه‌ی گره‌ها شناسه‌ی فعلی | `AlreadyCurrent` — کاری لازم نیست |
+| همه‌ی گره‌ها **یک** شناسه‌ی قدیمیِ یکسان | `Restamped(n)` — دوباره مهر می‌خورند، ایندکس حفظ می‌شود |
+| **چند** شناسه‌ی متفاوت | `Mixed(n)` — نشتی واقعی؛ **عمداً مهر نمی‌خورد** و به `enforce_single_project` سپرده می‌شود |
+
+قرار دادن این منطق داخل `load_persisted` (نه فقط در MCP) هر ۹ فراخوان‌کننده‌ی
+`load_persisted` در CLI و MCP را یک‌جا درست می‌کند.
 
 ### ۳.۵ رد کردن workspaceهای ناامن / مبهم
 
