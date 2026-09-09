@@ -80,6 +80,24 @@ pub fn run_seed_resolution(
             is_style,
         );
 
+        // Artifact seeds run alongside the engine, not as a last resort. An ML
+        // question usually *does* resolve something by name — on nanoGPT
+        // "training" found a symbol called `train` — and then never reaches the
+        // checkpoint or the metric the question was actually about, so a
+        // zero-seed guard would never fire. On a graph with no artifact nodes
+        // this is one cheap read that returns nothing.
+        for (node_id, score, reason) in
+            crate::retrieval::artifact_seeds::resolve_artifact_seeds(graph, signature)
+        {
+            sink.insert(
+                node_id,
+                score,
+                reason,
+                Some(crate::retrieval::embedding_confidence::TIER_L1_EXACT),
+                None,
+            );
+        }
+
         if sink.resolved_count() == 0 {
             let plan = QueryPlan::from_signature(signature);
             for (node_id, score, reason) in resolve_concept_seeds(graph, signature, &plan) {

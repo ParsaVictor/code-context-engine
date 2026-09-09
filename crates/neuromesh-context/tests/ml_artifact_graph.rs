@@ -30,10 +30,15 @@ fn use_temp_neuromesh_home() {
     std::env::set_var("NEUROMESH_HOME", &home);
 }
 
+/// One home for the whole binary: `NEUROMESH_HOME` is process-wide, so two
+/// tests racing to set different values would be nondeterministic. Sharing it is
+/// safe because the two staged fixtures resolve to different project ids and so
+/// to different slots underneath it.
+///
 /// Staged outside the repository for the same reason the isolation gate does
 /// it: `stable_project_id` resolves to the nearest enclosing git repository, so
 /// a fixture left in place would carry this repo's identity.
-fn staged_fixture(name: &str) -> PathBuf {
+fn staged_fixture(name: &str, tag: &str) -> PathBuf {
     let src = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
@@ -42,7 +47,7 @@ fn staged_fixture(name: &str) -> PathBuf {
         .join(name);
     assert!(src.is_dir(), "fixture {name} must exist at {src:?}");
 
-    let dst = std::env::temp_dir().join(format!("nm-ml-{}-{}", name, std::process::id()));
+    let dst = std::env::temp_dir().join(format!("nm-ml-{}-{}-{tag}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&dst);
     copy_tree(&src, &dst);
     dst.canonicalize().expect("staged fixture path")
@@ -177,7 +182,7 @@ fn packet_files(graph: &NeuralProjectGraph, prompt: &str) -> Vec<String> {
 #[test]
 fn a_pytorch_project_indexes_into_a_walkable_artifact_graph() {
     use_temp_neuromesh_home();
-    let root = staged_fixture(FIXTURE);
+    let root = staged_fixture(FIXTURE, "walk");
     let graph = indexed(&root);
 
     // ---- 1. the artifacts are typed as artifacts ----
@@ -269,6 +274,46 @@ fn a_pytorch_project_indexes_into_a_walkable_artifact_graph() {
         files.iter().any(|f| f.ends_with("detector.py")),
         "the model's file is missing from the packet: {files:?}"
     );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The question has to *reach* the artifacts, not merely be answerable from
+/// them. Measured on a real nanoGPT checkout before artifact seeding existed,
+/// "how does evaluation compute the loss on the validation split" resolved no
+/// seed at all and returned an empty packet: the concept expansion is
+/// web-shaped and reads "validation" as a schema validator, "model" as a
+/// database model. Nothing in the prompt names a symbol, so nothing was found.
+#[test]
+fn an_ml_question_that_names_no_symbol_still_finds_the_artifacts() {
+    use_temp_neuromesh_home();
+    let root = staged_fixture(FIXTURE, "seed");
+    let graph = indexed(&root);
+
+    for (prompt, expected) in [
+        (
+            "where is the checkpoint saved and which model does it belong to",
+            "train.py",
+        ),
+        (
+            "how does evaluation compute the metric on the validation split",
+            "evaluate.py",
+        ),
+        (
+            "which transforms are applied to the dataset before training",
+            "dataset.py",
+        ),
+    ] {
+        let files = packet_files(&graph, prompt);
+        assert!(
+            !files.is_empty(),
+            "empty packet for {prompt:?} — no seed resolved"
+        );
+        assert!(
+            files.iter().any(|f| f.ends_with(expected)),
+            "{prompt:?} did not reach {expected}: {files:?}"
+        );
+    }
 
     let _ = std::fs::remove_dir_all(&root);
 }

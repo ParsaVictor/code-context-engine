@@ -977,6 +977,20 @@ impl NeuralProjectGraph {
         self.inner.read().concept_index.lookup(concept).to_vec()
     }
 
+    /// Every node a framework overlay typed as an ML artifact, with its type.
+    ///
+    /// Retrieval asks by *kind* here rather than by name — "where is the
+    /// checkpoint saved" wants Checkpoint nodes whatever they happen to be
+    /// called — which no name index can answer.
+    pub fn artifact_nodes(&self) -> Vec<(NodeId, NodeType)> {
+        let data = self.inner.read();
+        data.mesh
+            .nodes()
+            .filter(|n| n.node_type.is_artifact())
+            .map(|n| (n.id.clone(), n.node_type))
+            .collect()
+    }
+
     pub fn search_symbols(&self, query: &str, limit: usize) -> Vec<SearchHit> {
         let query = query.trim();
         if query.is_empty() {
