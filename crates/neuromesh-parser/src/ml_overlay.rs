@@ -20,6 +20,7 @@ use crate::types::{AstAnalysisResult, ParsedRelationship, ParsedSymbol};
 use neuromesh_core::{EdgeType, NodeType};
 use regex::Regex;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::OnceLock;
 
 /// Base classes that make a class a model.
@@ -54,20 +55,35 @@ const MODULE_METHODS: &[&str] = &[
     "modules",
 ];
 
-pub fn pytorch_overlay(content: &str, ast: &mut AstAnalysisResult) {
+pub fn pytorch_overlay(path: &Path, content: &str, ast: &mut AstAnalysisResult) {
     if !has_torch_evidence(content) {
         return;
     }
 
-    let defs = python_defs(content);
+    let mut defs = python_defs(content);
     let classes = python_classes(content);
     let bindings = local_bindings(content);
 
-    let model_classes = retype_classes(&classes, MODEL_BASES, NodeType::Model, ast);
+    // Research scripts put the training loop at module scope, under
+    // `while True:` or `for epoch in ...`, with no enclosing def at all —
+    // nanoGPT is the canonical example. Without a synthetic owner the loop is
+    // invisible and every checkpoint and metric in the file is unattributed.
+    if let Some(module_loop) = module_level_loop(path, content, &defs, ast) {
+        defs.push(module_loop);
+    }
+
+    let modules = module_classes(&classes);
+    let (model_classes, layer_classes) = split_models_and_layers(content, &classes, &modules);
+    for name in &model_classes {
+        retype_symbol(ast, name, NodeType::Model);
+    }
+    for name in &layer_classes {
+        retype_symbol(ast, name, NodeType::Layer);
+    }
     let dataset_classes = retype_classes(&classes, DATASET_BASES, NodeType::Dataset, ast);
 
-    push_layers(content, &classes, &model_classes, ast);
-    retype_defs(content, &defs, &classes, &model_classes, ast);
+    push_layers(content, &classes, &modules, ast);
+    retype_defs(content, &defs, &classes, &modules, ast);
 
     link_artifacts(
         content,
@@ -77,7 +93,7 @@ pub fn pytorch_overlay(content: &str, ast: &mut AstAnalysisResult) {
         &dataset_classes,
         ast,
     );
-    push_checkpoints(content, &defs, &bindings, ast);
+    push_checkpoints(content, &defs, &bindings, &modules, ast);
     push_metrics(content, &defs, ast);
 }
 
@@ -263,8 +279,77 @@ fn retype_symbol(ast: &mut AstAnalysisResult, name: &str, node_type: NodeType) -
     false
 }
 
-/// `self.backbone = nn.Sequential(...)` inside a model is a named part of that
-/// model, and "which backbone?" is a question people actually ask.
+/// Every `nn.Module` subclass in this file, model or layer alike.
+fn module_classes(classes: &[PyBlock]) -> Vec<String> {
+    classes
+        .iter()
+        .filter(|class| {
+            class.bases.iter().any(|b| {
+                let short = b.rsplit('.').next().unwrap_or(b);
+                MODEL_BASES.contains(&short)
+            })
+        })
+        .map(|class| class.name.clone())
+        .collect()
+}
+
+/// Decide which `nn.Module` subclasses are *models* and which are *layers*.
+///
+/// Typing every `nn.Module` subclass as a Model is what the first version did,
+/// and on a real library it is useless: vit-pytorch has 86 Python files and
+/// produced 388 "models". A block, a head, an attention module and the network
+/// they compose all became the same thing, so `Model` stopped narrowing
+/// anything.
+///
+/// The distinction that holds up in real code is composition: a module that
+/// another module builds inside itself — `self.attn = Attention(...)`,
+/// `ModuleList([Block(cfg) for _ in ...])` — is a part. Whatever nothing else
+/// builds is the whole. On nanoGPT that leaves `GPT` a Model and demotes
+/// `Block`, `MLP`, `CausalSelfAttention` and `LayerNorm` to Layers, which is
+/// exactly how a person reads that file.
+fn split_models_and_layers(
+    content: &str,
+    classes: &[PyBlock],
+    modules: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let mut models = Vec::new();
+    let mut layers = Vec::new();
+    for name in modules {
+        let composed_by_another = classes.iter().any(|owner| {
+            owner.name != *name
+                && modules.contains(&owner.name)
+                && constructs(owner.body(content), name)
+        });
+        if composed_by_another {
+            layers.push(name.clone());
+        } else {
+            models.push(name.clone());
+        }
+    }
+    (models, layers)
+}
+
+/// Whether this body calls `Name(...)` as a constructor.
+fn constructs(body: &str, name: &str) -> bool {
+    let mut from = 0usize;
+    while let Some(found) = body[from..].find(name) {
+        let at = from + found;
+        let before_ok = at == 0
+            || !body[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.');
+        let after = body[at + name.len()..].trim_start();
+        if before_ok && after.starts_with('(') {
+            return true;
+        }
+        from = at + name.len();
+    }
+    false
+}
+
+/// `self.backbone = nn.Sequential(...)` inside a module is a named part of it,
+/// and "which backbone?" is a question people actually ask.
 fn push_layers(
     content: &str,
     classes: &[PyBlock],
@@ -346,8 +431,29 @@ fn is_train_loop(body: &str) -> bool {
         || (body.contains(".step()") && body.contains("zero_grad"))
 }
 
+/// Gradients being off is not enough on its own. `GPT.from_pretrained` copies
+/// weights under `torch.no_grad()` and `generate` samples tokens under it — both
+/// were coming out as EvalLoops. An evaluation loop also has to *look at data*
+/// or *report a number*; a weight-copying constructor does neither.
 fn is_eval_loop(body: &str) -> bool {
-    body.contains("no_grad") || body.contains("inference_mode") || body.contains(".eval()")
+    let grads_off =
+        body.contains("no_grad") || body.contains("inference_mode") || body.contains(".eval()");
+    grads_off && (iterates_data(body) || reports_quality(body))
+}
+
+fn iterates_data(body: &str) -> bool {
+    body.contains("for ")
+        && ["loader", "dataset", "batch", "val_", "valid", "test_"]
+            .iter()
+            .any(|k| body.contains(k))
+}
+
+fn reports_quality(body: &str) -> bool {
+    [
+        "loss", "acc", "metric", "correct", "map", "perplex", "score", "f1",
+    ]
+    .iter()
+    .any(|k| body.contains(k))
 }
 
 /// Only a `Compose(` counts. Matching on `transforms.` or `augment` looked
@@ -495,6 +601,7 @@ fn push_checkpoints(
     content: &str,
     defs: &[PyBlock],
     bindings: &HashMap<String, String>,
+    modules: &[String],
     ast: &mut AstAnalysisResult,
 ) {
     static SAVE_RE: OnceLock<Regex> = OnceLock::new();
@@ -529,25 +636,63 @@ fn push_checkpoints(
                 };
                 push_relationship(ast, &owner.name, &name, edge, None);
             }
-            // `torch.save(model.state_dict(), path)` says whose weights these
-            // are. `torch.load("runs/last.pt")` does not — its first argument is
-            // the path itself, so there is nothing to attribute.
+            // Whose weights these are, when the call actually says so.
             if produces {
-                if let Some(model) = args
-                    .split(',')
-                    .next()
-                    .and_then(|first| first.trim().split('.').next())
-                    .filter(|base| {
-                        base.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
-                            && *base != "self"
-                    })
-                {
-                    let resolved = bindings.get(model).cloned().unwrap_or_else(|| model.into());
-                    push_relationship(ast, &name, &resolved, EdgeType::CheckpointOf, None);
+                if let Some(model) = saved_model(args, content, bindings, modules) {
+                    push_relationship(ast, &name, &model, EdgeType::CheckpointOf, None);
                 }
             }
         }
     }
+}
+
+/// The model a `torch.save` is saving, when the call states it.
+///
+/// Taking the first argument's leading identifier unconditionally produced
+/// nonsense on real code: `torch.save({"model": _get_full_model_state_dict(m)})`
+/// attributed the checkpoint to a *function*. Two shapes actually carry the
+/// claim, and nothing else does:
+///
+///   - `torch.save(x.state_dict(), path)` — only an `nn.Module` has a
+///     `state_dict`, so `x` is a model by construction;
+///   - `torch.save(x, path)` where `x` is a bare identifier that is either
+///     built from a module class in this file, or is treated as a module
+///     somewhere in it (`x.eval()`, `x.parameters()`).
+///
+/// A dict literal, a call, or an unrecognised name yields nothing rather than a
+/// guess.
+fn saved_model(
+    args: &str,
+    content: &str,
+    bindings: &HashMap<String, String>,
+    modules: &[String],
+) -> Option<String> {
+    let first = args.split(',').next()?.trim();
+    let ident = first.strip_suffix(".state_dict()").map(str::trim);
+    if let Some(ident) = ident {
+        let base = ident.split('.').next()?;
+        if base.is_empty() || base == "self" {
+            return None;
+        }
+        return Some(bindings.get(base).cloned().unwrap_or_else(|| base.into()));
+    }
+    let bare = first
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_')
+        .then_some(first)
+        .filter(|s| !s.is_empty() && *s != "self")?;
+    let built_from_module = bindings.get(bare).is_some_and(|c| modules.contains(c));
+    if built_from_module || used_as_module(content, bare) {
+        return Some(bindings.get(bare).cloned().unwrap_or_else(|| bare.into()));
+    }
+    None
+}
+
+/// Whether this identifier ever receives an `nn.Module`-only method.
+fn used_as_module(content: &str, ident: &str) -> bool {
+    MODULE_METHODS
+        .iter()
+        .any(|m| content.contains(&format!("{ident}.{m}(")))
 }
 
 /// Prefer the path literal — `runs/last.pt` is what a person searches for.
@@ -556,8 +701,19 @@ fn checkpoint_name(args: &str) -> String {
     let re = PATH_RE.get_or_init(|| {
         Regex::new(r#"["']([^"']*\.(?:pt|pth|ckpt|bin|safetensors))["']"#).unwrap()
     });
-    re.captures(args)
-        .and_then(|c| c.get(1))
+    if let Some(path) = re.captures(args).and_then(|c| c.get(1)) {
+        return path.as_str().to_string();
+    }
+    // No literal: `torch.load(ckpt_path, map_location=device)`. The variable
+    // holding the path is still a better name than "checkpoint" — it is what
+    // the file calls this artifact, and it keeps two different checkpoints in
+    // one module from collapsing onto one node.
+    static PATH_VAR_RE: OnceLock<Regex> = OnceLock::new();
+    let var_re = PATH_VAR_RE.get_or_init(|| {
+        Regex::new(r"\b([A-Za-z_]\w*(?:_(?:path|file|dir|ckpt))|ckpt\w*|checkpoint\w*)\b").unwrap()
+    });
+    args.split(',')
+        .find_map(|arg| var_re.captures(arg).and_then(|c| c.get(1)))
         .map(|m| m.as_str().to_string())
         .unwrap_or_else(|| "checkpoint".to_string())
 }
@@ -603,11 +759,60 @@ fn push_metrics(content: &str, defs: &[PyBlock], ast: &mut AstAnalysisResult) {
     }
 }
 
-/// The innermost `def` containing this byte offset.
+/// The innermost block containing this byte offset — smallest span wins, so a
+/// nested def beats its parent and both beat the synthetic module-level block.
 fn enclosing_def(defs: &[PyBlock], byte: usize) -> Option<&PyBlock> {
     defs.iter()
         .filter(|d| byte >= d.start && byte < d.end)
-        .max_by_key(|d| d.indent)
+        .min_by_key(|d| d.end - d.start)
+}
+
+/// A training loop written at module scope, with no enclosing `def`.
+///
+/// Research scripts routinely do this — nanoGPT's whole loop lives under a bare
+/// `while True:` at the top level of `train.py`. With no owner to attach to,
+/// the loop was invisible and so was every checkpoint and metric in the file:
+/// the audit found nanoGPT had *zero* TrainLoops.
+///
+/// The synthetic block spans the file and is named after the module, so
+/// `train.py` contributes a `train` TrainLoop. `enclosing_def` prefers the
+/// smallest containing span, so real defs still win wherever they exist.
+fn module_level_loop(
+    path: &Path,
+    content: &str,
+    defs: &[PyBlock],
+    ast: &mut AstAnalysisResult,
+) -> Option<PyBlock> {
+    let at = backward_calls(content).find(|at| enclosing_def(defs, *at).is_none())?;
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("module");
+    let name = if ast.symbols.iter().any(|s| s.name == stem) {
+        format!("{stem}:train")
+    } else {
+        stem.to_string()
+    };
+    let line = line_of(content, at);
+    push_symbol(
+        ast,
+        &name,
+        NodeType::TrainLoop,
+        Some(format!("module-level training loop in {stem}")),
+        line,
+    );
+    Some(PyBlock {
+        name,
+        bases: Vec::new(),
+        line,
+        start: 0,
+        end: content.len(),
+        indent: 0,
+    })
+}
+
+fn backward_calls(content: &str) -> impl Iterator<Item = usize> + '_ {
+    content.match_indices(".backward(").map(|(at, _)| at)
 }
 
 fn push_symbol(
@@ -721,12 +926,16 @@ def evaluate(model, loader):
 "#;
 
     fn run(source: &str, declared: &[(&str, NodeType)]) -> AstAnalysisResult {
+        run_at("train.py", source, declared)
+    }
+
+    fn run_at(file: &str, source: &str, declared: &[(&str, NodeType)]) -> AstAnalysisResult {
         let mut ast = AstAnalysisResult::default();
         for (name, ty) in declared {
             ast.symbols
                 .push(ParsedSymbol::new(*name, *ty, None, 1..2, true));
         }
-        pytorch_overlay(source, &mut ast);
+        pytorch_overlay(Path::new(file), source, &mut ast);
         ast
     }
 
@@ -830,6 +1039,127 @@ def evaluate(model, loader):
             Some(NodeType::Metric)
         );
         assert!(has_edge(&ast, "evaluate", "val/mAP", EdgeType::Produces));
+    }
+
+    const NANOGPT_SHAPED: &str = r#"
+import torch
+import torch.nn as nn
+
+class MLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.c_fc = nn.Linear(4, 4)
+
+    def forward(self, x):
+        return self.c_fc(x)
+
+
+class Block(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mlp = MLP()
+
+
+class GPT(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.h = nn.ModuleList([Block() for _ in range(4)])
+
+
+model = GPT()
+while True:
+    loss = model(x)
+    loss.backward()
+    torch.save(model.state_dict(), "out/ckpt.pt")
+"#;
+
+    #[test]
+    fn only_the_module_nothing_else_builds_is_a_model() {
+        let ast = run_at(
+            "train.py",
+            NANOGPT_SHAPED,
+            &[
+                ("MLP", NodeType::Class),
+                ("Block", NodeType::Class),
+                ("GPT", NodeType::Class),
+            ],
+        );
+        // `MLP` is built by `Block`, `Block` by `GPT`. Nothing builds `GPT`.
+        assert_eq!(type_of(&ast, "GPT"), Some(NodeType::Model));
+        assert_eq!(type_of(&ast, "Block"), Some(NodeType::Layer));
+        assert_eq!(type_of(&ast, "MLP"), Some(NodeType::Layer));
+    }
+
+    #[test]
+    fn a_training_loop_at_module_scope_still_gets_an_owner() {
+        let ast = run_at("train.py", NANOGPT_SHAPED, &[("GPT", NodeType::Class)]);
+        // The loop is under a bare `while True:` with no enclosing def, so the
+        // file itself becomes the owner and is named after the module.
+        assert_eq!(type_of(&ast, "train"), Some(NodeType::TrainLoop));
+        assert!(has_edge(&ast, "train", "GPT", EdgeType::Trains));
+        assert!(has_edge(&ast, "train", "out/ckpt.pt", EdgeType::Produces));
+    }
+
+    #[test]
+    fn gradients_being_off_is_not_enough_to_be_an_eval_loop() {
+        let source = r#"
+import torch
+
+def from_pretrained(cls, model_type):
+    sd = {}
+    with torch.no_grad():
+        for k in sd_keys:
+            sd[k].copy_(sd_hf[k])
+    return sd
+
+def estimate_loss(model, loader):
+    model.eval()
+    with torch.no_grad():
+        for batch in loader:
+            loss = model(batch)
+    return loss
+"#;
+        let ast = run(
+            source,
+            &[
+                ("from_pretrained", NodeType::Function),
+                ("estimate_loss", NodeType::Function),
+            ],
+        );
+        // Copying weights under no_grad looks at no data and reports no number.
+        assert_eq!(type_of(&ast, "from_pretrained"), Some(NodeType::Function));
+        assert_eq!(type_of(&ast, "estimate_loss"), Some(NodeType::EvalLoop));
+    }
+
+    #[test]
+    fn a_checkpoint_only_claims_a_model_when_the_call_says_so() {
+        let source = r#"
+import torch
+
+def save_all(state, path):
+    torch.save({"model": _get_full_model_state_dict(m)}, "a.pt")
+    torch.save(model.state_dict(), "b.pt")
+"#;
+        let ast = run(source, &[("save_all", NodeType::Function)]);
+        // A dict built from a function call names no model; `.state_dict()` does.
+        assert!(!ast
+            .relationships
+            .iter()
+            .any(|r| r.relationship == EdgeType::CheckpointOf
+                && r.target_symbol == "_get_full_model_state_dict"));
+        assert!(has_edge(&ast, "b.pt", "model", EdgeType::CheckpointOf));
+    }
+
+    #[test]
+    fn a_checkpoint_with_no_path_literal_is_named_after_its_variable() {
+        let source = r#"
+import torch
+
+def resume(ckpt_path, device):
+    return torch.load(ckpt_path, map_location=device)
+"#;
+        let ast = run(source, &[("resume", NodeType::Function)]);
+        assert_eq!(type_of(&ast, "ckpt_path"), Some(NodeType::Checkpoint));
     }
 
     #[test]

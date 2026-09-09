@@ -792,6 +792,12 @@ impl NeuralProjectGraph {
                             .map(|(id, _)| id)
                         })
                         .unwrap_or_else(|| file_id.clone());
+                    // Import-scoped only, deliberately. The global ranked search
+                    // used to run as a fallback here and reached across the
+                    // whole project for a name — on pytorch/examples it bound a
+                    // Python `generate` to a class called `Model` in a *C++*
+                    // file. An artifact relation has to be grounded in
+                    // something the source file can actually see.
                     let target = self
                         .resolve_call_ranked(
                             &rel.target_symbol,
@@ -800,12 +806,20 @@ impl NeuralProjectGraph {
                             rel.receiver_hint.as_deref(),
                         )
                         .or_else(|| {
-                            self.resolve_ranked(
-                                &rel.target_symbol,
-                                rel.target_file_hint.as_deref(),
-                                Some(&imported_files),
-                            )
+                            rel.target_file_hint
+                                .as_deref()
+                                .and_then(|hint| self.resolve_file_hint(hint))
+                                .map(|id| (id, EdgeConfidence::Likely))
                         });
+                    // An artifact overlay reads one language, so its edges stay
+                    // inside it. Without this, a Python `generate` in
+                    // pytorch/examples bound to a class named `Model` in a
+                    // `.cpp` file — the name matched and nothing else objected.
+                    let target = target.filter(|(id, _)| {
+                        self.get_node(id).is_some_and(|node| {
+                            node.file_path.extension() == rel.source_file.extension()
+                        })
+                    });
                     match target {
                         Some((target, confidence)) if target != source => {
                             self.add_edge_with_confidence(source, target, other, confidence);
