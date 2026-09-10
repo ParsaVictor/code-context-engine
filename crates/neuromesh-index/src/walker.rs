@@ -194,6 +194,21 @@ impl ProjectWalker {
         crate::confine::is_safe_workspace(path)
     }
 
+    /// Bytes on disk this file may occupy before it is skipped.
+    ///
+    /// A notebook is mostly output — base64 PNGs and HTML reprs — so the 2 MB
+    /// text budget would reject the very files this feature exists to read.
+    /// It gets its own ceiling, and what survives normalization is capped
+    /// again at the source-view limit, so a big `.ipynb` still cannot turn
+    /// into a big node.
+    fn size_cap_for(&self, relative_path: &Path) -> u64 {
+        if crate::notebook::is_notebook(relative_path) {
+            crate::notebook::MAX_NOTEBOOK_BYTES.max(self.max_file_size)
+        } else {
+            self.max_file_size
+        }
+    }
+
     /// True when `path` sits in an ignored directory *of this project*.
     ///
     /// `is_ignored` inspects every component of whatever it is handed, so
@@ -317,7 +332,7 @@ impl ProjectWalker {
                 Err(_) => continue,
             };
 
-            if metadata.len() > self.max_file_size {
+            if metadata.len() > self.size_cap_for(&relative_path) {
                 continue;
             }
 
@@ -368,7 +383,7 @@ impl ProjectWalker {
                 }
             }
 
-            let content = match fs::read_to_string(&full_path) {
+            let content = match crate::notebook::read_source_text(&full_path) {
                 Ok(c) => c,
                 Err(_) => continue,
             };
@@ -403,10 +418,10 @@ impl ProjectWalker {
             return None;
         }
         let metadata = fs::metadata(full_path).ok()?;
-        if metadata.len() > self.max_file_size {
+        if metadata.len() > self.size_cap_for(&relative_path) {
             return None;
         }
-        let content = fs::read_to_string(full_path).ok()?;
+        let content = crate::notebook::read_source_text(full_path).ok()?;
         let last_modified: DateTime<Utc> = metadata
             .modified()
             .map(|t| t.into())

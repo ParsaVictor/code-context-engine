@@ -464,7 +464,7 @@ impl NeuralProjectGraph {
 
     /// Ingests AST analysis results for an indexed file and creates symbols and edges
     pub fn ingest_ast(&self, file: &IndexedFile, ast: &AstAnalysisResult) {
-        let content = std::fs::read_to_string(&file.full_path).ok();
+        let content = neuromesh_index::read_source_text(&file.full_path).ok();
         self.ingest_file(file, ast, content.as_deref());
     }
 
@@ -765,6 +765,27 @@ impl NeuralProjectGraph {
                             relationship: EdgeType::Calls,
                         });
                         false
+                    }
+                }
+                // Cell order is a fact about one notebook. Both ends exist in
+                // the source file by construction, so this never reaches the
+                // global name search: every notebook in a repo has a `cell3`,
+                // and resolving by name alone would wire them into one chain.
+                // It also must not fall through to the generic arm, which
+                // anchors the source on the *file* node — that would leave
+                // "what runs before this cell?" unanswerable.
+                EdgeType::Precedes => {
+                    let file = rel.source_file.to_string_lossy();
+                    match (
+                        self.resolve_in_file(&rel.source_symbol, &file),
+                        self.resolve_in_file(&rel.target_symbol, &file),
+                    ) {
+                        (Some(source), Some(target)) if source != target => {
+                            self.add_edge(source, target, EdgeType::Precedes);
+                            true
+                        }
+                        (Some(_), Some(_)) => true,
+                        _ => false,
                     }
                 }
                 // Artifact edges are symbol-to-symbol by construction: the whole

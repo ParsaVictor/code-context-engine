@@ -59,7 +59,13 @@ impl LanguageSpec {
                 options: QueryOptions::typescript(),
                 fallback: Fallback::TypeScript,
             },
-            SourceLanguage::Python => Self {
+            // A notebook reaches the parser already normalized to a Python
+            // source view (`neuromesh_index::notebook`), so it takes the
+            // Python grammar, queries, and fallback unchanged. Cells
+            // concatenated in document order are the module the notebook
+            // denotes, which is what makes cross-cell DEF-USE ordinary Python
+            // name resolution rather than a second resolver.
+            SourceLanguage::Python | SourceLanguage::Notebook => Self {
                 language,
                 grammar: Some(Grammar::Python),
                 queries: Some(PYTHON_QUERIES),

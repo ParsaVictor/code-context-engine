@@ -40,7 +40,15 @@ Offered upstream as [pinoox/neuromesh#34](https://github.com/pinoox/neuromesh/pu
 - [ ] tree-sitter grammars: C, C++, R, Julia, Scala, Lua, Bash, TOML
 - [ ] `tree-sitter-stack-graphs` name resolution (Python / JS / TS first)
 - [ ] SCIP index ingestion when present
-- [ ] `.ipynb` parser (ordered cells + cross-cell DEF-USE)
+- [x] **`.ipynb` parser (ordered cells + cross-cell DEF-USE)** — a notebook is
+      normalized once, at every point the engine reads a file, into a jupytext
+      "percent" Python view: cells in document order, magics and shell escapes
+      commented, markdown reduced to its headings, outputs dropped except a
+      one-line echo of the exception a cell died on. Cross-cell DEF-USE is then
+      ordinary Python name resolution, and the PyTorch overlay types artifacts
+      inside notebooks without knowing what a notebook is. Code cells also
+      become `NotebookCell` nodes joined by `Precedes`, so a packet can quote
+      one cell instead of the whole file.
 - [ ] Config→Code layer (YAML / Hydra / argparse → `Hyperparameter` / `Parameterizes`)
 - [x] **ML framework overlays — PyTorch object detection first** (`nn.Module`, `forward`, `DataLoader`, train loop, checkpoint, mAP metric)
 - [ ] `tantivy` BM25 replaces hand-rolled lexical retrieval
@@ -57,6 +65,21 @@ val/mAP <-Produces- evaluate -Evaluates-> Detector <-CheckpointOf- runs/last.pt
 
 Still to measure: the token saving against opening the repo, once the gold
 dataset and `neuromesh eval` cover a CV project.
+
+**Notebooks, measured on a checkout we did not write** — `visual-intelligence-engine`,
+5 notebooks, indexed at `main` and again on the notebook branch:
+
+| | before | after |
+|---|---|---|
+| files indexed | 47 | 52 |
+| symbols inside notebooks | 0 | 185 |
+| artifact nodes | 5 | 9 |
+| packet for *"how does the animal recognition notebook score crops with CLIP?"* | 7 files, no notebook | 9 files, led by the two notebooks named |
+
+The packet comparison is the one that counts: before, a question about a
+notebook could not return one. Re-run it with
+`crates/neuromesh-context/tests/artifact_audit.rs` (`audit_a_real_repository`
+and `packet_probe`, both `--ignored`).
 
 ## P2 — Deeper compression & knowledge
 

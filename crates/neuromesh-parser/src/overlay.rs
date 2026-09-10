@@ -17,10 +17,13 @@ pub fn apply(path: &Path, content: &str, language: SourceLanguage, ast: &mut Ast
             spring_overlay(content, ast);
             ktor_overlay(content, ast);
         }
-        SourceLanguage::Python => {
+        SourceLanguage::Python | SourceLanguage::Notebook => {
             django_overlay(path, content, ast);
             fastapi_overlay(content, ast);
             crate::ml_overlay::pytorch_overlay(path, content, ast);
+            if language == SourceLanguage::Notebook {
+                crate::notebook_cells::notebook_overlay(path, content, ast);
+            }
         }
         SourceLanguage::Ruby => rails_overlay(path, content, ast),
         SourceLanguage::Dart => flutter_overlay(content, ast),

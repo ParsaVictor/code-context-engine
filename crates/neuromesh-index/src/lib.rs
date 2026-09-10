@@ -1,6 +1,7 @@
 pub mod confine;
 pub mod hasher;
 pub mod mcp_workspace;
+pub mod notebook;
 pub mod tracker;
 pub mod walker;
 pub mod watcher;
@@ -14,6 +15,7 @@ pub use mcp_workspace::{
     mcp_workspace_env_summary, parse_workspace_folder_paths, resolve_mcp_startup_workspace,
     same_workspace_path, workspace_from_ide_env,
 };
+pub use notebook::{cell_markers, is_notebook, read_source_text, CellKind, CellMarker};
 pub use tracker::{FileFingerprint, IndexedFile, SourceLanguage};
 pub use walker::{ProjectWalker, ScanReport};
 pub use watcher::{FileChangeEvent, WorkspaceWatcher};
