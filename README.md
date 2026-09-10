@@ -242,7 +242,7 @@ Command reference: [docs/cli.md](docs/cli.md).
 
 ## Languages
 
-Rust, TypeScript, Python, Go, Java, Kotlin, PHP, C#, Dart, Swift, Ruby, and more via **tree-sitter**. Framework overlays for Laravel, Django, Next, Vue, Axum, Rails, Flutter, and others. Details: [docs/architecture.md](docs/architecture.md).
+Rust, TypeScript, Python, Go, Java, Kotlin, PHP, C#, Dart, Swift, Ruby, and more via **tree-sitter**. Jupyter notebooks (`.ipynb`) are read as code: cells in order, outputs dropped, so a notebook is searchable like any other source file. Framework overlays for Laravel, Django, Next, Vue, Axum, Rails, Flutter, PyTorch, and others. Details: [docs/architecture.md](docs/architecture.md).
 
 ---
 

@@ -102,9 +102,14 @@ pub fn resolve_workspace_file(workspace: &Path, requested: &Path) -> Result<Path
     Ok(canonical)
 }
 
+/// Read a workspace file as the engine sees it.
+///
+/// A notebook comes back as its Python source view, not as raw JSON — the same
+/// bytes the walker hashed and the parser recorded line ranges against, so a
+/// packet built from this text points at the lines the symbols were found on.
 pub fn read_workspace_file(workspace: &Path, requested: &Path) -> Result<String> {
     let resolved = resolve_workspace_file(workspace, requested)?;
-    fs::read_to_string(&resolved)
+    crate::notebook::read_source_text(&resolved)
         .map_err(|e| NeuroMeshError::Config(format!("unable to read workspace file: {e}")))
 }
 

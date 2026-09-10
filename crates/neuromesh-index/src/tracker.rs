@@ -21,6 +21,9 @@ pub enum SourceLanguage {
     Less,
     Rust,
     Python,
+    /// A Jupyter notebook. Read through [`crate::notebook`], which turns it
+    /// into a Python source view, so it is parsed with the Python grammar.
+    Notebook,
     Go,
     PHP,
     Java,
@@ -86,6 +89,7 @@ impl SourceLanguage {
             "less" => SourceLanguage::Less,
             "rs" => SourceLanguage::Rust,
             "py" | "pyw" => SourceLanguage::Python,
+            "ipynb" => SourceLanguage::Notebook,
             "go" => SourceLanguage::Go,
             "php" => SourceLanguage::PHP,
             "java" => SourceLanguage::Java,
@@ -123,6 +127,7 @@ impl SourceLanguage {
             Self::Less => "less",
             Self::Rust => "rust",
             Self::Python => "python",
+            Self::Notebook => "notebook",
             Self::Go => "go",
             Self::PHP => "php",
             Self::Java => "java",
