@@ -1063,7 +1063,7 @@ forbidden_files = ["src/directive/clipboard.js", "src/views/profile/UserCard.vue
             .map(|p| load_gold_tasks(&p))
             .unwrap_or_else(builtin_gold_tasks);
         let registry = Arc::new(ReversibleContextRegistry::new());
-        let activator = ContextActivator::new(registry).without_physarum_sidecar();
+        let activator = ContextActivator::new(registry);
 
         // Debug binaries that link several tree-sitter grammars are cold on first activate.
         if let Some(task) = tasks.first() {
@@ -1209,7 +1209,7 @@ forbidden_files = ["src/directive/clipboard.js", "src/views/profile/UserCard.vue
             let scanned = walker.scan().expect("scan fixture");
             graph.ingest_workspace(&scanned);
             let registry = Arc::new(ReversibleContextRegistry::new());
-            let activator = ContextActivator::new(registry).without_physarum_sidecar();
+            let activator = ContextActivator::new(registry);
             let signature = signature_for_gold_task(&task);
             let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
             let metrics = evaluate_view(&task, &view, 0);
@@ -1294,7 +1294,7 @@ forbidden_files = ["src/directive/clipboard.js", "src/views/profile/UserCard.vue
             .unwrap_or(0);
 
         let registry = Arc::new(ReversibleContextRegistry::new());
-        let activator = ContextActivator::new(registry).without_physarum_sidecar();
+        let activator = ContextActivator::new(registry);
         let modes = [
             OptimizationMode::MaxSavings,
             OptimizationMode::Balanced,

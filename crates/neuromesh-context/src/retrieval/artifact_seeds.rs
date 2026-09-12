@@ -168,6 +168,7 @@ pub fn resolve_artifact_seeds(
             b.1.partial_cmp(&a.1)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| a.2.cmp(&b.2))
+                .then_with(|| a.0.as_str().cmp(b.0.as_str()))
         });
         for candidate in candidates {
             if taken >= MAX_PER_KIND || out.len() >= MAX_TOTAL {
