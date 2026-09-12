@@ -26,6 +26,7 @@
 | F18 | بلوک synaptic fill بی‌جهت بود (۹×وزن روی هر همسایه‌ی seed و فایلش) | `selector.rs` | ✅ PR #23 (فقط یال‌های خروجی از seed) |
 | F20 | gating مصرف‌کننده‌ها دو فیکسچر را شکست (`physarum_usage`: «Where is Physarum used?»، `sms_stored`: «received» ↔ `SmsReceiver`): سؤال‌های usage باید مصرف‌کننده بگیرند و match باید inflection را تحمل کند | `selector.rs` | ✅ PR #23 (`focus_terms_ask_for_consumers`, `same_word_stem`) |
 | F19 | فایل‌های داده (`package.json`, `components.json`) خارج از قاعده‌ی family هستند و هنوز در `fastapi_settings` می‌آیند (`package.json` با utility:36 چون focus term `secrets`/`database`؟) | fill | ⏳ باز |
+| F21 | فیکسچرهای کوچک (مثلاً `mini-aspnet::sms_store`) روی دو تعریف هم‌نام (`Store` در `Program.cs` و در `Sms.cshtml`) بدون سیگنال تمایز دیگری تکیه دارند: seed resolution یکی را (اشتباه) انتخاب می‌کند و تنها fill عمومی (بدون قید) فایل درست دیگر را می‌آورد. gate کردن fill بدون قید scale (آیتم ۱/PR سیدکار) این fixture را می‌شکند. فعلاً با آستانه‌ی اندازه‌ی پروژه (`large_project`، >۲۰ فایل) دور زده شد — gate فقط روی ریپوهای واقعی اثر می‌کند. ریشه‌ی واقعی: twin_cohere باید «Store» را به `Program.cs` cohere کند نه `Sms.cshtml` (هم‌رخدادی برابر است، تساوی باید با «handler نه view» شکسته شود) | `seed/twin_cohere.rs` | ⏳ باز |
 
 ## اعداد ratchet (ریپوهای واقعی)
 
@@ -37,6 +38,7 @@
 | #22 twin coherence | **1.000** | 0.214 | 11 | 16/21 | 14 |
 | #23 language family + consumer gating | 1.000 | **0.266** | **9** | 16/21 | 14 |
 | #24 no cross-language Calls edge (F14) | 1.000 | **0.273** | 9 | 16/21 | 14 |
+| #25 sidecar/utility fill gate (F12, آیتم ۴) | 1.000 | **0.572** | **4** | **19/21** | **17** |
 
 ## ترتیب باقی‌مانده‌ی مرحله ۴
 
