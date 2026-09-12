@@ -1226,6 +1226,56 @@ fn resolve_dotted_member(
     None
 }
 
+/// `owner.member` whose member the graph does not know: fall back to the
+/// module the owner names, by exact file stem. `app.handle` in an Express
+/// codebase is `lib/application.js` even when the parser produced no symbol
+/// for `app.handle = function handle(...)` — which it currently does not.
+///
+/// Exact stem only, and the bare owner name only when the user wrote the
+/// expression: the loose path matcher used to take the `app` of a
+/// server-inferred `app.render` and hit `app.php` in a PHP project. The
+/// `application` alias is safe either way — a file by that name is the
+/// application module in every framework that has one.
+fn resolve_owner_module(
+    graph: &NeuralProjectGraph,
+    owner: &str,
+    written_by_user: bool,
+    prompt: &str,
+) -> Option<NodeId> {
+    let owner_l = owner.to_lowercase();
+    if owner_l.len() < 3
+        || !owner_l
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return None;
+    }
+    let mut stems: Vec<String> = Vec::new();
+    if owner_l == "app" {
+        stems.push("application".into());
+    }
+    if written_by_user {
+        stems.push(owner_l.clone());
+    }
+    let files = graph.file_node_paths();
+    for stem in stems {
+        let mut hits: Vec<NodeId> = files
+            .iter()
+            .filter(|(_, path)| {
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|s| s.eq_ignore_ascii_case(&stem))
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        hits.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        if hits.len() == 1 && seed_path_allowed(graph, &hits[0], prompt) {
+            return Some(hits.remove(0));
+        }
+    }
+    None
+}
+
 fn merge_context_views(base: ContextView, extension: ContextView) -> ContextView {
     let mut merged = base;
     for node in extension.active_nodes {
@@ -1459,6 +1509,10 @@ fn resolve_seed_query_once(
             if let Some(hit) = resolve_dotted_member(graph, owner, member, prompt) {
                 return Some(hit);
             }
+            let written = prompt.to_lowercase().contains(&query.to_lowercase());
+            if let Some(id) = resolve_owner_module(graph, owner, written, prompt) {
+                return Some((id, 0.8));
+            }
         }
     }
     if query.contains("::") {
@@ -1468,7 +1522,7 @@ fn resolve_seed_query_once(
             }
         }
     }
-    if query.contains(['/', '\\', '.']) && !is_route_query(query) {
+    if graph.is_file_hint_query(query) && !is_route_query(query) {
         if let Some(id) = graph.resolve_file_hint(query) {
             if seed_path_allowed(graph, &id, prompt) {
                 return Some((id, 0.95));
@@ -2092,7 +2146,13 @@ fn function_spans_for_file(
     graph
         .nodes_in_file(path)
         .into_iter()
-        .filter(|n| n.node_type == NodeType::Function)
+        // The artifact overlay retypes functions — `train_one_epoch` becomes
+        // a TrainLoop, `forward` a Layer, `build_transforms` a Transform. A
+        // span is about the text, not the type: anything whose signature is a
+        // function definition is a span, or its body silently leaves the
+        // packet (no fold marker, nothing to expand), which is exactly what
+        // happened to the function a question named.
+        .filter(|n| n.node_type == NodeType::Function || looks_like_function_def(n))
         .filter_map(|n| {
             let range = n.line_range?;
             Some(FunctionSpan {
@@ -2104,6 +2164,35 @@ fn function_spans_for_file(
             })
         })
         .collect()
+}
+
+fn looks_like_function_def(node: &neuromesh_core::ContextNode) -> bool {
+    if !node.node_type.is_artifact() {
+        return false;
+    }
+    let Some(sig) = node.signature.as_deref() else {
+        return false;
+    };
+    let mut head = sig.trim();
+    for modifier in [
+        "export ",
+        "pub(crate) ",
+        "pub ",
+        "async ",
+        "static ",
+        "private ",
+        "public ",
+        "protected ",
+        "override ",
+        "@",
+    ] {
+        while let Some(rest) = head.strip_prefix(modifier) {
+            head = rest.trim_start();
+        }
+    }
+    ["def ", "fn ", "function ", "fun ", "func "]
+        .iter()
+        .any(|kw| head.starts_with(kw))
 }
 
 fn compute_seed_call_coverage(

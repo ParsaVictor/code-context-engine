@@ -1246,6 +1246,37 @@ impl NeuralProjectGraph {
         }
     }
 
+    /// Whether a seed query should be read as a file hint at all.
+    ///
+    /// A path separator settles it. A bare dotted name only counts when the
+    /// part after the dot is an extension some indexed file actually has:
+    /// `routes.php` is a hint in a Laravel app, `app.render` is an Express
+    /// API and never a file. Before this check the loose matcher took the
+    /// `app` of `app.render` and found `app.php`, and the `res` of
+    /// `res.render` found `stores/dashboard.ts` — two wrong seeds from one
+    /// keyword expansion, on a small enough repository for each to be unique.
+    pub fn is_file_hint_query(&self, query: &str) -> bool {
+        if query.contains(['/', '\\']) {
+            return true;
+        }
+        let Some((stem, ext)) = query.rsplit_once('.') else {
+            return false;
+        };
+        if stem.is_empty() || ext.is_empty() || ext.len() > 8 {
+            return false;
+        }
+        let ext_l = ext.to_ascii_lowercase();
+        if !ext_l.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return false;
+        }
+        let data = self.inner.read();
+        data.file_to_nodes.keys().any(|path| {
+            path.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case(&ext_l))
+        })
+    }
+
     pub fn resolve_file_hint(&self, hint: &str) -> Option<NodeId> {
         let data = self.inner.read();
         let hint_norm = normalize_path_hint(hint);

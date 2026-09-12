@@ -426,12 +426,11 @@ impl CodeSkeletonizer {
             }
         }
 
-        if !exon_spans.is_empty() {
-            let kept_owners: HashSet<Option<String>> =
-                exon_spans.iter().map(|s| s.owner.clone()).collect();
-            emit_spans.retain(|(span, is_exon, _)| *is_exon || kept_owners.contains(&span.owner));
-            fold_plans.retain(|(_, _, span)| kept_owners.contains(&span.owner));
-        }
+        // Methods of a class that contributed no exon used to be removed here
+        // outright — no marker, no fold, nothing for `expand_fold` to find.
+        // "Fold, don't delete" is the contract: they stay as one-line folds
+        // under their class header, so the model can see the class exists
+        // and ask for a body by id.
 
         if emit_spans.is_empty() {
             return SkeletonResult {
@@ -514,16 +513,17 @@ impl CodeSkeletonizer {
                     .collect::<String>();
                 let fold_id =
                     make_fold_id(file_path, &span.name, folds.len() + 1, *interior_start + 1);
-                if start < *interior_start {
-                    result_lines.push(lines[start].to_string());
-                }
-                result_lines.push(format!(
+                let marker = format!(
                     "{}/* [neuromesh:fold:{} | {} lines folded | {}] */",
                     indent,
                     fold_id,
                     interior_end.saturating_sub(*interior_start) + 1,
                     span.signature
-                ));
+                );
+                if start < *interior_start {
+                    result_lines.push(lines[start].to_string());
+                }
+                result_lines.push(marker);
                 if end > *interior_end {
                     result_lines.push(lines[end].to_string());
                 }
@@ -698,7 +698,7 @@ export function untargetedHeavyHelper2() {
     }
 
     #[test]
-    fn windowed_skeleton_drops_unrelated_class_body() {
+    fn windowed_skeleton_folds_unrelated_class_body() {
         let code = r#"package com.google.gson;
 import java.io.IOException;
 
@@ -754,12 +754,24 @@ public class TypeAdapter<T> {
             CodeSkeletonizer::skeletonize_with_spans("TypeAdapter.java", code, &active, &spans);
         assert!(res.skeleton_code.contains("out.nullValue()"));
         assert!(res.skeleton_code.contains("import java.io.IOException"));
+        // Fold, don't delete: the unrelated class's bodies are out, but the
+        // class is still visible and each body has a fold the model can ask
+        // for. Before, they vanished without a marker.
         assert!(
             !res.skeleton_code.contains("int e = a + b + c + d"),
             "unrelated class body must not ship: {}",
             res.skeleton_code
         );
-        assert!(res.skeleton_tokens < res.original_tokens);
+        assert!(
+            res.skeleton_code.contains("public void unusedHelper()"),
+            "the folded method keeps its signature line: {}",
+            res.skeleton_code
+        );
+        assert!(
+            res.folds.iter().any(|f| f.symbol_name == "unusedHelper"
+                && f.original_body.contains("int e = a + b + c + d")),
+            "the dropped body must be registered as a fold"
+        );
     }
 
     #[test]

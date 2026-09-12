@@ -75,6 +75,9 @@ pub struct FoldPolicy {
     /// Resolved seed / callee names. Rank above prompt identifiers so K
     /// never folds the method the packet is for.
     pub priority_symbols: HashSet<String>,
+    /// `Owner.member` pairs written in the prompt, lower-cased. A method the
+    /// user named with its class outranks every other `forward` in the file.
+    pub qualified: HashSet<(String, String)>,
 }
 
 pub const SEED_EXON_BUDGET: usize = 4;
@@ -91,6 +94,7 @@ impl Default for FoldPolicy {
             verb_exons: HashSet::new(),
             exon_budget: SEED_EXON_BUDGET,
             priority_symbols: HashSet::new(),
+            qualified: HashSet::new(),
         }
     }
 }
@@ -114,6 +118,7 @@ impl FoldPolicy {
             verb_exons: HashSet::new(),
             exon_budget: SEED_EXON_BUDGET,
             priority_symbols: active_symbols,
+            qualified: HashSet::new(),
         }
     }
 
@@ -141,6 +146,7 @@ impl FoldPolicy {
         }
         policy.prompt_tokens = prompt_focus_tokens(&signature.raw_prompt, &policy.ident_tokens);
         policy.verb_exons = infer_verb_exons(&signature.raw_prompt);
+        policy.qualified = qualified_pairs(&signature.raw_prompt);
         policy
     }
 
@@ -200,6 +206,14 @@ impl FoldPolicy {
     }
 
     pub fn score(&self, name: &str, owner: Option<&str>, signature: &str, body: &str) -> f32 {
+        if let Some(owner) = owner {
+            if self
+                .qualified
+                .contains(&(owner.to_lowercase(), name.to_lowercase()))
+            {
+                return 300.0;
+            }
+        }
         if is_seed_exon(name, &self.priority_symbols) {
             return 200.0;
         }
@@ -214,6 +228,13 @@ impl FoldPolicy {
         let sig_hits = self.ident_hits(&tokenize_name(signature));
         let verb = self.verb_exons.contains(&name.to_lowercase());
 
+        // A method of the class the question names is part of the answer
+        // even when its own name is not: `forward` under `Detector` when the
+        // prompt says "the Detector model". Without this the class body was
+        // dropped from the packet altogether.
+        if owner.is_some_and(|o| is_seed_exon(o, &self.active_symbols)) {
+            score += 40.0;
+        }
         if owner.is_some_and(|o| self.compound_type_match(o)) {
             score += 40.0;
         }
@@ -561,5 +582,85 @@ mod tests {
             .with_exon_budget(1)
             .select_exons(&[100.0, 100.0, 100.0]);
         assert_eq!(only_seeds, HashSet::from([0]), "K caps even exact seeds");
+    }
+}
+
+/// `Owner.member` expressions in a prompt, as lower-cased pairs.
+/// `CausalSelfAttention.forward` -> ("causalselfattention", "forward").
+/// Decimal numbers and file names are skipped by requiring both halves to
+/// start with a letter or underscore.
+pub(crate) fn qualified_pairs(prompt: &str) -> HashSet<(String, String)> {
+    let mut out = HashSet::new();
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_';
+    for token in prompt.split(|c: char| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '(' | ')' | ',' | '?' | '!' | ';' | ':' | '`' | '"' | '\''
+            )
+    }) {
+        let Some((owner, member)) = token.split_once('.') else {
+            continue;
+        };
+        let owner = owner.trim_matches(|c: char| !is_ident(c));
+        let member = member.trim_matches(|c: char| !is_ident(c));
+        let starts_ok = |s: &str| {
+            s.chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic() || c == '_')
+        };
+        if owner.is_empty() || member.is_empty() || !starts_ok(owner) || !starts_ok(member) {
+            continue;
+        }
+        const EXTENSIONS: &[&str] = &[
+            "py", "js", "ts", "tsx", "jsx", "rs", "go", "rb", "php", "java", "kt", "cs", "cpp",
+            "c", "h", "md", "json", "toml", "yaml", "yml", "txt", "vue", "scss", "css", "html",
+        ];
+        if EXTENSIONS.contains(&member.to_lowercase().as_str()) {
+            continue;
+        }
+        if !owner.chars().all(is_ident) || !member.chars().all(is_ident) {
+            continue;
+        }
+        out.insert((owner.to_lowercase(), member.to_lowercase()));
+    }
+    out
+}
+
+#[cfg(test)]
+mod qualified_tests {
+    use super::*;
+
+    #[test]
+    fn prompt_owner_member_pairs_are_extracted() {
+        let pairs = qualified_pairs(
+            "How does CausalSelfAttention.forward use flash attention? See train.py and v1.2.",
+        );
+        assert!(pairs.contains(&("causalselfattention".into(), "forward".into())));
+        assert!(
+            !pairs.iter().any(|(o, _)| o == "train"),
+            "file names are not pairs: {pairs:?}"
+        );
+        assert!(
+            !pairs.iter().any(|(o, _)| o == "v1"),
+            "numbers are not pairs: {pairs:?}"
+        );
+    }
+
+    #[test]
+    fn qualified_method_outranks_every_other_forward() {
+        let signature = neuromesh_task::TaskSignatureExtractor::extract(
+            "How does CausalSelfAttention.forward compute attention?",
+        );
+        let policy = FoldPolicy::from_task(&HashSet::new(), &signature);
+        let named = policy.score(
+            "forward",
+            Some("CausalSelfAttention"),
+            "def forward(self, x):",
+            "",
+        );
+        let other = policy.score("forward", Some("MLP"), "def forward(self, x):", "");
+        assert!(named > other, "named {named} other {other}");
+        assert!(named >= 300.0);
     }
 }

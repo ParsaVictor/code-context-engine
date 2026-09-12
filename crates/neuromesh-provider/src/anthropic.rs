@@ -80,10 +80,21 @@ impl Provider for AnthropicProvider {
             })?;
 
             let id = json["id"].as_str().unwrap_or("msg-unknown").to_string();
-            let content = json["content"][0]["text"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
+            // Current models answer with a `thinking` block ahead of the text
+            // (adaptive thinking is on by default), so `content[0].text` is
+            // empty: take every text block, in order.
+            let content = json["content"]
+                .as_array()
+                .map(|blocks| {
+                    blocks
+                        .iter()
+                        .filter(|b| b["type"].as_str() == Some("text"))
+                        .filter_map(|b| b["text"].as_str())
+                        .collect::<Vec<_>>()
+                        .join("")
+                })
+                .unwrap_or_default();
+            let finish_reason = json["stop_reason"].as_str().map(|s| s.to_string());
 
             let prompt_tokens = json["usage"]["input_tokens"].as_u64().unwrap_or(0) as usize;
             let completion_tokens = json["usage"]["output_tokens"].as_u64().unwrap_or(0) as usize;
@@ -97,7 +108,7 @@ impl Provider for AnthropicProvider {
                     completion_tokens,
                     total_tokens: prompt_tokens + completion_tokens,
                 },
-                finish_reason: Some("end_turn".to_string()),
+                finish_reason,
             })
         })
     }

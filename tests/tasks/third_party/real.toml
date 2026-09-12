@@ -1,0 +1,60 @@
+# Task cases on third-party checkouts. Not read by `load_task_dir` (it takes
+# only top-level files) and not run by CI: clone the repositories under a
+# workspace as `repos/nanoGPT` and `repos/express` and run
+#
+#   git clone --depth 1 https://github.com/karpathy/nanoGPT repos/nanoGPT
+#   git clone --depth 1 https://github.com/expressjs/express repos/express
+#   neuromesh eval --tasks --tasks-file <path to this file>
+#
+# Measured 2026-09-12 on the PR that introduced the harness: 8/8 reachable,
+# strict 6/8 (GPT.forward and CausalSelfAttention.__init__ shipped folded).
+# Before the JS parser learned `app.x = function x()`, every Express case was
+# SymbolMissing and `res.json` did not even reach the packet.
+
+[[task]]
+id = "nano_train_forward"
+repo = "repos/nanoGPT"
+prompt = "How does the training loop call the GPT model forward and estimate_loss?"
+needs = ["train.py::estimate_loss", "train.py::get_batch", "model.py::GPT.forward"]
+
+[[task]]
+id = "nano_attention"
+repo = "repos/nanoGPT"
+prompt = "How does CausalSelfAttention.forward compute attention and where is flash attention chosen?"
+needs = ["model.py::CausalSelfAttention.forward", "model.py::CausalSelfAttention.__init__"]
+
+[[task]]
+id = "nano_generate"
+repo = "repos/nanoGPT"
+prompt = "How does GPT.generate sample the next token with temperature and top_k?"
+needs = ["model.py::GPT.generate"]
+
+[[task]]
+id = "nano_optim"
+repo = "repos/nanoGPT"
+prompt = "How does configure_optimizers split parameters into decay and no-decay groups?"
+needs = ["model.py::GPT.configure_optimizers"]
+
+[[task]]
+id = "express_use"
+repo = "repos/express"
+prompt = "How does app.use register middleware and how does app.handle dispatch a request?"
+needs = ["lib/application.js::use", "lib/application.js::handle"]
+
+[[task]]
+id = "express_listen"
+repo = "repos/express"
+prompt = "How does app.listen create the http server, and how does createApplication build the app?"
+needs = ["lib/application.js::listen", "lib/express.js::createApplication"]
+
+[[task]]
+id = "express_render"
+repo = "repos/express"
+prompt = "How does app.render look up a view engine and render a template with tryRender?"
+needs = ["lib/application.js::render", "lib/application.js::tryRender"]
+
+[[task]]
+id = "express_res_json"
+repo = "repos/express"
+prompt = "How does res.json serialize the body and set the content type?"
+needs = ["lib/response.js::json"]

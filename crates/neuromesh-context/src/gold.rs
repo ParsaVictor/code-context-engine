@@ -736,17 +736,35 @@ pub fn load_gold_tasks(path: &Path) -> Vec<GoldTask> {
     parse_gold_toml(&raw).unwrap_or_else(builtin_gold_tasks)
 }
 
-pub fn signature_for_gold_task(task: &GoldTask) -> neuromesh_core::TaskSignature {
-    use neuromesh_core::{RetrievalEngine, SeedEngineId};
+/// The signature a live `neuromesh_get_context` call builds from a bare
+/// prompt: the extractor, then the server-assisted keyword pass under the
+/// same config switch the MCP server reads. Every harness in this workspace
+/// — gold tests, `neuromesh eval`, the determinism gate, the task harness —
+/// must go through here, or they measure different pipelines. They did: the
+/// gold tests ran with the seed engine switched off while `eval` ran the
+/// production engine, and one fixture case scored 1.00 in the first and 0.00
+/// in the second on the same commit.
+pub fn production_signature(prompt: &str) -> neuromesh_core::TaskSignature {
+    use crate::retrieval::apply_auto_extract_keywords;
     use neuromesh_task::TaskSignatureExtractor;
-    let mut signature = TaskSignatureExtractor::extract(&task.prompt);
+    let mut signature = TaskSignatureExtractor::extract(prompt);
+    let enabled = neuromesh_core::Config::load()
+        .seed_resolution
+        .effective_auto_extract();
+    apply_auto_extract_keywords(&mut signature, prompt, enabled);
+    signature
+}
+
+/// `production_signature` plus the client-supplied signals two gold cases
+/// model (a client that passes keywords, a client that asks for hybrid).
+pub fn signature_for_gold_task(task: &GoldTask) -> neuromesh_core::TaskSignature {
+    use neuromesh_core::RetrievalEngine;
+    let mut signature = production_signature(&task.prompt);
     if task.id == "shop_keywords_user" {
         signature.client_keywords = vec!["SmsMessage".into(), "create_sms_messages".into()];
         signature.retrieval_engine_override = Some(RetrievalEngine::Fast);
     } else if task.id == "shop_design_catalog" {
         signature.retrieval_engine_override = Some(RetrievalEngine::Hybrid);
-    } else {
-        signature.engine_override = Some(SeedEngineId::Off);
     }
     signature
 }
@@ -820,11 +838,17 @@ fn parse_gold_toml(raw: &str) -> Option<Vec<GoldTask>> {
     }
 }
 
-fn unquote(value: &str) -> String {
-    value.trim_matches('"').to_string()
+pub(crate) fn unquote(value: &str) -> String {
+    let trimmed = value.trim();
+    let inner = trimmed
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .unwrap_or(trimmed);
+    // The two escapes a shell command in a TOML string needs.
+    inner.replace("\\\"", "\"").replace("\\\\", "\\")
 }
 
-fn parse_string_array(value: &str) -> Vec<String> {
+pub(crate) fn parse_string_array(value: &str) -> Vec<String> {
     value
         .trim()
         .trim_start_matches('[')

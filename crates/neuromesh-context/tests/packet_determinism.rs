@@ -12,13 +12,11 @@
 //! sidecar that never runs is trivially stable and would hide a regression
 //! that switched it off. `NM_DET_ROUNDS` overrides the round count.
 
-use neuromesh_context::gold::{builtin_gold_tasks, fixture_gold_cases, GoldTask};
-use neuromesh_context::retrieval::apply_auto_extract_keywords;
+use neuromesh_context::gold::{builtin_gold_tasks, fixture_gold_cases, signature_for_gold_task};
 use neuromesh_context::{ContextActivator, ReversibleContextRegistry};
 use neuromesh_core::{OptimizationMode, ProjectId};
 use neuromesh_graph::NeuralProjectGraph;
 use neuromesh_index::ProjectWalker;
-use neuromesh_task::TaskSignatureExtractor;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -100,7 +98,7 @@ fn same_question_same_packet_across_fresh_activators() {
             graph.ingest_workspace(&scanned);
             graph
         });
-        let signature = production_signature(&task);
+        let signature = signature_for_gold_task(&task);
         let mut seen: Vec<Answer> = Vec::new();
         for _ in 0..rounds {
             let registry = Arc::new(ReversibleContextRegistry::new());
@@ -173,7 +171,7 @@ fn same_question_same_packet_on_this_repository() {
     let mut cases = 0usize;
     let mut sidecar_cases = 0usize;
     for task in builtin_gold_tasks() {
-        let signature = production_signature(&task);
+        let signature = signature_for_gold_task(&task);
         let mut seen: Vec<Answer> = Vec::new();
         for _ in 0..rounds {
             let activator = ContextActivator::new(Arc::new(ReversibleContextRegistry::new()));
@@ -203,14 +201,4 @@ fn same_question_same_packet_on_this_repository() {
     eprintln!(
         "packet_determinism(repo): {cases} cases x {rounds} rounds stable; sidecar fired on {sidecar_cases}"
     );
-}
-
-/// The signature a live session builds: extractor plus auto-extracted
-/// keywords, seed engine on. `signature_for_gold_task` switches the seed
-/// engine off for the gold gate; this gate is about stability of the path
-/// users hit, so it must not.
-fn production_signature(task: &GoldTask) -> neuromesh_core::TaskSignature {
-    let mut signature = TaskSignatureExtractor::extract(&task.prompt);
-    apply_auto_extract_keywords(&mut signature, &task.prompt, true);
-    signature
 }

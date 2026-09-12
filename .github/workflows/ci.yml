@@ -44,6 +44,9 @@ jobs:
       - name: Packet determinism gate
         run: cargo test -p neuromesh-context --test packet_determinism -- --nocapture
 
+      - name: Task success gate (oracle)
+        run: cargo test -p neuromesh-context --test task_success -- --nocapture
+
       - name: Embedding feature tests
         run: cargo test -p neuromesh-context --features embeddings --verbose
 

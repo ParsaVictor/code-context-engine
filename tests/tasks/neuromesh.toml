@@ -1,0 +1,26 @@
+# Task cases on this repository itself (repo = "."): larger graph, real
+# fold pressure — the place where "file present, body folded" shows up.
+
+[[task]]
+id = "nm_handle_tool_call"
+repo = "."
+prompt = "How does handle_tool_call build a context packet through ContextActivator::activate?"
+needs = ["crates/neuromesh-mcp/src/tools.rs::handle_tool_call", "crates/neuromesh-context/src/activator.rs::activate"]
+
+[[task]]
+id = "nm_physarum_sidecar"
+repo = "."
+prompt = "Where does activate solve the Physarum tube and add its files to the packet, and how does solve_physarum_tube bound the work?"
+needs = ["crates/neuromesh-context/src/activator.rs::activate", "crates/neuromesh-graph/src/graph.rs::solve_physarum_tube"]
+
+[[task]]
+id = "nm_fold_expand"
+repo = "."
+prompt = "How does expand_fold restore a folded body from the ReversibleContextRegistry?"
+needs = ["crates/neuromesh-context/src/expansion.rs::expand_fold", "crates/neuromesh-context/src/registry.rs::get_fold"]
+
+[[task]]
+id = "nm_notebook_read"
+repo = "."
+prompt = "How does read_source_text turn an .ipynb notebook into a Python source view?"
+needs = ["crates/neuromesh-index/src/notebook.rs::read_source_text"]

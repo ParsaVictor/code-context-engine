@@ -137,7 +137,14 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
             let prompt = args.get(2).cloned();
             commands::optimize::execute(prompt)?;
         }
-        "eval" | "evaluate" => commands::evaluate::execute(args)?,
+        "eval" | "evaluate" => {
+            if commands::tasks::wants_tasks(args) {
+                commands::tasks::execute(args).await?;
+            } else {
+                commands::evaluate::execute(args)?;
+            }
+        }
+        "tasks" => commands::tasks::execute(args).await?,
         "benchmark" => commands::benchmark::execute()?,
         "mcp" => {
             // Handshake over stdio must start immediately. Index on a blocking

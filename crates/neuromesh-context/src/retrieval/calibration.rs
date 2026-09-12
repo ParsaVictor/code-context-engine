@@ -21,6 +21,10 @@ pub struct EvalSuiteMetrics {
     pub task_success_per_1k_tokens: f32,
     pub task_success_per_dollar: f32,
     pub task_success_per_100ms: f32,
+    /// Where the task-success numbers came from: `oracle: ...` or a model
+    /// run. Empty means nothing measured them and they are zero by default.
+    #[serde(default)]
+    pub task_success_source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub false_sufficiency_rate: Option<f32>,
     #[serde(default)]

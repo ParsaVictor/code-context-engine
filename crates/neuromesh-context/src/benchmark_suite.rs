@@ -200,6 +200,14 @@ impl ReleaseGateReport {
                 "fsr_proxy_below_10pct".into(),
                 metrics.false_sufficiency_proxy < 0.10,
             ),
+            (
+                "task_success_measured".into(),
+                !metrics.task_success_source.is_empty(),
+            ),
+            (
+                "task_success_competitive".into(),
+                metrics.task_success_rate >= 0.5,
+            ),
             ("l1_p95_slo".into(), metrics.l1_p95_ms <= 50),
             ("l3_rare".into(), metrics.l3_rate <= 0.20),
             ("memory_bounded".into(), true),
@@ -286,6 +294,11 @@ pub fn aggregate_cell_results(cells: &[BenchmarkCellResult]) -> EvalSuiteMetrics
         task_success_per_1k_tokens,
         task_success_per_dollar: task_success_rate,
         task_success_per_100ms,
+        task_success_source: if has_task_success {
+            "cells".into()
+        } else {
+            String::new()
+        },
         false_sufficiency_rate: fsr,
         false_sufficiency_proxy: fsr_proxy,
         impact_recall: 0.0,
