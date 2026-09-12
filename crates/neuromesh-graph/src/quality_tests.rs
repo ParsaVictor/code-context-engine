@@ -1796,6 +1796,42 @@ const ui = useUiStore()
         }
     }
 
+    #[test]
+    fn a_call_does_not_cross_into_another_language_family() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("stack"));
+        let py = "from sqlmodel import select\n\ndef read_items(session):\n    return session.exec(select(Item)).all()\n";
+        let tsx = "export function Select(props: SelectProps) {\n  return <div>{props.children}</div>;\n}\n";
+        ingest_fixture(
+            &graph,
+            "backend/app/api/routes/items.py",
+            py,
+            SourceLanguage::Python,
+        );
+        ingest_fixture(
+            &graph,
+            "frontend/src/components/ui/select.tsx",
+            tsx,
+            SourceLanguage::TypeScript,
+        );
+        graph.finalize_links();
+
+        let caller = graph
+            .search_symbols("read_items", 4)
+            .into_iter()
+            .find(|h| h.name == "read_items")
+            .expect("read_items indexed");
+        let crossed = graph
+            .get_connected_neighbors(&caller.id)
+            .into_iter()
+            .filter(|(_, e)| e.edge_type == neuromesh_core::EdgeType::Calls)
+            .filter_map(|(n, _)| graph.get_node(&n))
+            .any(|n| n.file_path.to_string_lossy().ends_with(".tsx"));
+        assert!(
+            !crossed,
+            "Python select(...) must not resolve to the TSX Select component"
+        );
+    }
+
     fn ingest_fixture(
         graph: &NeuralProjectGraph,
         rel: &str,

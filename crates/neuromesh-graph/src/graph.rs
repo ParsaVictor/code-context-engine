@@ -699,12 +699,15 @@ impl NeuralProjectGraph {
                             EdgeConfidence::Likely,
                         );
                         true
-                    } else if let Some((target, confidence)) = self.resolve_call_ranked(
-                        &rel.target_symbol,
-                        &rel.source_file,
-                        &imported_files,
-                        rel.receiver_hint.as_deref(),
-                    ) {
+                    } else if let Some((target, confidence)) = self
+                        .resolve_call_ranked(
+                            &rel.target_symbol,
+                            &rel.source_file,
+                            &imported_files,
+                            rel.receiver_hint.as_deref(),
+                        )
+                        .filter(|(target, _)| self.same_language_family(target, &rel.source_file))
+                    {
                         if target != source {
                             self.add_edge_with_confidence(
                                 source,
@@ -714,11 +717,14 @@ impl NeuralProjectGraph {
                             );
                         }
                         true
-                    } else if let Some((target, _)) = self.resolve_ranked(
-                        &rel.target_symbol,
-                        Some(&rel.source_file.to_string_lossy()),
-                        Some(&imported_files),
-                    ) {
+                    } else if let Some((target, _)) = self
+                        .resolve_ranked(
+                            &rel.target_symbol,
+                            Some(&rel.source_file.to_string_lossy()),
+                            Some(&imported_files),
+                        )
+                        .filter(|(target, _)| self.same_language_family(target, &rel.source_file))
+                    {
                         if target != source {
                             self.add_edge_with_confidence(
                                 source.clone(),
@@ -1362,6 +1368,23 @@ impl NeuralProjectGraph {
             }
         }
         None
+    }
+
+    /// A call cannot cross from one language family into another: Python's
+    /// `select(...)` is not the React `Select` component that happens to be
+    /// the only `select` in the index. Files with no family (data, styles)
+    /// never block.
+    fn same_language_family(&self, target: &NodeId, source_file: &Path) -> bool {
+        let Some(target_path) = self.node_file_path(target) else {
+            return true;
+        };
+        match (
+            neuromesh_core::language_family(source_file),
+            neuromesh_core::language_family(&target_path),
+        ) {
+            (Some(a), Some(b)) => a == b,
+            _ => true,
+        }
     }
 
     fn resolve_call_target(

@@ -35,25 +35,8 @@ fn reason_prefix(query: &str) -> &str {
     query.split(':').next().unwrap_or("")
 }
 
-/// Languages that ship in one build are one family: a `.tsx` route and the
-/// `.ts` client it calls are the same side of a stack.
 pub(crate) fn family(path: &Path) -> Option<&'static str> {
-    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-    Some(match ext.as_str() {
-        "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "vue" | "svelte" | "astro" => "js",
-        "py" | "pyi" | "ipynb" => "python",
-        "rs" => "rust",
-        "go" => "go",
-        "php" | "twig" => "php",
-        "java" | "kt" | "kts" => "jvm",
-        "cs" => "dotnet",
-        "swift" => "swift",
-        "dart" => "dart",
-        "rb" => "ruby",
-        "c" | "h" | "cc" | "cpp" | "hpp" => "c",
-        // Styles, data, docs: no side of the stack to be foreign to.
-        _ => return None,
-    })
+    neuromesh_core::language_family(path)
 }
 
 /// Families of the files the strong seeds resolved to.
