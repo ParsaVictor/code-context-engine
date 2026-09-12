@@ -15,6 +15,10 @@
 | F7 | fold policy برای بلوک‌های ماژول از prompt استفاده نمی‌کند: بلوکی که جواب سؤال در آن است (ساخت vocab) هم fold می‌شود؛ فقط قابل expand است | `skeleton.rs`, `fold.rs` | ⏳ باز — مربوط به آیتم ۵ (fold policy) |
 | F8 | گیت ریلیز (`eval --release-gates`) روی main با precision 0.383 قرمز است (آستانه‌ی precision_min) — از قبل، نه regression | `neuromesh-cli eval` | ⏳ هدف مرحله ۴: ≥0.73 |
 | F9 | با fold-not-delete packetها کمی بزرگ‌تر شدند (express +۱۲٪) چون کد ماژول دیگر حذف نمی‌شود؛ هیچ گیتی قرمز نشد ولی باید در آیتم ۷ (marker کوتاه‌تر) دیده شود | `skeleton.rs` | ⏳ باز |
+| F10 | `pick_dominant_candidate` بین تعریف‌های هم‌نام (۱۴× `SimpleViT`، ۱۸× `posemb_sincos_2d`) با اندازه‌ی بدنه/درجه انتخاب می‌کرد؛ دو seed یک سؤال به دو فایل مختلف می‌رفتند | `graph.rs`, `activator.rs` | ✅ PR #22 (`seed::twin_cohere`: هم‌رخدادی + پوشش کامل stem توسط prompt) |
+| F11 | `tokenize_ident("SimpleViT")` → `["simple","vi"]`؛ حرف تکی `T` حذف می‌شود و `vit` گم می‌شود. برای twin_cohere با «کلمه‌ی چسبیده» دور زده شد؛ ولی هر جای دیگری که به توکن‌های camelCase با حرف بزرگ پایانی تکیه می‌کند همین سوراخ را دارد | `neuromesh-parser/identifiers.rs` | ⏳ باز |
+| F12 | `vit_sincos` هنوز دو sidecar هم‌ردیف می‌آورد (`simple_vit_with_fft.py`, `vaat.py`) → precision 0.33 به‌جای 1.0 | Physarum sidecar | ⏳ آیتم ۴ |
+| F13 | هنگام mutation-test با `git checkout -- <file>` دو بار wiring کامیت‌نشده هم برگشت؛ قاعده: قبل از mutation کامیت یا `git stash push <file>` | فرایند | ✅ قاعده ثبت شد |
 
 ## اعداد ratchet (ریپوهای واقعی)
 
@@ -23,10 +27,11 @@
 | main (4b74c25) | 0.900 | 0.146 | 12 (شمارنده‌ی درست) | 14/21 | 12 |
 | #20 path steer | 0.950 | 0.196 | 11 | 14/21 | 12 |
 | #21 fold-not-delete | 0.950 | 0.196 | 11 | 15/21 | 13 |
+| #22 twin coherence | **1.000** | 0.214 | 11 | 16/21 | 14 |
 
 ## ترتیب باقی‌مانده‌ی مرحله ۴
 
-2. `vit_sincos` recall 0 → reranker + tantivy
+2. ~~`vit_sincos` recall 0~~ ✅ بدون tantivy حل شد (#22)؛ tantivy/reranker همچنان برای precision لازم است
 3. هرس frontend برای سؤال backend
 4. sidecar Physarum هم‌ردیف‌ها
 5. fold policy (strict) — F7 هم اینجا

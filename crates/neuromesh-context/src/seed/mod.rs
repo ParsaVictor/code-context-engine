@@ -15,6 +15,7 @@ pub mod micro_header;
 pub(crate) mod path_steer;
 pub mod ranker;
 pub mod sink;
+pub(crate) mod twin_cohere;
 
 #[cfg(feature = "embeddings")]
 pub mod semantic_embed;

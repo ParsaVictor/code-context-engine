@@ -362,6 +362,12 @@ impl ContextActivator {
 
         mark_equivalent_file_hits(graph, &mut seed_resolutions, &mut seed_energies);
         cohere_ambiguous_seeds_to_app(graph, &mut seed_resolutions, &mut seed_energies, prompt);
+        crate::seed::twin_cohere::cohere_twin_definitions(
+            graph,
+            &mut seed_resolutions,
+            &mut seed_energies,
+            prompt,
+        );
         expand_file_seeds_to_symbols(
             graph,
             signature,

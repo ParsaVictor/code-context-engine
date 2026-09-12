@@ -986,6 +986,19 @@ impl NeuralProjectGraph {
         data.mesh.edges_map()
     }
 
+    /// Every node whose name equals `name` (case-insensitive), in index order.
+    pub fn nodes_named(&self, name: &str) -> Vec<ContextNode> {
+        let data = self.inner.read();
+        data.name_to_nodes
+            .get(&name.to_lowercase())
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| data.mesh.node(id).cloned())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub fn find_nodes_by_name(&self, query: &str) -> Vec<ContextNode> {
         self.search_symbols(query, 32)
             .into_iter()
