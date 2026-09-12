@@ -368,6 +368,12 @@ impl ContextActivator {
             &mut seed_energies,
             prompt,
         );
+        crate::seed::lang_cohere::prune_off_family_weak_seeds(
+            graph,
+            &mut seed_resolutions,
+            &mut seed_energies,
+            &mut seed_reasons,
+        );
         expand_file_seeds_to_symbols(
             graph,
             signature,
@@ -530,6 +536,23 @@ impl ContextActivator {
         // bypassed by whatever the tube added, and a style question shipped the
         // cart drawer because it happens to include the same mixin.
         let mut skipped_files: Vec<SkippedFile> = Vec::new();
+        // The frontend client of a backend question arrives here as a
+        // connector or a tube file, scored on shared words like `auth` and
+        // `login`. The seeds already settled which side of the stack the
+        // question is about; fill does not reopen it.
+        let families = crate::seed::lang_cohere::strong_families(graph, &seed_resolutions);
+        selection.optional.retain(|id| {
+            let off = crate::seed::lang_cohere::off_family(graph, id, &families);
+            if off {
+                if let Some(node) = graph.get_node(id) {
+                    skipped_files.push(SkippedFile {
+                        path: node.file_path.to_string_lossy().replace('\\', "/"),
+                        reason: "outside the language family of every strong seed".into(),
+                    });
+                }
+            }
+            !off
+        });
         if is_style_task(signature) {
             selection.required.retain(|id| {
                 let keep = graph

@@ -73,13 +73,24 @@ pub(crate) fn cohere_twin_definitions(
         let Some(node) = graph.get_node(id) else {
             continue;
         };
+        // Data and config files (a `config` key in components.json) neither
+        // anchor code seeds nor count as twins of a code symbol.
+        if crate::seed::lang_cohere::family(&node.file_path).is_none() {
+            continue;
+        }
         if node.node_type == NodeType::File {
             anchor_files.insert(node.file_path.clone());
             continue;
         }
+        // Same name under the same parent is a twin whatever the node type:
+        // the `User` class in models.py and the `User` component in
+        // User.tsx are both what the prompt's `User` could mean.
         let mut by_file: HashMap<PathBuf, NodeId> = HashMap::new();
         for twin in graph.nodes_named(&node.name) {
-            if twin.node_type != node.node_type || twin.parent != node.parent {
+            if twin.node_type == NodeType::File
+                || twin.parent != node.parent
+                || crate::seed::lang_cohere::family(&twin.file_path).is_none()
+            {
                 continue;
             }
             by_file.entry(twin.file_path).or_insert(twin.id);

@@ -35,8 +35,8 @@ use std::sync::Arc;
 /// (recall 0.90, precision 0.146, forbidden 12, oracle 14/21); each constant
 /// moves up with the engine, never down.
 const MIN_MEAN_RECALL: f32 = 0.99; // measured 1.00 (path steer, twin coherence)
-const MIN_MEAN_PRECISION: f32 = 0.21; // measured 0.214 — the real number, not the fixture 0.89
-const MAX_FORBIDDEN_HITS: usize = 11; // measured 11 (path steer)
+const MIN_MEAN_PRECISION: f32 = 0.26; // measured 0.266 — the real number, not the fixture 0.89
+const MAX_FORBIDDEN_HITS: usize = 9; // measured 9 (language family, consumer gating)
 const MIN_TASK_REACHABLE: f32 = 0.75; // measured 16/21 (fold don't delete, twin coherence)
 
 fn workspace_root() -> PathBuf {
