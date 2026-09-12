@@ -11,8 +11,8 @@ use crate::seed::{
     SeedBuffers, SeedSink,
 };
 use crate::selector::{
-    budget_mode_name, fill_budget, is_noise_path, packet_cap, path_sort_keys,
-    seed_callee_exon_names, select, sort_key,
+    budget_mode_name, consumer_named_in_focus, fill_budget, focus_terms_ask_for_consumers,
+    is_noise_path, packet_cap, path_sort_keys, seed_callee_exon_names, select, sort_key,
 };
 use crate::skeleton::{CodeSkeletonizer, FoldedIntron, FunctionSpan};
 use crate::style_routing::{
@@ -728,6 +728,17 @@ impl ContextActivator {
         let mut all_folds: Vec<FoldedIntron> = Vec::new();
         let registry = self.registry.clone();
 
+        // On a handful of files there is no independent disambiguation
+        // signal beyond "some symbol in this file matches the question", so
+        // a stem-match fill file is often the only way to reach a legitimate
+        // second gold file (e.g. a duplicate-named handler in a sibling
+        // file). At real-codebase scale that same rule is what drags in
+        // sidecar noise (duplicate helpers copy-pasted across many modules).
+        // Gate fill files only once the project is big enough that "shares a
+        // stem with a required file" stops being a useful signal on its own.
+        const FILL_GATE_MIN_FILES: usize = 20;
+        let large_project = graph.file_node_paths().len() > FILL_GATE_MIN_FILES;
+
         let materialize = |id: &NodeId,
                            scores: &HashMap<NodeId, f32>,
                            seed_energies: &HashMap<NodeId, f32>,
@@ -761,6 +772,21 @@ impl ContextActivator {
             });
             let sidecar =
                 !required_file && (reason == "physarum_tube" || reason.starts_with("utility:"));
+            // A plain term-score fill file (not a physarum structural bridge)
+            // with no other justification is a coincidental stem match, not
+            // something the question asked for. Gate it the same way a
+            // symbol's consumers are gated: only in when the question names
+            // the file (or its stem) or asks for usage/consumers. Physarum
+            // tube files are left alone: they are graph-theoretic bridges
+            // (e.g. a router wiring a controller to its template) that the
+            // question does not name directly but that connect the seeds.
+            if large_project
+                && sidecar
+                && !focus_terms_ask_for_consumers(&focus_terms)
+                && !consumer_named_in_focus(&node.name, &node.file_path, &focus_terms)
+            {
+                return None;
+            }
             let mut folds = Vec::new();
             let mut folded_symbols = Vec::new();
             let policy = fold_policy.clone().with_exon_budget(exon_budget);
