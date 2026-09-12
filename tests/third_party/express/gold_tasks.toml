@@ -1,0 +1,34 @@
+[[task]]
+id = "express_middleware"
+prompt = "How does app.use register middleware and how does app.handle dispatch a request?"
+gold_files = ["lib/application.js"]
+forbidden_files = ["lib/view.js", "lib/request.js"]
+expect_seeds_missed = false
+
+[[task]]
+id = "express_res_json"
+prompt = "How does res.json serialize the body and set the content type?"
+gold_files = ["lib/response.js"]
+forbidden_files = ["lib/request.js", "lib/view.js"]
+expect_seeds_missed = false
+
+[[task]]
+id = "express_req_headers"
+prompt = "How does req.get read a request header and how does req.is check the content type?"
+gold_files = ["lib/request.js"]
+forbidden_files = ["lib/response.js", "lib/view.js"]
+expect_seeds_missed = false
+
+[[task]]
+id = "express_view_render"
+prompt = "How does app.render create a View, and how does View.lookup resolve the template path?"
+gold_files = ["lib/application.js", "lib/view.js"]
+forbidden_files = ["lib/request.js"]
+expect_seeds_missed = false
+
+[[task]]
+id = "express_listen"
+prompt = "How does app.listen create the http server, and how does createApplication build the app?"
+gold_files = ["lib/application.js", "lib/express.js"]
+forbidden_files = ["lib/request.js", "lib/response.js", "lib/view.js"]
+expect_seeds_missed = false

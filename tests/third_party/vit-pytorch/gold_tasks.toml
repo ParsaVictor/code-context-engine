@@ -1,0 +1,34 @@
+[[task]]
+id = "vit_mae"
+prompt = "How does MAE mask patches, encode the visible ones and reconstruct pixels?"
+gold_files = ["vit_pytorch/mae.py"]
+forbidden_files = ["vit_pytorch/simmim.py", "vit_pytorch/mpp.py", "vit_pytorch/dino.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vit_sincos"
+prompt = "How does SimpleViT build the 2D sincos positional embedding with posemb_sincos_2d?"
+gold_files = ["vit_pytorch/simple_vit.py"]
+forbidden_files = ["vit_pytorch/vit.py", "vit_pytorch/simple_vit_1d.py", "vit_pytorch/simple_vit_3d.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vit_recorder"
+prompt = "How does Recorder wrap a ViT to record the attention maps of every Attention layer?"
+gold_files = ["vit_pytorch/recorder.py"]
+forbidden_files = ["vit_pytorch/extractor.py", "vit_pytorch/cait.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vit_cross"
+prompt = "How does CrossViT exchange CLS tokens between the small and large branches in CrossTransformer?"
+gold_files = ["vit_pytorch/cross_vit.py"]
+forbidden_files = ["vit_pytorch/crossformer.py", "vit_pytorch/vit.py", "vit_pytorch/cvt.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vit_distill"
+prompt = "How does DistillWrapper add the distillation token and compute the distillation loss against the teacher?"
+gold_files = ["vit_pytorch/distill.py"]
+forbidden_files = ["vit_pytorch/dino.py", "vit_pytorch/es_vit.py"]
+expect_seeds_missed = false

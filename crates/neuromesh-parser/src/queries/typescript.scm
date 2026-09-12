@@ -33,3 +33,14 @@
     object: (identifier) @function.parent
     property: (property_identifier) @function.name)
   right: [(function_expression) (arrow_function)]) @function
+
+; `View.prototype.lookup = function lookup(name) {...}` — the pre-class
+; prototype pattern, still how express's View is written.
+(assignment_expression
+  left: (member_expression
+    object: (member_expression
+      object: (identifier) @function.parent
+      property: (property_identifier) @_proto)
+    property: (property_identifier) @function.name)
+  right: [(function_expression) (arrow_function)]
+  (#eq? @_proto "prototype")) @function

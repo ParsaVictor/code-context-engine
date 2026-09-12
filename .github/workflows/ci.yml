@@ -61,3 +61,18 @@ jobs:
           cargo build --release -p neuromesh-cli --bin neuromesh --features embeddings
           ./target/release/neuromesh -V
           ./target/release/neuromesh install embed list
+
+  third-party-gold:
+    name: Real-repository gold set
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Fetch pinned third-party checkouts
+        run: bash scripts/fetch-third-party.sh
+      - name: Third-party gold + task oracle (ratchet)
+        run: NM_THIRD_PARTY=1 cargo test -p neuromesh-context --test third_party_gold -- --nocapture

@@ -1,0 +1,34 @@
+[[task]]
+id = "nano_train_loop"
+prompt = "How does the training loop call the GPT model forward and estimate_loss?"
+gold_files = ["train.py", "model.py"]
+forbidden_files = ["sample.py", "bench.py", "data/openwebtext/prepare.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "nano_flash_attention"
+prompt = "How does CausalSelfAttention.forward compute attention and where is flash attention chosen?"
+gold_files = ["model.py"]
+forbidden_files = ["sample.py", "bench.py", "configurator.py", "data/shakespeare_char/prepare.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "nano_sample_generate"
+prompt = "How does sample.py load a checkpoint and generate text with GPT.generate?"
+gold_files = ["sample.py", "model.py"]
+forbidden_files = ["bench.py", "data/openwebtext/prepare.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "nano_char_vocab"
+prompt = "How does the shakespeare_char prepare script build the character vocabulary and write meta.pkl?"
+gold_files = ["data/shakespeare_char/prepare.py"]
+forbidden_files = ["data/openwebtext/prepare.py", "data/shakespeare/prepare.py", "model.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "nano_configurator"
+prompt = "How does configurator.py override config globals from command line --key=value arguments?"
+gold_files = ["configurator.py"]
+forbidden_files = ["model.py", "sample.py", "bench.py"]
+expect_seeds_missed = false
