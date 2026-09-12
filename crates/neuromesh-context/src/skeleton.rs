@@ -152,6 +152,50 @@ fn is_preamble_line(line: &str) -> bool {
         || (t.starts_with("mod ") && t.ends_with(';'))
 }
 
+/// Module-level runs up to this many code lines ship verbatim; longer runs fold.
+const MODULE_GAP_KEEP_LINES: usize = 6;
+
+enum Block {
+    Group {
+        header: Option<usize>,
+        items: Vec<SpanEmit>,
+    },
+    Gap {
+        start: usize,
+        end: usize,
+    },
+}
+
+/// Maximal runs of lines (0-based, inclusive) after the preamble that no span
+/// or class group covers, trimmed of blank lines and lone block closers.
+fn module_gaps(lines: &[&str], covered: &[bool], preamble: usize) -> Vec<(usize, usize)> {
+    let mut gaps = Vec::new();
+    let mut i = preamble;
+    while i < lines.len() {
+        if covered[i] {
+            i += 1;
+            continue;
+        }
+        let run_start = i;
+        while i < lines.len() && !covered[i] {
+            i += 1;
+        }
+        let mut start = run_start;
+        let mut end = i - 1;
+        let noise = |l: &str| l.trim().is_empty() || is_block_closer(l);
+        while start <= end && noise(lines[start]) {
+            start += 1;
+        }
+        while end > start && noise(lines[end]) {
+            end -= 1;
+        }
+        if start <= end && !noise(lines[start]) {
+            gaps.push((start, end));
+        }
+    }
+    gaps
+}
+
 fn preamble_len(lines: &[&str]) -> usize {
     let mut last = 0usize;
     for (i, line) in lines.iter().enumerate() {
@@ -420,9 +464,15 @@ impl CodeSkeletonizer {
                 emit_spans.push((span.clone(), true, scores[i]));
                 continue;
             }
-            if let Some((interior_start, interior_end)) = interior_range(&lines, span, min_lines) {
-                fold_plans.push((interior_start, interior_end, span.clone()));
-                emit_spans.push((span.clone(), false, scores[i]));
+            match interior_range(&lines, span, min_lines) {
+                Some((interior_start, interior_end)) => {
+                    fold_plans.push((interior_start, interior_end, span.clone()));
+                    emit_spans.push((span.clone(), false, scores[i]));
+                }
+                // A body too small to fold saves nothing folded and loses the
+                // symbol dropped: `def decode(l): return ...` vanished from the
+                // packet and the oracle reported it missing. It ships as-is.
+                None => emit_spans.push((span.clone(), true, scores[i])),
             }
         }
 
@@ -446,7 +496,8 @@ impl CodeSkeletonizer {
 
         let mut result_lines: Vec<String> = Vec::new();
         let mut folds: Vec<FoldedIntron> = Vec::new();
-        for line in lines.iter().take(preamble_len(&lines)) {
+        let preamble = preamble_len(&lines);
+        for line in lines.iter().take(preamble) {
             result_lines.push((*line).to_string());
         }
 
@@ -459,30 +510,94 @@ impl CodeSkeletonizer {
                 groups.push((owner, vec![item]));
             }
         }
-        groups.sort_by_key(|(_, items)| {
-            items
-                .iter()
-                .map(|(s, _, _)| s.start_line)
-                .min()
-                .unwrap_or(0)
-        });
-
-        for (owner, mut items) in groups {
+        for (_, items) in groups.iter_mut() {
             items.sort_by_key(|(s, _, _)| s.start_line);
+        }
+
+        // Every span, emitted or not, covers its own lines; a class group also
+        // covers its header line through its last method, so attributes
+        // between methods stay class-level rather than surfacing as a gap.
+        let mut covered = vec![false; lines.len()];
+        for span in &ordered {
+            let start = span.start_line.saturating_sub(1).min(lines.len());
+            let end = span.end_line.min(lines.len()).saturating_sub(1);
+            for c in covered.iter_mut().take(end + 1).skip(start) {
+                *c = true;
+            }
+        }
+        let mut blocks: Vec<(usize, Block)> = Vec::new();
+        for (owner, items) in groups {
+            let first_start = items
+                .first()
+                .map(|(s, _, _)| s.start_line.saturating_sub(1))
+                .unwrap_or(0);
+            let last_end = items
+                .iter()
+                .map(|(s, _, _)| s.end_line.min(lines.len()).saturating_sub(1))
+                .max()
+                .unwrap_or(first_start);
+            let header = owner
+                .as_deref()
+                .and_then(|name| enclosing_header_line(&lines, name, first_start));
+            let block_start = header.unwrap_or(first_start);
+            for c in covered.iter_mut().take(last_end + 1).skip(block_start) {
+                *c = true;
+            }
+            blocks.push((block_start, Block::Group { header, items }));
+        }
+        for (start, end) in module_gaps(&lines, &covered, preamble) {
+            blocks.push((start, Block::Gap { start, end }));
+        }
+        blocks.sort_by_key(|(start, _)| *start);
+
+        for (_, block) in blocks {
+            let (header, items) = match block {
+                Block::Gap { start, end } => {
+                    let body_lines = &lines[start..=end];
+                    let code_lines = body_lines.iter().filter(|l| !l.trim().is_empty()).count();
+                    if code_lines <= MODULE_GAP_KEEP_LINES {
+                        for line in body_lines {
+                            result_lines.push((*line).to_string());
+                        }
+                        continue;
+                    }
+                    // Module-level code between the functions used to be
+                    // deleted outright. A script's whole logic lives there.
+                    let body_content = body_lines.join("\n");
+                    let saved_tokens = TokenCounter::count_tokens(&body_content);
+                    let signature = format!("module-level code L{}-L{}", start + 1, end + 1);
+                    let fold_id = make_fold_id(file_path, "module", folds.len() + 1, start + 1);
+                    let indent = header_indent(lines[start]);
+                    result_lines.push(format!(
+                        "{}/* [neuromesh:fold:{} | {} lines folded | {}] */",
+                        indent,
+                        fold_id,
+                        end - start + 1,
+                        signature
+                    ));
+                    folds.push(FoldedIntron {
+                        fold_id,
+                        symbol_name: "module".into(),
+                        signature,
+                        original_body: body_content,
+                        start_line: start + 1,
+                        end_line: end + 1,
+                        saved_tokens,
+                        owner: None,
+                        task_score: 0.0,
+                    });
+                    continue;
+                }
+                Block::Group { header, items } => (header, items),
+            };
             let mut close_indent: Option<String> = None;
-            if let Some(owner_name) = owner.as_deref() {
-                let first_start = items
-                    .first()
-                    .map(|(s, _, _)| s.start_line.saturating_sub(1))
-                    .unwrap_or(0);
-                if let Some(header) = enclosing_header_line(&lines, owner_name, first_start) {
-                    close_indent = Some(header_indent(lines[header]));
-                    result_lines.push(lines[header].to_string());
-                    if !lines[header].contains('{') {
-                        if let Some(next) = lines.get(header + 1) {
-                            if next.trim() == "{" {
-                                result_lines.push((*next).to_string());
-                            }
+            if let Some(header) = header {
+                close_indent = Some(header_indent(lines[header]));
+                result_lines.push(lines[header].to_string());
+                if !lines[header].contains('{') {
+                    if let Some(next) = lines.get(header + 1) {
+                        if next.trim() == "{" {
+                            result_lines.push((*next).to_string());
                         }
                     }
                 }
@@ -802,6 +917,116 @@ export function otherTwo() {
         assert!(res.skeleton_code.contains("return a + b;"));
         assert!(res.introns_folded >= 2, "{}", res.skeleton_code);
         assert!(!res.folds.iter().any(|f| f.symbol_name == "keepMe"));
+    }
+
+    #[test]
+    fn tiny_sibling_body_ships_instead_of_vanishing() {
+        let code = "def encode(s):\n    return [stoi[c] for c in s]\ndef decode(l):\n    return ''.join([itos[i] for i in l])\n";
+        let mut active = HashSet::new();
+        active.insert("encode".into());
+        let spans = vec![
+            FunctionSpan {
+                name: "encode".into(),
+                start_line: 1,
+                end_line: 2,
+                signature: "def encode(...)".into(),
+                owner: None,
+            },
+            FunctionSpan {
+                name: "decode".into(),
+                start_line: 3,
+                end_line: 4,
+                signature: "def decode(...)".into(),
+                owner: None,
+            },
+        ];
+        let res = CodeSkeletonizer::skeletonize_with_spans("prepare.py", code, &active, &spans);
+        assert!(
+            res.skeleton_code.contains("def decode(l):")
+                && res.skeleton_code.contains("itos[i] for i in l"),
+            "a one-line body has nothing to fold, so it stays: {}",
+            res.skeleton_code
+        );
+        assert_eq!(res.folds.len(), 0);
+    }
+
+    #[test]
+    fn module_level_script_body_folds_instead_of_vanishing() {
+        let mut code = String::from("import os\nimport pickle\n\n");
+        for i in 0..12 {
+            code.push_str(&format!("chars_{i} = sorted(list(set(data)))\n"));
+        }
+        code.push_str("def encode(s):\n    a = 1\n    b = 2\n    return [stoi[c] for c in s]\n");
+        code.push_str("vocab_size = len(chars_0)\nmeta = {'vocab_size': vocab_size}\n");
+        let mut active = HashSet::new();
+        active.insert("encode".into());
+        let spans = vec![FunctionSpan {
+            name: "encode".into(),
+            start_line: 16,
+            end_line: 19,
+            signature: "def encode(...)".into(),
+            owner: None,
+        }];
+        let res = CodeSkeletonizer::skeletonize_with_spans("prepare.py", &code, &active, &spans);
+        assert!(res.skeleton_code.contains("import pickle"));
+        assert!(res.skeleton_code.contains("return [stoi[c] for c in s]"));
+        // Twelve module lines before the function fold behind one marker the
+        // model can expand; the two after it are short enough to ship.
+        let module_fold = res
+            .folds
+            .iter()
+            .find(|f| f.symbol_name == "module")
+            .expect("module-level block registered as a fold");
+        assert!(module_fold.original_body.contains("chars_11 = sorted"));
+        assert!(!res.skeleton_code.contains("chars_11 = sorted"));
+        assert!(
+            res.skeleton_code.contains("neuromesh:fold:fold_module"),
+            "{}",
+            res.skeleton_code
+        );
+        assert!(
+            res.skeleton_code
+                .contains("meta = {'vocab_size': vocab_size}"),
+            "short trailing module code ships verbatim: {}",
+            res.skeleton_code
+        );
+        let marker_pos = res.skeleton_code.find("fold_module").unwrap();
+        let encode_pos = res.skeleton_code.find("def encode").unwrap();
+        let meta_pos = res.skeleton_code.find("meta = ").unwrap();
+        assert!(
+            marker_pos < encode_pos && encode_pos < meta_pos,
+            "file order kept"
+        );
+    }
+
+    #[test]
+    fn class_attributes_between_methods_are_not_module_gaps() {
+        let code = "class A:\n    x = 1\n    def f(self):\n        a = 1\n        b = 2\n        return a + b\n    y = 2\n    def g(self):\n        c = 1\n        d = 2\n        return c + d\n";
+        let mut active = HashSet::new();
+        active.insert("f".into());
+        let spans = vec![
+            FunctionSpan {
+                name: "f".into(),
+                start_line: 3,
+                end_line: 6,
+                signature: "def f(...)".into(),
+                owner: Some("A".into()),
+            },
+            FunctionSpan {
+                name: "g".into(),
+                start_line: 8,
+                end_line: 11,
+                signature: "def g(...)".into(),
+                owner: Some("A".into()),
+            },
+        ];
+        let res = CodeSkeletonizer::skeletonize_with_spans("a.py", code, &active, &spans);
+        assert!(
+            !res.folds.iter().any(|f| f.symbol_name == "module"),
+            "class-level lines are the class's business, not a module gap: {}",
+            res.skeleton_code
+        );
+        assert!(res.skeleton_code.contains("class A:"));
     }
 
     #[test]
