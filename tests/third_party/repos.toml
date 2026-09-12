@@ -1,0 +1,29 @@
+# Third-party checkouts the real-repo gold set runs on. Pinned to a commit so
+# the numbers mean the same thing next month. `scripts/fetch-third-party.sh`
+# puts them under target/third_party/<name> (or $NM_THIRD_PARTY_DIR).
+#
+# Each one breaks a different assumption:
+#   nanoGPT      — module-level training loop, three prepare.py decoys
+#   express      — CommonJS `app.x = function x()` module pattern, six files
+#   vit-pytorch  — 60 files that each define Attention/FeedForward/Transformer
+#   full-stack-fastapi-template — FastAPI + SQLModel backend, alembic decoys
+
+[[repo]]
+name = "nanoGPT"
+url = "https://github.com/karpathy/nanoGPT"
+rev = "3adf61e154c3fe3fca428ad6bc3818b27a3b8291"
+
+[[repo]]
+name = "express"
+url = "https://github.com/expressjs/express"
+rev = "53d4a0d606c0388f764f192b306ce0e90200e7e8"
+
+[[repo]]
+name = "vit-pytorch"
+url = "https://github.com/lucidrains/vit-pytorch"
+rev = "d01bbb31ec889a338f6048c273dcf2af1a097d30"
+
+[[repo]]
+name = "full-stack-fastapi-template"
+url = "https://github.com/fastapi/full-stack-fastapi-template"
+rev = "cb740b656d7a0a6c5e12c7bf8e50343ec94ee9c7"

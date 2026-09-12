@@ -1,0 +1,32 @@
+[[task]]
+id = "fastapi_login_flow"
+repo = "full-stack-fastapi-template"
+prompt = "How does login_access_token authenticate the user with crud.authenticate and create the access token?"
+needs = ["backend/app/api/routes/login.py::login_access_token", "backend/app/crud.py::authenticate", "backend/app/core/security.py::create_access_token"]
+forbidden = ["backend/app/api/routes/items.py"]
+
+[[task]]
+id = "fastapi_deps"
+repo = "full-stack-fastapi-template"
+prompt = "How does get_current_user decode the JWT token into TokenPayload and load the User from the session?"
+needs = ["backend/app/api/deps.py::get_current_user"]
+forbidden = ["backend/app/api/routes/items.py"]
+
+[[task]]
+id = "fastapi_create_user"
+repo = "full-stack-fastapi-template"
+prompt = "How does register_user create the user and how does crud.create_user hash the password with get_password_hash?"
+needs = ["backend/app/api/routes/users.py::register_user", "backend/app/crud.py::create_user", "backend/app/core/security.py::get_password_hash"]
+
+[[task]]
+id = "fastapi_read_items"
+repo = "full-stack-fastapi-template"
+prompt = "How does read_items restrict non-superusers to their own items and how is Item linked to its owner?"
+needs = ["backend/app/api/routes/items.py::read_items"]
+forbidden = ["backend/app/api/routes/login.py"]
+
+[[task]]
+id = "fastapi_secrets"
+repo = "full-stack-fastapi-template"
+prompt = "How does Settings check for default secrets with _enforce_non_default_secrets and build the database URI?"
+needs = ["backend/app/core/config.py::Settings._enforce_non_default_secrets", "backend/app/core/config.py::Settings._check_default_secret"]

@@ -1,0 +1,32 @@
+[[task]]
+id = "nano_train_forward"
+repo = "nanoGPT"
+prompt = "How does the training loop call the GPT model forward and estimate_loss?"
+needs = ["train.py::estimate_loss", "train.py::get_batch", "model.py::GPT.forward"]
+forbidden = ["sample.py", "bench.py"]
+
+[[task]]
+id = "nano_attention"
+repo = "nanoGPT"
+prompt = "How does CausalSelfAttention.forward compute attention and where is flash attention chosen?"
+needs = ["model.py::CausalSelfAttention.forward", "model.py::CausalSelfAttention.__init__"]
+forbidden = ["sample.py", "bench.py"]
+
+[[task]]
+id = "nano_generate"
+repo = "nanoGPT"
+prompt = "How does GPT.generate sample the next token with temperature and top_k?"
+needs = ["model.py::GPT.generate"]
+
+[[task]]
+id = "nano_optim"
+repo = "nanoGPT"
+prompt = "How does configure_optimizers split parameters into decay and no-decay groups?"
+needs = ["model.py::GPT.configure_optimizers"]
+
+[[task]]
+id = "nano_char_encode"
+repo = "nanoGPT"
+prompt = "How does the shakespeare_char prepare script encode characters to integers?"
+needs = ["data/shakespeare_char/prepare.py::encode", "data/shakespeare_char/prepare.py::decode"]
+forbidden = ["data/openwebtext/prepare.py", "data/shakespeare/prepare.py"]

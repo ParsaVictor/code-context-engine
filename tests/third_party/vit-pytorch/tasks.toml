@@ -1,0 +1,34 @@
+[[task]]
+id = "vit_mae_forward"
+repo = "vit-pytorch"
+prompt = "How does MAE mask patches, encode the visible ones and reconstruct pixels?"
+needs = ["vit_pytorch/mae.py::MAE.forward", "vit_pytorch/mae.py::MAE.__init__"]
+forbidden = ["vit_pytorch/simmim.py", "vit_pytorch/mpp.py"]
+
+[[task]]
+id = "vit_sincos_fn"
+repo = "vit-pytorch"
+prompt = "How does SimpleViT build the 2D sincos positional embedding with posemb_sincos_2d?"
+needs = ["vit_pytorch/simple_vit.py::posemb_sincos_2d", "vit_pytorch/simple_vit.py::SimpleViT.forward"]
+forbidden = ["vit_pytorch/vit.py"]
+
+[[task]]
+id = "vit_recorder_hooks"
+repo = "vit-pytorch"
+prompt = "How does Recorder wrap a ViT to record the attention maps of every Attention layer?"
+needs = ["vit_pytorch/recorder.py::Recorder.forward", "vit_pytorch/recorder.py::find_modules"]
+forbidden = ["vit_pytorch/extractor.py"]
+
+[[task]]
+id = "vit_cross_transformer"
+repo = "vit-pytorch"
+prompt = "How does CrossViT exchange CLS tokens between the small and large branches in CrossTransformer?"
+needs = ["vit_pytorch/cross_vit.py::CrossTransformer.forward", "vit_pytorch/cross_vit.py::CrossViT.forward"]
+forbidden = ["vit_pytorch/crossformer.py"]
+
+[[task]]
+id = "vit_distill_loss"
+repo = "vit-pytorch"
+prompt = "How does DistillWrapper add the distillation token and compute the distillation loss against the teacher?"
+needs = ["vit_pytorch/distill.py::DistillWrapper.forward", "vit_pytorch/distill.py::DistillMixin.forward"]
+forbidden = ["vit_pytorch/dino.py"]

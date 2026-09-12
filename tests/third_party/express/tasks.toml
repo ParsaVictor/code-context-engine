@@ -1,0 +1,39 @@
+[[task]]
+id = "express_use"
+repo = "express"
+prompt = "How does app.use register middleware and how does app.handle dispatch a request?"
+needs = ["lib/application.js::use", "lib/application.js::handle"]
+forbidden = ["lib/view.js", "lib/request.js"]
+
+[[task]]
+id = "express_listen"
+repo = "express"
+prompt = "How does app.listen create the http server, and how does createApplication build the app?"
+needs = ["lib/application.js::listen", "lib/express.js::createApplication"]
+
+[[task]]
+id = "express_render"
+repo = "express"
+prompt = "How does app.render look up a view engine and render a template with tryRender?"
+needs = ["lib/application.js::render", "lib/application.js::tryRender"]
+
+[[task]]
+id = "express_res_json"
+repo = "express"
+prompt = "How does res.json serialize the body and set the content type?"
+needs = ["lib/response.js::json"]
+forbidden = ["lib/request.js"]
+
+[[task]]
+id = "express_req_is"
+repo = "express"
+prompt = "How does req.get read a request header and how does req.is check the content type?"
+needs = ["lib/request.js::header", "lib/request.js::is"]
+forbidden = ["lib/response.js"]
+
+[[task]]
+id = "express_view_lookup"
+repo = "express"
+prompt = "How does View.lookup resolve a template path and how does View.render call the engine?"
+needs = ["lib/view.js::lookup", "lib/view.js::render"]
+forbidden = ["lib/request.js"]

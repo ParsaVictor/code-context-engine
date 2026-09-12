@@ -1,0 +1,34 @@
+[[task]]
+id = "fastapi_login"
+prompt = "How does login_access_token authenticate the user with crud.authenticate and create the access token?"
+gold_files = ["backend/app/api/routes/login.py", "backend/app/crud.py", "backend/app/core/security.py"]
+forbidden_files = ["backend/app/api/routes/items.py", "backend/app/alembic/env.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fastapi_current_user"
+prompt = "How does get_current_user decode the JWT token into TokenPayload and load the User from the session?"
+gold_files = ["backend/app/api/deps.py", "backend/app/models.py"]
+forbidden_files = ["backend/app/api/routes/items.py", "backend/app/api/routes/utils.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fastapi_register"
+prompt = "How does register_user create the user and how does crud.create_user hash the password with get_password_hash?"
+gold_files = ["backend/app/api/routes/users.py", "backend/app/crud.py", "backend/app/core/security.py"]
+forbidden_files = ["backend/app/api/routes/items.py", "backend/app/alembic/env.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fastapi_items_owner"
+prompt = "How does read_items restrict non-superusers to their own items and how is Item linked to its owner?"
+gold_files = ["backend/app/api/routes/items.py", "backend/app/models.py"]
+forbidden_files = ["backend/app/api/routes/login.py", "backend/app/core/security.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fastapi_settings"
+prompt = "How does Settings check for default secrets with _enforce_non_default_secrets and build the database URI?"
+gold_files = ["backend/app/core/config.py"]
+forbidden_files = ["backend/app/api/routes/items.py", "backend/app/crud.py"]
+expect_seeds_missed = false
