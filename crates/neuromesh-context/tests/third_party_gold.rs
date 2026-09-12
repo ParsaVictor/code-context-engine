@@ -37,7 +37,7 @@ use std::sync::Arc;
 const MIN_MEAN_RECALL: f32 = 0.94; // measured 0.95 (path steer)
 const MIN_MEAN_PRECISION: f32 = 0.19; // measured 0.196 — the real number, not the fixture 0.89
 const MAX_FORBIDDEN_HITS: usize = 11; // measured 11 (path steer)
-const MIN_TASK_REACHABLE: f32 = 0.6; // measured 14/21
+const MIN_TASK_REACHABLE: f32 = 0.7; // measured 15/21 (fold, don't delete)
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
