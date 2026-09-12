@@ -929,7 +929,7 @@ fn hmvc_apps_conflict(seed: &Path, other: &Path) -> bool {
 }
 
 /// "Where is Physarum used?" is a question about consumers.
-fn focus_terms_ask_for_consumers(focus_terms: &HashSet<String>) -> bool {
+pub(crate) fn focus_terms_ask_for_consumers(focus_terms: &HashSet<String>) -> bool {
     [
         "used",
         "usage",
@@ -965,7 +965,11 @@ fn same_word_stem(a: &str, b: &str) -> bool {
     a == b || strip(a) == strip(b)
 }
 
-fn consumer_named_in_focus(name: &str, path: &Path, focus_terms: &HashSet<String>) -> bool {
+pub(crate) fn consumer_named_in_focus(
+    name: &str,
+    path: &Path,
+    focus_terms: &HashSet<String>,
+) -> bool {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     let words: Vec<String> = neuromesh_parser::tokenize_ident(name)
         .into_iter()
