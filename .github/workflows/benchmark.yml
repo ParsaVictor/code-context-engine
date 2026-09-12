@@ -35,6 +35,10 @@ jobs:
         run: |
           ./target/release/neuromesh eval --release-gates | tee release_gates_output.txt
 
+      - name: Task-success harness (oracle)
+        run: |
+          ./target/release/neuromesh eval --tasks | tee tasks_output.txt
+
       - name: ANN SIMD benchmark (informational)
         continue-on-error: true
         run: |
@@ -54,6 +58,13 @@ jobs:
             echo "### Release gates (informational — holdout matrix)" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             tail -n 30 release_gates_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f tasks_output.txt ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Task success (\`neuromesh eval --tasks\`, oracle)" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 30 tasks_output.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
           if [ -f ann_bench_output.txt ]; then

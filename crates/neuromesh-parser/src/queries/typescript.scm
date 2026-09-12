@@ -24,3 +24,12 @@
 (import_statement) @import
 
 (call_expression) @call
+
+; `app.handle = function handle(req, res) {...}` — the module pattern of
+; Express, Connect and much of the CommonJS world. Without this the file has
+; no symbols, nothing resolves to it, and its bodies never reach a packet.
+(assignment_expression
+  left: (member_expression
+    object: (identifier) @function.parent
+    property: (property_identifier) @function.name)
+  right: [(function_expression) (arrow_function)]) @function

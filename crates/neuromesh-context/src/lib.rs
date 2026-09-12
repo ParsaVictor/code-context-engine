@@ -19,6 +19,7 @@ pub mod seed;
 pub mod selector;
 pub mod skeleton;
 pub mod style_routing;
+pub mod task_harness;
 pub mod unified_score;
 
 pub use activator::{ContextActivator, PacketSnapshot, PhysarumTelemetry};

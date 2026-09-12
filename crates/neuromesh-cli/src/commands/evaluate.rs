@@ -3,32 +3,20 @@ use neuromesh_context::benchmark_suite::{
 };
 use neuromesh_context::gold::{
     evaluate_view, fixture_gold_cases, load_gold_tasks, packet_file_names, packet_paths,
+    production_signature,
 };
 use neuromesh_context::learning_eval::{
     compute_ranking_metrics, dose_response_rank, emitted_paths_from_view,
 };
-use neuromesh_context::retrieval::apply_auto_extract_keywords;
 use neuromesh_context::retrieval::failure::{classify_retrieval_failure, FailureClass};
 use neuromesh_context::{ContextActivator, ReversibleContextRegistry};
-use neuromesh_core::{OptimizationMode, ProjectId, Result, RetrievalEngine, TaskSignature};
+use neuromesh_core::{OptimizationMode, ProjectId, Result, RetrievalEngine};
 use neuromesh_graph::NeuralProjectGraph;
 use neuromesh_index::ProjectWalker;
-use neuromesh_task::TaskSignatureExtractor;
 use std::env;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
-
-fn prepare_eval_signature(prompt: &str, engine: RetrievalEngine) -> TaskSignature {
-    let mut signature = TaskSignatureExtractor::extract(prompt);
-    if engine == RetrievalEngine::Fast {
-        let enabled = neuromesh_core::Config::load()
-            .seed_resolution
-            .effective_auto_extract();
-        apply_auto_extract_keywords(&mut signature, prompt, enabled);
-    }
-    signature
-}
 
 pub fn execute(args: &[String]) -> Result<()> {
     let learning_mode = args.iter().any(|a| a == "--learning");
@@ -119,7 +107,7 @@ pub fn execute(args: &[String]) -> Result<()> {
     println!("{}", "-".repeat(118));
 
     for task in &tasks {
-        let signature = prepare_eval_signature(&task.prompt, eval_cfg.retrieval.engine);
+        let signature = production_signature(&task.prompt);
         for mode in [
             OptimizationMode::MaxSavings,
             OptimizationMode::Balanced,
@@ -168,7 +156,7 @@ pub fn execute(args: &[String]) -> Result<()> {
     if release_gates {
         let mut cells = Vec::new();
         for (i, task) in tasks.iter().enumerate() {
-            let signature = prepare_eval_signature(&task.prompt, eval_cfg.retrieval.engine);
+            let signature = production_signature(&task.prompt);
             let started = Instant::now();
             let view = activator.activate_tiered(&graph, &signature, OptimizationMode::Balanced);
             let ms = started.elapsed().as_millis() as u64;
@@ -245,7 +233,46 @@ pub fn execute(args: &[String]) -> Result<()> {
                 embedding_primary,
             });
         }
-        let suite = aggregate_cell_results(&cells);
+        let mut suite = aggregate_cell_results(&cells);
+        // Task success comes from the task harness, not from the gold cells:
+        // the cases under tests/tasks/ that target this workspace, scored by
+        // the sufficiency oracle on the same graph. Labelled as such — it is
+        // not a model run.
+        {
+            use neuromesh_context::task_harness::{load_task_dir, oracle_outcome, summarize};
+            let task_cases: Vec<_> = load_task_dir(&current_dir.join("tests").join("tasks"))
+                .into_iter()
+                .filter(|c| c.repo == ".")
+                .collect();
+            if !task_cases.is_empty() {
+                let mut outcomes = Vec::new();
+                for case in &task_cases {
+                    let registry = Arc::new(ReversibleContextRegistry::new());
+                    let task_activator = ContextActivator::new(registry.clone());
+                    let signature = production_signature(&case.prompt);
+                    let started = Instant::now();
+                    let view =
+                        task_activator.activate(&graph, &signature, OptimizationMode::Balanced);
+                    let ms = started.elapsed().as_millis() as u64;
+                    outcomes.push(oracle_outcome(case, &view, &registry, ms));
+                }
+                let summary = summarize(&outcomes);
+                suite.task_success_rate = summary.success_rate;
+                suite.task_success_per_1k_tokens = summary.success_per_1k_tokens;
+                suite.task_success_per_dollar = summary.success_rate;
+                let avg_ms = outcomes.iter().map(|o| o.latency_ms).sum::<u64>()
+                    / outcomes.len().max(1) as u64;
+                suite.task_success_per_100ms = if avg_ms > 0 {
+                    summary.success_rate / (avg_ms as f32 / 100.0)
+                } else {
+                    0.0
+                };
+                suite.task_success_source = format!(
+                    "oracle: {} cases from tests/tasks (strict {:.3})",
+                    summary.cases, summary.strict_success_rate
+                );
+            }
+        }
         let report = ReleaseGateReport::evaluate_for_engine(eval_cfg.retrieval.engine, &suite);
         println!(
             "\nRelease gates (Benchmark A, engine={}): {}",
@@ -316,7 +343,7 @@ pub fn execute(args: &[String]) -> Result<()> {
                         .collect()
                 };
                 for task in tasks {
-                    let signature = prepare_eval_signature(&task.prompt, eval_cfg.retrieval.engine);
+                    let signature = production_signature(&task.prompt);
                     let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
                     let metrics = evaluate_view(&task, &view, 0);
                     println!(
@@ -380,7 +407,7 @@ fn execute_learning_eval(
     eval_graph.finalize_links();
 
     let prompt = "how does promocodeinput component work in checkout";
-    let signature = TaskSignatureExtractor::extract(prompt);
+    let signature = production_signature(prompt);
     let gold = vec!["src/components/PromoCodeInput.vue".into()];
     let levels: [i32; 8] = [0, 1, 2, 5, 10, 25, 50, 100];
 

@@ -1,0 +1,110 @@
+# Task cases on the fixture repositories: what a model would need to *finish*
+# each task, at symbol level. `needs` are `file::symbol` (bare file = the
+# file is enough). Scored by `neuromesh eval --tasks` (oracle) and gated by
+# `crates/neuromesh-context/tests/task_success.rs`.
+
+[[task]]
+id = "py_sms_receive"
+repo = "tests/fixtures/mini-python"
+prompt = "How does on_receive use SmsStore.save?"
+needs = ["src/receiver.py::on_receive", "src/sms_store.py::SmsStore.save"]
+forbidden = ["src/inbox_store.py"]
+
+[[task]]
+id = "py_persist_chain"
+repo = "tests/fixtures/mini-python"
+prompt = "Change SmsStore.persist so it strips whitespace before returning the body"
+needs = ["src/sms_store.py::SmsStore.persist"]
+forbidden = ["src/inbox_store.py"]
+
+[[task]]
+id = "kt_sms_receive"
+repo = "tests/fixtures/mini-kotlin"
+prompt = "How does onReceive use SmsStore.save?"
+needs = ["src/SmsReceiver.kt::onReceive", "src/SmsStore.kt::save"]
+forbidden = ["src/InboxStore.kt"]
+
+[[task]]
+id = "rs_process_job"
+repo = "tests/fixtures/mini-queue"
+prompt = "How does process_job use enqueue and dequeue?"
+needs = ["src/worker.rs::process_job", "src/queue.rs::enqueue", "src/queue.rs::dequeue"]
+
+[[task]]
+id = "rs_session_token"
+repo = "tests/fixtures/mini-service"
+prompt = "How does start_session issue_token?"
+needs = ["src/session.rs::start_session", "src/auth.rs::issue_token"]
+
+[[task]]
+id = "rs_router_handle"
+repo = "tests/fixtures/mini-router"
+prompt = "How does handle_request extract a route?"
+needs = ["src/handler.rs::handle_request", "src/extract.rs::extract_route"]
+
+[[task]]
+id = "ts_cart_add"
+repo = "tests/fixtures/mini-store"
+prompt = "How does addToCart use createStore?"
+needs = ["src/cart.ts::addToCart", "src/store.ts::createStore"]
+
+[[task]]
+id = "ts_sms_api"
+repo = "tests/fixtures/mini-express"
+prompt = "How does store use saveSms?"
+needs = ["src/app.ts::store", "src/sms_store.ts::saveSms"]
+
+[[task]]
+id = "ts_safeparse"
+repo = "tests/fixtures/mini-schema"
+prompt = "where is the safeParse function implemented"
+needs = ["packages/schema/src/core/parse.ts::safeParse"]
+
+[[task]]
+id = "vue_qty_stepper"
+repo = "tests/fixtures/mini-shop"
+prompt = "Add quantity stepper in checkout list using setQty from cart store"
+needs = ["src/stores/cart.js::setQty", "src/views/CheckoutView.vue"]
+forbidden = ["src/components/PromoCodeInput.vue"]
+
+[[task]]
+id = "vue_dead_gocart"
+repo = "tests/fixtures/mini-shop"
+prompt = "Find unused goCart in the ui store and list all references to goCart across the project"
+needs = ["src/stores/ui.js::goCart", "src/App.vue", "src/components/CartDrawer.vue", "src/components/Header.vue"]
+
+[[task]]
+id = "react_stat_card"
+repo = "tests/fixtures/mini-pinoox"
+prompt = "How does the StatCard React FC render a label?"
+needs = ["theme/spark/src/StatCard.tsx::StatCard"]
+forbidden = ["theme/spark/src/Dashboard.vue", "theme/default/hello.twig"]
+
+[[task]]
+id = "ml_train_loss"
+repo = "tests/fixtures/ml-pytorch-detection"
+prompt = "How does train_one_epoch compute detection_loss for the Detector model?"
+needs = ["engine/train.py::train_one_epoch", "models/detector.py::detection_loss", "models/detector.py::Detector.forward"]
+
+[[task]]
+id = "ml_dataset_transforms"
+repo = "tests/fixtures/ml-pytorch-detection"
+prompt = "Where does CocoDetection apply build_transforms to an image?"
+needs = ["data/dataset.py::CocoDetection.__getitem__", "data/dataset.py::build_transforms"]
+
+# The class is not named, so its methods will not be exons; they must still
+# be *in* the packet as folds. Guards the fold-not-delete contract.
+[[task]]
+id = "ml_loss_sees_model_folded"
+repo = "tests/fixtures/ml-pytorch-detection"
+prompt = "How does detection_loss compute the loss between predictions and targets?"
+needs = ["models/detector.py::detection_loss", "models/detector.py::Detector.forward"]
+
+# A case with a `verify` command, for the model executor: the packet must let
+# a model make saveSms return what it stored. Oracle scores it like any other.
+[[task]]
+id = "cjs_save_returns_body"
+repo = "tests/fixtures/mini-cjs"
+prompt = "Fix saveSms so it stores the body in the store under 'body' and returns it"
+needs = ["src/saveSms.cjs::saveSms", "src/store.js::createStore"]
+verify = "node -e \"const {saveSms}=require('./src/saveSms.cjs'); if (saveSms('hi')!=='hi') process.exit(1)\""
