@@ -282,6 +282,7 @@ pub fn select(
         }
     }
 
+    let consumers_wanted = focus_terms_ask_for_consumers(focus_terms);
     for seed in seeds {
         let Some(seed_node) = graph.get_node(seed) else {
             continue;
@@ -303,6 +304,16 @@ pub fn select(
                 }
                 if let Some(node) = graph.get_node(&neighbor) {
                     if outbound_call && is_common_call(&node.name) {
+                        continue;
+                    }
+                    // A consumer of the seed enters only when the question
+                    // names it or asks where the seed is used: every route
+                    // imports `settings`, and a question about Settings is not
+                    // a question about every route.
+                    if !outbound_call
+                        && !consumers_wanted
+                        && !consumer_named_in_focus(&node.name, &node.file_path, focus_terms)
+                    {
                         continue;
                     }
                     if let Some(file_id) = graph.file_id_for_path(&node.file_path) {
@@ -359,6 +370,12 @@ pub fn select(
         for endpoint in endpoints {
             for (neighbor, edge) in graph.get_connected_neighbors(&endpoint) {
                 if edge.pheromone_weight < SYNAPTIC_FILL_MIN {
+                    continue;
+                }
+                // What the seed uses, not who uses the seed: a config module
+                // every route imports would otherwise pull every route in.
+                // Consumers still enter above, scored as inbound use.
+                if edge.source != endpoint {
                     continue;
                 }
                 if let Some(node) = graph.get_node(&neighbor) {
@@ -909,6 +926,60 @@ fn hmvc_apps_conflict(seed: &Path, other: &Path) -> bool {
         (Some(a), Some(b)) => a != b,
         _ => false,
     }
+}
+
+/// "Where is Physarum used?" is a question about consumers.
+fn focus_terms_ask_for_consumers(focus_terms: &HashSet<String>) -> bool {
+    [
+        "used",
+        "usage",
+        "usages",
+        "uses",
+        "using",
+        "caller",
+        "callers",
+        "consumer",
+        "consumers",
+        "consumed",
+        "invoked",
+        "invokes",
+        "referenced",
+        "references",
+    ]
+    .iter()
+    .any(|w| focus_terms.contains(*w))
+}
+
+/// `received` and `receiver` share a stem; `settings` and `items` do not.
+fn same_word_stem(a: &str, b: &str) -> bool {
+    fn strip(w: &str) -> &str {
+        for suffix in ["ings", "ing", "ers", "er", "ed", "es", "s"] {
+            if let Some(base) = w.strip_suffix(suffix) {
+                if base.len() >= 4 {
+                    return base;
+                }
+            }
+        }
+        w
+    }
+    a == b || strip(a) == strip(b)
+}
+
+fn consumer_named_in_focus(name: &str, path: &Path, focus_terms: &HashSet<String>) -> bool {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let words: Vec<String> = neuromesh_parser::tokenize_ident(name)
+        .into_iter()
+        .chain(neuromesh_parser::tokenize_ident(stem))
+        .map(|w| w.to_lowercase())
+        .collect();
+    focus_terms.iter().any(|term| {
+        term.len() >= 4
+            && (term == &name.to_lowercase()
+                || file_stem_eq(path, term)
+                || words
+                    .iter()
+                    .any(|w| w.len() >= 4 && same_word_stem(w, term)))
+    })
 }
 
 fn file_stem_eq(path: &Path, query: &str) -> bool {

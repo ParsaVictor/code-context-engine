@@ -10,6 +10,7 @@ use std::time::Instant;
 pub mod engine;
 pub mod engines;
 pub mod fallback;
+pub(crate) mod lang_cohere;
 pub mod manifest;
 pub mod micro_header;
 pub(crate) mod path_steer;
