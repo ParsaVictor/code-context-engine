@@ -19,7 +19,7 @@
 | F11 | `tokenize_ident("SimpleViT")` → `["simple","vi"]`؛ حرف تکی `T` حذف می‌شود و `vit` گم می‌شود. برای twin_cohere با «کلمه‌ی چسبیده» دور زده شد؛ ولی هر جای دیگری که به توکن‌های camelCase با حرف بزرگ پایانی تکیه می‌کند همین سوراخ را دارد | `neuromesh-parser/identifiers.rs` | ⏳ باز |
 | F12 | `vit_sincos` هنوز دو sidecar هم‌ردیف می‌آورد (`simple_vit_with_fft.py`, `vaat.py`) → precision 0.33 به‌جای 1.0 | Physarum sidecar | ⏳ آیتم ۴ |
 | F13 | هنگام mutation-test با `git checkout -- <file>` دو بار wiring کامیت‌نشده هم برگشت؛ قاعده: قبل از mutation کامیت یا `git stash push <file>` | فرایند | ✅ قاعده ثبت شد |
-| F14 | یال `Calls` بین دو زبان: فراخوانی `select(...)` (SQLModel) در Python به component `Select` در `frontend/.../select.tsx` resolve شده → فایل TSX به‌عنوان callee *required* (utility:16) وارد packet سؤال backend می‌شود (`fastapi_register`, `fastapi_items_owner`) | `graph.rs::resolve_call_target/finalize_links` | ⏳ باز — رفع ریشه‌ای: کاندیداهای call باید هم‌family فایل مبدأ باشند |
+| F14 | یال `Calls` بین دو زبان: فراخوانی `select(...)` (SQLModel) در Python به component `Select` در `frontend/.../select.tsx` resolve شده → فایل TSX به‌عنوان callee *required* (utility:16) وارد packet سؤال backend می‌شود (`fastapi_register`, `fastapi_items_owner`) | `graph.rs::finalize_links` | ✅ PR #24 (`same_language_family` روی هدف `resolve_call_ranked`/`resolve_ranked`؛ `language_family` به `neuromesh-core` منتقل شد) |
 | F15 | seedهای ضعیف (`concept:auth`, `concept:login`) در سؤال backend به کلاینت TypeScript می‌رفتند و Physarum سه فایل frontend دیگر روی‌شان می‌آویخت | `seed/lang_cohere.rs` | ✅ PR #23 (خانواده‌ی زبانی seedهای قوی، seed ضعیف خارج از آن حذف) |
 | F16 | `twin_cohere` نودهای JSON/YAML (`components.json:config`) را anchor/twin حساب می‌کرد | `seed/twin_cohere.rs` | ✅ PR #23 (نودهای بدون family کنار گذاشته می‌شوند) |
 | F17 | مصرف‌کننده‌های یک symbol seed (همه‌ی routeهایی که `settings` را import می‌کنند) با امتیاز ثابت 10 و بدون هیچ سیگنال query وارد fill می‌شدند؛ همان «هم‌ردیف بدون امتیاز query» آیتم ۴ | `selector.rs` (`inbound_use`) | ✅ PR #23 (فقط با match نام/stem در focus terms) |
@@ -35,7 +35,8 @@
 | #20 path steer | 0.950 | 0.196 | 11 | 14/21 | 12 |
 | #21 fold-not-delete | 0.950 | 0.196 | 11 | 15/21 | 13 |
 | #22 twin coherence | **1.000** | 0.214 | 11 | 16/21 | 14 |
-| #23 language family + consumer gating | 1.000 | **0.261** | **9** | 16/21 | 14 |
+| #23 language family + consumer gating | 1.000 | **0.266** | **9** | 16/21 | 14 |
+| #24 no cross-language Calls edge (F14) | 1.000 | **0.273** | 9 | 16/21 | 14 |
 
 ## ترتیب باقی‌مانده‌ی مرحله ۴
 

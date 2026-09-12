@@ -1,6 +1,27 @@
 use std::path::Path;
 
 /// Lowercase `/`-separated path for segment checks.
+/// Languages that ship in one build are one family: a `.tsx` route and the
+/// `.ts` client it calls are the same side of a stack. Styles, data and docs
+/// have no side to be foreign to and return `None`.
+pub fn language_family(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "vue" | "svelte" | "astro" => "js",
+        "py" | "pyi" | "ipynb" => "python",
+        "rs" => "rust",
+        "go" => "go",
+        "php" | "twig" => "php",
+        "java" | "kt" | "kts" => "jvm",
+        "cs" => "dotnet",
+        "swift" => "swift",
+        "dart" => "dart",
+        "rb" => "ruby",
+        "c" | "h" | "cc" | "cpp" | "hpp" => "c",
+        _ => return None,
+    })
+}
+
 pub fn normalized_source_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/").to_lowercase()
 }
