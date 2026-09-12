@@ -8,6 +8,7 @@ echo "== test all"; cargo test --all --verbose > /dev/null 2>&1
 echo "== isolation gate"; cargo test -p neuromesh-context --test cross_project_isolation -- --nocapture > /dev/null 2>&1
 echo "== ml gate";  cargo test -p neuromesh-context --test ml_artifact_graph -- --nocapture > /dev/null 2>&1
 echo "== notebook gate"; cargo test -p neuromesh-context --test notebook_graph -- --nocapture > /dev/null 2>&1
+echo "== determinism gate"; cargo test -p neuromesh-context --test packet_determinism -- --nocapture > /dev/null 2>&1
 echo "== embeddings"; cargo test -p neuromesh-context --features embeddings --verbose > /dev/null 2>&1
 echo "== embed crate"; cargo test -p neuromesh-embed --verbose > /dev/null 2>&1
 echo "== graph proxy"; cargo test -p neuromesh-graph-proxy --verbose > /dev/null 2>&1

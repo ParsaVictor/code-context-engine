@@ -327,7 +327,7 @@ pub fn execute(args: &[String]) -> Result<()> {
                         metrics.reduction_vs_workspace,
                         metrics.reduction_vs_selected,
                         metrics.grep_still_needed,
-                        packet_paths(&view)
+                        packet_paths(&view).into_iter().collect::<std::collections::BTreeSet<_>>()
                     );
                 }
             }

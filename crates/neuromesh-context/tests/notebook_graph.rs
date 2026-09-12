@@ -305,7 +305,7 @@ fn a_question_about_the_notebook_reaches_the_notebook() {
     // Off the wall clock: the Physarum sidecar only contributes when its solve
     // beats an SLA, which makes the packet vary between runs on a loaded CI
     // machine. See issue #15.
-    let activator = ContextActivator::new(registry).without_physarum_sidecar();
+    let activator = ContextActivator::new(registry);
     let prompt = "why did val/mAP drop after the Detector training loop changed?";
     let mut signature = TaskSignatureExtractor::extract(prompt);
     apply_auto_extract_keywords(&mut signature, prompt, true);

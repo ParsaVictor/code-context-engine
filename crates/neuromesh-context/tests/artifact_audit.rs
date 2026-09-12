@@ -207,10 +207,9 @@ fn packet_probe() {
     graph.set_workspace(&root);
     graph.reindex_incremental(&root, pid, Some(5000));
 
-    // Off the wall clock, or the same query returns different files between
-    // runs on a loaded machine and the diff means nothing. See issue #15.
-    let activator = ContextActivator::new(Arc::new(ReversibleContextRegistry::new()))
-        .without_physarum_sidecar();
+    // The production path: the sidecar is deterministic since issue #15, so
+    // the probe measures the packet a session would actually get.
+    let activator = ContextActivator::new(Arc::new(ReversibleContextRegistry::new()));
     let mut signature = TaskSignatureExtractor::extract(&prompt);
     apply_auto_extract_keywords(&mut signature, &prompt, true);
     let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
@@ -218,17 +217,40 @@ fn packet_probe() {
     let mut files: Vec<String> = view
         .active_nodes
         .iter()
-        .map(|n| n.node.file_path.to_string_lossy().replace('\\', "/"))
+        .filter(|n| n.node.node_type == neuromesh_core::NodeType::File)
+        .map(|n| {
+            format!(
+                "{}  [{}{}]",
+                n.node.file_path.to_string_lossy().replace('\\', "/"),
+                n.expansion_reason.as_deref().unwrap_or("-"),
+                if n.sidecar { " sidecar" } else { "" }
+            )
+        })
         .collect();
-    files.sort();
     files.dedup();
     println!("\n=== packet probe: {prompt:?}");
     println!(
-        "=== {} nodes over {} files",
+        "=== {} nodes over {} files; method={} physarum_used={} physarum_ms={} tokens={}",
         view.active_nodes.len(),
-        files.len()
+        files.len(),
+        view.selection_method,
+        view.physarum_used,
+        view.physarum_ms,
+        view.active_tokens
     );
     for file in &files {
         println!("    {file}");
+    }
+    for seed in &view.seeds {
+        println!(
+            "    seed {} -> {} @{:.2} {}",
+            seed.query,
+            seed.resolved_id
+                .as_ref()
+                .map(|i| i.to_string())
+                .unwrap_or_else(|| "-".into()),
+            seed.confidence,
+            seed.resolution_tier.as_deref().unwrap_or("")
+        );
     }
 }
