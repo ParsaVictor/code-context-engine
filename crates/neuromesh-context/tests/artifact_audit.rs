@@ -253,4 +253,17 @@ fn packet_probe() {
             seed.resolution_tier.as_deref().unwrap_or("")
         );
     }
+    if std::env::var("NM_PROBE_NODES").is_ok() {
+        for n in &view.active_nodes {
+            println!(
+                "    node {:?} {} tokens={} status={:?} folded={:?} [{}]",
+                n.node.node_type,
+                n.node.id,
+                n.node.token_cost,
+                n.status,
+                n.folded_symbols,
+                n.expansion_reason.as_deref().unwrap_or("-"),
+            );
+        }
+    }
 }

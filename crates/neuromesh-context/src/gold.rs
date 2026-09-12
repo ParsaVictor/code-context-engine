@@ -880,7 +880,10 @@ pub fn packet_paths(view: &ContextView) -> HashSet<String> {
         .collect()
 }
 
-fn gold_file_hit(gold: &str, names: &HashSet<String>, paths: &HashSet<String>) -> bool {
+/// A path-qualified entry (`data/shakespeare_char/prepare.py`) matches by
+/// path only; a bare name matches any file called that. Matching a qualified
+/// entry by its bare name too would report the gold twin as forbidden.
+pub fn gold_file_hit(gold: &str, names: &HashSet<String>, paths: &HashSet<String>) -> bool {
     let gold = gold.replace('\\', "/");
     if gold.contains('/') {
         paths

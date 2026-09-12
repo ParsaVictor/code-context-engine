@@ -1480,15 +1480,20 @@ pub(crate) fn resolve_seed_query(
     query: &str,
     prompt: &str,
 ) -> Option<(NodeId, f32)> {
-    if let Some(hit) = resolve_seed_query_once(graph, query, prompt) {
-        return Some(hit);
-    }
-    for stem in stem_search_queries(query) {
-        if let Some(hit) = resolve_seed_query_once(graph, &stem, prompt) {
-            return Some(hit);
+    let hit = resolve_seed_query_once(graph, query, prompt).or_else(|| {
+        stem_search_queries(query)
+            .iter()
+            .find_map(|stem| resolve_seed_query_once(graph, stem, prompt))
+    });
+    match hit {
+        Some((id, conf)) => {
+            let id =
+                crate::seed::path_steer::steer_same_name_file(graph, &id, prompt).unwrap_or(id);
+            Some((id, conf))
         }
+        None => crate::seed::path_steer::resolve_dir_segment_seed(graph, query, prompt)
+            .map(|id| (id, 0.9)),
     }
-    None
 }
 
 fn resolve_seed_query_once(

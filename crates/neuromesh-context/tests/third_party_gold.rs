@@ -20,7 +20,8 @@
 //! a red run green.
 
 use neuromesh_context::gold::{
-    evaluate_view, load_gold_tasks, packet_file_names, packet_paths, production_signature, GoldTask,
+    evaluate_view, gold_file_hit, load_gold_tasks, packet_file_names, packet_paths,
+    production_signature, GoldTask,
 };
 use neuromesh_context::task_harness::{oracle_outcome, parse_task_toml, Presence};
 use neuromesh_context::{ContextActivator, ReversibleContextRegistry};
@@ -30,10 +31,12 @@ use neuromesh_index::ProjectWalker;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// Ratchet. Measured 2026-09-12 on the commit that added this gate.
-const MIN_MEAN_RECALL: f32 = 0.85; // measured 0.90
-const MIN_MEAN_PRECISION: f32 = 0.14; // measured 0.146 — the real number, not the fixture 0.89
-const MAX_FORBIDDEN_HITS: usize = 13; // measured 13
+/// Ratchet. First measured 2026-09-12 on the commit that added this gate
+/// (recall 0.90, precision 0.146, forbidden 12, oracle 14/21); each constant
+/// moves up with the engine, never down.
+const MIN_MEAN_RECALL: f32 = 0.94; // measured 0.95 (path steer)
+const MIN_MEAN_PRECISION: f32 = 0.19; // measured 0.196 — the real number, not the fixture 0.89
+const MAX_FORBIDDEN_HITS: usize = 11; // measured 11 (path steer)
 const MIN_TASK_REACHABLE: f32 = 0.6; // measured 14/21
 
 fn workspace_root() -> PathBuf {
@@ -58,21 +61,6 @@ fn repo_names(root: &Path) -> Vec<String> {
         .filter_map(|rest| rest.split_once('='))
         .map(|(_, v)| v.trim().trim_matches('"').to_string())
         .collect()
-}
-
-fn gold_file_hit(
-    gold: &str,
-    names: &std::collections::HashSet<String>,
-    paths: &std::collections::HashSet<String>,
-) -> bool {
-    let gold = gold.replace('\\', "/");
-    paths
-        .iter()
-        .any(|p| p == &gold || p.ends_with(&format!("/{gold}")))
-        || Path::new(&gold)
-            .file_name()
-            .map(|n| names.contains(&n.to_string_lossy().to_string()))
-            .unwrap_or(false)
 }
 
 #[test]
