@@ -12,6 +12,7 @@ pub mod engines;
 pub mod fallback;
 pub mod manifest;
 pub mod micro_header;
+pub(crate) mod path_steer;
 pub mod ranker;
 pub mod sink;
 
