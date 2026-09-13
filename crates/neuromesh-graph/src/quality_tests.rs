@@ -1852,4 +1852,58 @@ const ui = useUiStore()
             neuromesh_parser::CodeIntelligenceEngine::analyze(&file.relative_path, src, language);
         graph.ingest_file(&file, &ast, Some(src));
     }
+
+    #[test]
+    fn a_declaration_in_a_real_class_outranks_the_copy_lifted_from_a_template() {
+        // mini-aspnet: `Store` in Program.cs and the same `Store` inside a
+        // Razor `@code` block, which the parser wraps in a synthetic
+        // `__RazorCode` owner. With equal size and degree the twin used to be
+        // decided by id order — the view won.
+        let graph = NeuralProjectGraph::new(ProjectId::new("app"));
+        let program = r#"
+namespace App
+{
+    public class Program
+    {
+        public static void Store(string body)
+        {
+            SmsStore.Save(body);
+        }
+    }
+}
+"#;
+        let page = r#"
+@page "/sms"
+@code {
+    void Store(string body)
+    {
+        SmsStore.Save(body);
+    }
+}
+"#;
+        for (rel, src, lang) in [
+            ("Program.cs", program, SourceLanguage::CSharp),
+            ("Pages/Sms.cshtml", page, SourceLanguage::HTML),
+        ] {
+            graph.ingest_file(
+                &indexed_lang(rel, lang),
+                &CodeIntelligenceEngine::analyze(&PathBuf::from(rel), src, lang),
+                Some(src),
+            );
+        }
+        graph.finalize_links();
+        let stores = graph.nodes_named("Store");
+        assert_eq!(stores.len(), 2, "{stores:?}");
+        assert!(
+            stores
+                .iter()
+                .any(|n| n.parent.as_deref() == Some("__RazorCode")),
+            "razor copy carries the synthetic owner: {stores:?}"
+        );
+        let (picked, _) = graph.resolve_ranked("Store", None, None).expect("resolves");
+        assert!(
+            picked.as_str().starts_with("sym:Program.cs:"),
+            "picked {picked:?}"
+        );
+    }
 }
