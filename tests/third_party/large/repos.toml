@@ -1,0 +1,22 @@
+# Large dev checkouts (plan revision 2026-09-14, phase A). These two were
+# the first holdout pair (phase 5a): recall 0.950, precision 0.146 on code
+# the engine had never seen. Once we decided to fix what they exposed
+# (F33-F36, docs/planning/stage5-findings.fa.md) they rotated into dev —
+# tuning on them is allowed now, and they are no longer a holdout. Their
+# ratchet lives in tests/third_party_large_gold.rs, separate from the four
+# small dev repos so a large-repo regression cannot hide behind a
+# small-repo improvement.
+#
+#   django       — 3513 files: name-collision density the small dev repos
+#                  never had (F33 __call__, F34 "django"/"next")
+#   ultralytics  — 931 files, also the phase 5c speed baseline (G4)
+
+[[repo]]
+name = "django"
+url = "https://github.com/django/django"
+rev = "2b30f6255b5ef84afbd827993643d52ef2c0963a"
+
+[[repo]]
+name = "ultralytics"
+url = "https://github.com/ultralytics/ultralytics"
+rev = "b6677f37597866210a2c345b723340ae75390d13"

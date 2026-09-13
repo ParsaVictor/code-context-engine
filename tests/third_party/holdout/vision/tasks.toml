@@ -1,0 +1,69 @@
+[[task]]
+id = "vision_resnet_make_layer"
+repo = "vision"
+prompt = "How does ResNet._make_layer stack BasicBlock or Bottleneck blocks with a downsample shortcut, and how does _forward_impl run the stages?"
+needs = ["torchvision/models/resnet.py::_make_layer", "torchvision/models/resnet.py::_forward_impl"]
+forbidden = ["torchvision/models/densenet.py"]
+
+[[task]]
+id = "vision_model_registry"
+repo = "vision"
+prompt = "How does register_model add a builder to the model registry, and how does get_model look a name up with get_model_builder and construct it?"
+needs = ["torchvision/models/_api.py::register_model", "torchvision/models/_api.py::get_model", "torchvision/models/_api.py::get_model_builder"]
+forbidden = ["torchvision/models/_meta.py"]
+
+[[task]]
+id = "vision_batched_nms"
+repo = "vision"
+prompt = "How does batched_nms run NMS per class using _batched_nms_coordinate_trick, and when does it fall back to _batched_nms_vanilla?"
+needs = ["torchvision/ops/boxes.py::batched_nms", "torchvision/ops/boxes.py::_batched_nms_coordinate_trick", "torchvision/ops/boxes.py::_batched_nms_vanilla"]
+forbidden = ["torchvision/ops/roi_align.py"]
+
+[[task]]
+id = "vision_box_iou"
+repo = "vision"
+prompt = "How does box_iou compute pairwise IoU through _box_inter_union, and how does generalized_box_iou extend it with the enclosing box?"
+needs = ["torchvision/ops/boxes.py::box_iou", "torchvision/ops/boxes.py::_box_inter_union", "torchvision/ops/boxes.py::generalized_box_iou"]
+forbidden = ["torchvision/ops/misc.py"]
+
+[[task]]
+id = "vision_coco_getitem"
+repo = "vision"
+prompt = "How does CocoDetection.__getitem__ load the image and annotations for an index, and how does CocoCaptions change what _load_target returns?"
+needs = ["torchvision/datasets/coco.py::__getitem__", "torchvision/datasets/coco.py::_load_target"]
+forbidden = ["torchvision/datasets/voc.py"]
+
+[[task]]
+id = "vision_roi_align"
+repo = "vision"
+prompt = "How does the pure-Python _roi_align compute bilinear interpolation over each RoI bin, and how does the RoIAlign module wrap roi_align?"
+needs = ["torchvision/ops/roi_align.py::_roi_align", "torchvision/ops/roi_align.py::_bilinear_interpolate", "torchvision/ops/roi_align.py::roi_align"]
+forbidden = ["torchvision/ops/ps_roi_align.py"]
+
+[[task]]
+id = "vision_generalized_rcnn"
+repo = "vision"
+prompt = "How does GeneralizedRCNN.forward run the transform, backbone, rpn and roi_heads, and postprocess the detections back to image size?"
+needs = ["torchvision/models/detection/generalized_rcnn.py::forward"]
+forbidden = ["torchvision/models/detection/ssd.py"]
+
+[[task]]
+id = "vision_roi_heads_training"
+repo = "vision"
+prompt = "How does RoIHeads.select_training_samples match proposals to ground truth and subsample them, and how does fastrcnn_loss score the result?"
+needs = ["torchvision/models/detection/roi_heads.py::select_training_samples", "torchvision/models/detection/roi_heads.py::fastrcnn_loss"]
+forbidden = ["torchvision/models/detection/rpn.py"]
+
+[[task]]
+id = "vision_anchor_generator"
+repo = "vision"
+prompt = "How does AnchorGenerator.grid_anchors place the base anchors over each feature map, and how does its forward produce anchors per image?"
+needs = ["torchvision/models/detection/anchor_utils.py::grid_anchors", "torchvision/models/detection/anchor_utils.py::forward"]
+forbidden = ["torchvision/models/detection/transform.py"]
+
+[[task]]
+id = "vision_decode_image"
+repo = "vision"
+prompt = "How does decode_image dispatch on the file format to decode_png or decode_jpeg, and how does read_file load the raw bytes?"
+needs = ["torchvision/io/image.py::decode_image", "torchvision/io/image.py::read_file"]
+forbidden = ["torchvision/io/video.py"]

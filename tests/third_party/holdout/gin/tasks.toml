@@ -1,0 +1,69 @@
+[[task]]
+id = "gin_serve_http"
+repo = "gin"
+prompt = "How does Engine.ServeHTTP take an incoming request and dispatch it through handleHTTPRequest to the matched handlers?"
+needs = ["gin.go::ServeHTTP", "gin.go::handleHTTPRequest"]
+forbidden = ["fs.go"]
+
+[[task]]
+id = "gin_route_tree"
+repo = "gin"
+prompt = "How does node.addRoute insert a path into the radix tree, and how does node.getValue look a request path up?"
+needs = ["tree.go::addRoute", "tree.go::getValue"]
+forbidden = ["path.go"]
+
+[[task]]
+id = "gin_group_handle"
+repo = "gin"
+prompt = "How does RouterGroup.handle compute the absolute path with calculateAbsolutePath and register the handler chain, and how does GET use it?"
+needs = ["routergroup.go::handle", "routergroup.go::calculateAbsolutePath", "routergroup.go::GET"]
+forbidden = ["auth.go"]
+
+[[task]]
+id = "gin_context_next"
+repo = "gin"
+prompt = "How does Context.Next advance through the middleware chain, and how does Abort stop the remaining handlers?"
+needs = ["context.go::Next", "context.go::Abort"]
+forbidden = ["auth.go"]
+
+[[task]]
+id = "gin_bind_json"
+repo = "gin"
+prompt = "How does Context.ShouldBindJSON validate a request body via ShouldBindWith, and what does MustBindWith do when binding fails?"
+needs = ["context.go::ShouldBindJSON", "context.go::ShouldBindWith", "context.go::MustBindWith"]
+forbidden = ["auth.go"]
+
+[[task]]
+id = "gin_recovery"
+repo = "gin"
+prompt = "How does the Recovery middleware catch a panic in CustomRecoveryWithWriter and format the stack trace?"
+needs = ["recovery.go::CustomRecoveryWithWriter", "recovery.go::stack"]
+forbidden = ["auth.go"]
+
+[[task]]
+id = "gin_logger"
+repo = "gin"
+prompt = "How does LoggerWithConfig build LogFormatterParams for each request and write the log line?"
+needs = ["logger.go::LoggerWithConfig"]
+forbidden = ["fs.go"]
+
+[[task]]
+id = "gin_trusted_proxies"
+repo = "gin"
+prompt = "How does Engine.SetTrustedProxies parse the trusted CIDRs, and how does Context.ClientIP use them to pick the client address?"
+needs = ["gin.go::SetTrustedProxies", "gin.go::prepareTrustedCIDRs", "context.go::ClientIP"]
+forbidden = ["auth.go"]
+
+[[task]]
+id = "gin_basic_auth"
+repo = "gin"
+prompt = "How does BasicAuth build the credential pairs with processAccounts and reject a request whose Authorization header does not match?"
+needs = ["auth.go::BasicAuth", "auth.go::processAccounts"]
+forbidden = ["recovery.go"]
+
+[[task]]
+id = "gin_static"
+repo = "gin"
+prompt = "How does RouterGroup.Static register a file-serving handler through createStaticHandler, and what does OnlyFilesFS.Open block?"
+needs = ["routergroup.go::Static", "routergroup.go::createStaticHandler", "fs.go::Open"]
+forbidden = ["auth.go"]

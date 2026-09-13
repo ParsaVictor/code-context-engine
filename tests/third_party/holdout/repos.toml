@@ -1,20 +1,22 @@
-# Holdout checkouts (phase 5a) — never used to tune the engine. Gold for
-# these was written from reading the source before any engine run against
-# them (docs/planning/05-phases-holdout-to-release.fa.md, phase 5a).
+# Holdout checkouts, second rotation (plan revision 2026-09-14, phase A).
+# Never used to tune the engine. Gold written from reading the source
+# before any engine run, with the G1 check: every forbidden_file was
+# verified not to be imported/called by the gold files.
 #
-# Each breaks a different assumption from the four dev repos:
-#   django       — backend framework, not express/fastapi; class-based
-#                  views/middleware, ORM query building, migrations, signals
-#   ultralytics  — ML repo, not nanoGPT/vit-pytorch; large (also used for the
-#                  phase 5c scale/speed measurement), YOLO task/registry
-#                  pattern instead of a single model script
+# The first holdout pair (django, ultralytics) rotated into
+# tests/third_party/large/ once we decided to fix what they exposed.
+#
+#   gin     — Go backend (tree-sitter Go grammar), single package, small
+#             files, receiver methods: nothing in dev looks like it
+#   vision  — torchvision: ML repo shaped as a library of ops/models/
+#             datasets, many same-named `forward`s, C++ extension dispatch
 
 [[repo]]
-name = "django"
-url = "https://github.com/django/django"
-rev = "2b30f6255b5ef84afbd827993643d52ef2c0963a"
+name = "gin"
+url = "https://github.com/gin-gonic/gin"
+rev = "dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9"
 
 [[repo]]
-name = "ultralytics"
-url = "https://github.com/ultralytics/ultralytics"
-rev = "b6677f37597866210a2c345b723340ae75390d13"
+name = "vision"
+url = "https://github.com/pytorch/vision"
+rev = "ac8d215f7d45d6601451b62e9f81622dac8aa0b4"
