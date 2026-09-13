@@ -1153,6 +1153,14 @@ fn read_fold_query(arguments: &Value) -> String {
         .to_string()
 }
 
+/// Longest prompt the tool accepts, in bytes. Signature extraction is linear
+/// in the prompt, so an unbounded prompt buys unbounded work: the stage-4
+/// security test's 2 MB prompt took 11 s in debug for a 71-token packet. A
+/// prompt is a question, not a document — 32 KB is ~8k tokens, far past any
+/// real question — and an over-long one is refused with the limit stated
+/// rather than truncated in silence (F24).
+pub const MAX_PROMPT_BYTES: usize = 32 * 1024;
+
 fn read_task_description(arguments: &Value) -> Result<String> {
     let raw = [
         "task_description",
@@ -1168,13 +1176,19 @@ fn read_task_description(arguments: &Value) -> Result<String> {
     .unwrap_or("")
     .trim();
     if raw.is_empty() {
-        Err(NeuroMeshError::Config(
+        return Err(NeuroMeshError::Config(
             "get_context_packet requires a prompt (query, task_description, prompt, or task)"
                 .into(),
-        ))
-    } else {
-        Ok(raw.to_string())
+        ));
     }
+    if raw.len() > MAX_PROMPT_BYTES {
+        return Err(NeuroMeshError::Config(format!(
+            "prompt is {} bytes; get_context_packet accepts at most {} bytes —              pass the question, not the document",
+            raw.len(),
+            MAX_PROMPT_BYTES
+        )));
+    }
+    Ok(raw.to_string())
 }
 
 fn read_bool(value: &Value, default: bool) -> bool {
@@ -1339,6 +1353,23 @@ mod tests {
     use neuromesh_parser::CodeIntelligenceEngine;
     use parking_lot::RwLock;
     use std::path::PathBuf;
+
+    #[test]
+    fn an_over_long_prompt_is_refused_with_the_limit_stated() {
+        let long = "x".repeat(MAX_PROMPT_BYTES + 1);
+        let err = read_task_description(&json!({ "prompt": long })).expect_err("over the cap");
+        let msg = err.to_string();
+        assert!(msg.contains("32768"), "{msg}");
+        assert!(msg.contains("at most"), "{msg}");
+
+        let at_cap = "y".repeat(MAX_PROMPT_BYTES);
+        assert_eq!(
+            read_task_description(&json!({ "task": at_cap }))
+                .unwrap()
+                .len(),
+            MAX_PROMPT_BYTES
+        );
+    }
 
     fn indexed(rel: &str) -> IndexedFile {
         IndexedFile {

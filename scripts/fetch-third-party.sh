@@ -24,6 +24,9 @@ flush() {
   name=""; url=""; rev=""
 }
 while IFS= read -r line; do
+  # With core.autocrlf=true the toml is checked out with CRLF; a trailing
+  # \r made "[[repo]]" never match, so only the last repo was ever fetched.
+  line="${line%$'\r'}"
   case "$line" in
     "[[repo]]") flush ;;
     name*) name="$(echo "$line" | sed 's/^name *= *"\(.*\)"/\1/')" ;;
