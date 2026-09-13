@@ -484,26 +484,46 @@ pub fn tokenize_ident(name: &str) -> Vec<String> {
         .split(['_', '-', '/', '\\', '.', ':'])
         .filter(|s| !s.is_empty())
     {
-        let mut current = String::new();
-        let chars: Vec<char> = chunk.chars().collect();
-        for (i, &ch) in chars.iter().enumerate() {
-            if ch.is_uppercase()
-                && i > 0
-                && (chars[i - 1].is_lowercase()
-                    || (i + 1 < chars.len() && chars[i + 1].is_lowercase()))
-                && !current.is_empty()
-            {
-                tokens.push(current.to_lowercase());
-                current.clear();
-            }
-            current.push(ch);
-        }
-        if !current.is_empty() {
-            tokens.push(current.to_lowercase());
-        }
+        tokenize_camel_chunk(chunk, &mut tokens);
     }
     tokens.retain(|t| t.len() > 1);
     tokens
+}
+
+/// Split one camel/Pascal-case chunk into lower-cased words.
+///
+/// A boundary is an uppercase letter that follows a lowercase one, or that
+/// starts a new word after an acronym (`HTTPServer` → `http`, `server`).
+/// One exception: an uppercase *tail* (`ViT` in `SimpleViT`, `iOS`) stays
+/// glued to a word that already mixes case — otherwise the lone trailing
+/// capital became a one-letter token and was dropped, so `vit` vanished.
+/// A pure-lowercase word followed by an acronym still splits (`getID` →
+/// `get`, `id`).
+pub fn tokenize_camel_chunk(chunk: &str, tokens: &mut Vec<String>) {
+    let chars: Vec<char> = chunk.chars().collect();
+    let mut current = String::new();
+    let mut current_has_upper = false;
+    for (i, &ch) in chars.iter().enumerate() {
+        let after_lower = i > 0 && chars[i - 1].is_lowercase();
+        let before_lower = i + 1 < chars.len() && chars[i + 1].is_lowercase();
+        let boundary = ch.is_uppercase() && i > 0 && (after_lower || before_lower);
+        if boundary && !current.is_empty() {
+            let tail_is_upper = chars[i..].iter().all(|c| c.is_uppercase());
+            // `i` in `iOS` is a one-letter prefix, not a word of its own.
+            let glue_tail =
+                after_lower && tail_is_upper && (current_has_upper || current.chars().count() == 1);
+            if !glue_tail {
+                tokens.push(current.to_lowercase());
+                current.clear();
+                current_has_upper = false;
+            }
+        }
+        current_has_upper |= ch.is_uppercase();
+        current.push(ch);
+    }
+    if !current.is_empty() {
+        tokens.push(current.to_lowercase());
+    }
 }
 
 const ROUTE_METHODS: &[&str] = &[
@@ -832,6 +852,28 @@ mod tests {
         assert!(camel.contains(&"neural".into()));
         assert!(camel.contains(&"project".into()));
         assert!(camel.contains(&"graph".into()));
+    }
+
+    #[test]
+    fn uppercase_tail_stays_glued_to_a_mixed_case_word() {
+        // F11: the lone trailing `T` used to become a one-letter token and
+        // vanish, so `SimpleViT` never matched the stem `simple_vit`.
+        assert_eq!(tokenize_ident("SimpleViT"), vec!["simple", "vit"]);
+        assert_eq!(tokenize_ident("ViT"), vec!["vit"]);
+        assert_eq!(tokenize_ident("iOS"), vec!["ios"]);
+        // A lowercase word followed by an acronym still splits.
+        assert_eq!(tokenize_ident("getID"), vec!["get", "id"]);
+        assert_eq!(tokenize_ident("parseXML"), vec!["parse", "xml"]);
+        // Acronym followed by a word.
+        assert_eq!(tokenize_ident("HTTPServer"), vec!["http", "server"]);
+        assert_eq!(
+            tokenize_ident("CausalSelfAttention"),
+            vec!["causal", "self", "attention"]
+        );
+        assert_eq!(
+            tokenize_ident("posemb_sincos_2d"),
+            vec!["posemb", "sincos", "2d"]
+        );
     }
 
     #[test]

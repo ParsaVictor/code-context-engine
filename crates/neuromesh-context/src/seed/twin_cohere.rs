@@ -14,26 +14,14 @@ use neuromesh_parser::tokenize_ident as tokenize;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-/// Sub-word tokens of every prompt word, plus each word squashed to
-/// alphanumerics: `SimpleViT` tokenizes to `simple`, `vi` (the lone `T`
-/// drops), so the squashed `simplevit` is what the stem `simple_vit` meets.
+/// Sub-word tokens of every prompt word (`SimpleViT` → `simple`, `vit`).
 fn prompt_token_set(prompt: &str) -> HashSet<String> {
-    let mut set = HashSet::new();
-    for word in prompt.split(|c: char| !c.is_alphanumeric() && c != '_') {
-        if word.is_empty() {
-            continue;
-        }
-        set.extend(tokenize(word).into_iter().map(|t| t.to_lowercase()));
-        let squashed: String = word
-            .chars()
-            .filter(|c| c.is_alphanumeric())
-            .collect::<String>()
-            .to_lowercase();
-        if squashed.len() > 1 {
-            set.insert(squashed);
-        }
-    }
-    set
+    prompt
+        .split(|c: char| !c.is_alphanumeric() && c != '_')
+        .filter(|w| !w.is_empty())
+        .flat_map(tokenize)
+        .map(|t| t.to_lowercase())
+        .collect()
 }
 
 fn stem_covered(path: &std::path::Path, prompt_tokens: &HashSet<String>) -> bool {
@@ -41,16 +29,10 @@ fn stem_covered(path: &std::path::Path, prompt_tokens: &HashSet<String>) -> bool
         return false;
     };
     let toks = tokenize(stem);
-    if toks.is_empty() {
-        return false;
-    }
-    if toks
-        .iter()
-        .all(|t| prompt_tokens.contains(&t.to_lowercase()))
-    {
-        return true;
-    }
-    prompt_tokens.contains(&toks.concat().to_lowercase())
+    !toks.is_empty()
+        && toks
+            .iter()
+            .all(|t| prompt_tokens.contains(&t.to_lowercase()))
 }
 
 struct Twinned {

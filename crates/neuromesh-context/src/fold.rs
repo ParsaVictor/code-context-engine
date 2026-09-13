@@ -341,6 +341,8 @@ pub fn normalize_fold_query(raw: &str) -> String {
     trimmed.to_string()
 }
 
+/// Like `neuromesh_parser::tokenize_ident`, but also splits on the
+/// punctuation found in signatures and bodies (`(`, `<`, `,`, quotes…).
 pub fn tokenize_name(name: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     for chunk in name
@@ -349,33 +351,10 @@ pub fn tokenize_name(name: &str) -> Vec<String> {
         ])
         .filter(|s| !s.is_empty())
     {
-        let mut current = String::new();
-        let chars: Vec<char> = chunk.chars().collect();
-        for (i, &ch) in chars.iter().enumerate() {
-            if ch.is_uppercase()
-                && i > 0
-                && (chars[i - 1].is_lowercase()
-                    || (i + 1 < chars.len() && chars[i + 1].is_lowercase()))
-                && !current.is_empty()
-            {
-                push_token(&mut tokens, &current);
-                current.clear();
-            }
-            current.push(ch);
-        }
-        if !current.is_empty() {
-            push_token(&mut tokens, &current);
-        }
+        neuromesh_parser::tokenize_camel_chunk(chunk, &mut tokens);
     }
     tokens.retain(|t| t.len() > 1);
     tokens
-}
-
-fn push_token(tokens: &mut Vec<String>, raw: &str) {
-    let tok = raw.to_lowercase();
-    if tok.len() > 1 {
-        tokens.push(tok);
-    }
 }
 
 fn token_hits(tokens: &[String], focus: &HashSet<String>) -> usize {
