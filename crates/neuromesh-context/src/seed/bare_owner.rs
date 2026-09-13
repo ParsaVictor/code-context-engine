@@ -92,7 +92,7 @@ mod tests {
     fn seed(query: &str, id: Option<&str>) -> SeedResolution {
         SeedResolution {
             query: query.into(),
-            resolved_id: id.map(|s| NodeId::new(s.to_string())),
+            resolved_id: id.map(NodeId::new),
             confidence: 1.0,
             resolution_tier: None,
             embedding_score: None,
