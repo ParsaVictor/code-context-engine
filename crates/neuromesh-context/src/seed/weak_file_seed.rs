@@ -13,14 +13,14 @@ use neuromesh_core::{NodeId, NodeType, SeedResolution};
 use neuromesh_graph::NeuralProjectGraph;
 use std::collections::{HashMap, HashSet};
 
-const STRONG: &[&str] = &[
+pub(crate) const STRONG: &[&str] = &[
     "identifier",
     "entity",
     "file",
     "client_keyword",
     "path_hint",
 ];
-const WEAK: &[&str] = &[
+pub(crate) const WEAK: &[&str] = &[
     "concept",
     "alias_code",
     "alias_gap_fill",
@@ -30,11 +30,11 @@ const WEAK: &[&str] = &[
     "entity_type",
 ];
 
-fn prefix(query: &str) -> &str {
+pub(crate) fn prefix(query: &str) -> &str {
     query.split(':').next().unwrap_or("")
 }
 
-fn strip_plural(w: &str) -> &str {
+pub(crate) fn strip_plural(w: &str) -> &str {
     for suffix in ["ies", "es", "s"] {
         if let Some(base) = w.strip_suffix(suffix) {
             if base.len() >= 3 {
@@ -45,7 +45,7 @@ fn strip_plural(w: &str) -> &str {
     w
 }
 
-fn prompt_words(prompt: &str) -> HashSet<String> {
+pub(crate) fn prompt_words(prompt: &str) -> HashSet<String> {
     prompt
         .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
         .flat_map(|tok| tok.split('_'))

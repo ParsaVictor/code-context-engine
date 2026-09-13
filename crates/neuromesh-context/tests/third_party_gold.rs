@@ -35,8 +35,8 @@ use std::sync::Arc;
 /// (recall 0.90, precision 0.146, forbidden 12, oracle 14/21); each constant
 /// moves up with the engine, never down.
 const MIN_MEAN_RECALL: f32 = 0.99; // measured 1.00 (path steer, twin coherence)
-const MIN_MEAN_PRECISION: f32 = 0.70; // measured 0.706 — the real number, not the fixture 0.89
-const MAX_FORBIDDEN_HITS: usize = 1; // measured 1 (artifact seeder covers a kind once, F26)
+const MIN_MEAN_PRECISION: f32 = 0.85; // measured 0.856 — the real number, not the fixture 0.89
+const MAX_FORBIDDEN_HITS: usize = 0; // measured 0 (weak substring symbol seeds pruned, F27)
 const MIN_TASK_REACHABLE: f32 = 1.0; // measured 21/21 (F26)
 
 fn workspace_root() -> PathBuf {
@@ -194,8 +194,12 @@ fn real_repositories_gold_and_task_oracle() {
         mean_precision >= MIN_MEAN_PRECISION,
         "mean precision {mean_precision:.3} < {MIN_MEAN_PRECISION}"
     );
+    // `<=` with a zero ceiling trips clippy::absurd_extreme_comparisons; the
+    // ratchet may rise from 0 again only if a measured regression is accepted.
+    #[allow(clippy::absurd_extreme_comparisons)]
+    let within_budget = forbidden_hits <= MAX_FORBIDDEN_HITS;
     assert!(
-        forbidden_hits <= MAX_FORBIDDEN_HITS,
+        within_budget,
         "{forbidden_hits} forbidden files shipped (max {MAX_FORBIDDEN_HITS})"
     );
     assert!(
