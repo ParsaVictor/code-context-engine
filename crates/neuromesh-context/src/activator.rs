@@ -393,6 +393,13 @@ impl ContextActivator {
             &mut seed_reasons,
             prompt,
         );
+        crate::seed::weak_symbol_seed::prune_weak_substring_symbol_seeds(
+            graph,
+            &mut seed_resolutions,
+            &mut seed_energies,
+            &mut seed_reasons,
+            prompt,
+        );
         expand_file_seeds_to_symbols(
             graph,
             signature,

@@ -20,6 +20,7 @@ pub mod ranker;
 pub mod sink;
 pub(crate) mod twin_cohere;
 pub(crate) mod weak_file_seed;
+pub(crate) mod weak_symbol_seed;
 
 #[cfg(feature = "embeddings")]
 pub mod semantic_embed;
