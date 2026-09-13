@@ -1,0 +1,69 @@
+[[task]]
+id = "gin_serve_http"
+prompt = "How does Engine.ServeHTTP take an incoming request and dispatch it through handleHTTPRequest to the matched handlers?"
+gold_files = ["gin.go"]
+forbidden_files = ["fs.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_route_tree"
+prompt = "How does node.addRoute insert a path into the radix tree, and how does node.getValue look a request path up?"
+gold_files = ["tree.go"]
+forbidden_files = ["path.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_group_handle"
+prompt = "How does RouterGroup.handle compute the absolute path with calculateAbsolutePath and register the handler chain, and how does GET use it?"
+gold_files = ["routergroup.go"]
+forbidden_files = ["auth.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_context_next"
+prompt = "How does Context.Next advance through the middleware chain, and how does Abort stop the remaining handlers?"
+gold_files = ["context.go"]
+forbidden_files = ["auth.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_bind_json"
+prompt = "How does Context.ShouldBindJSON validate a request body via ShouldBindWith, and what does MustBindWith do when binding fails?"
+gold_files = ["context.go"]
+forbidden_files = ["auth.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_recovery"
+prompt = "How does the Recovery middleware catch a panic in CustomRecoveryWithWriter and format the stack trace?"
+gold_files = ["recovery.go"]
+forbidden_files = ["auth.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_logger"
+prompt = "How does LoggerWithConfig build LogFormatterParams for each request and write the log line?"
+gold_files = ["logger.go"]
+forbidden_files = ["fs.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_trusted_proxies"
+prompt = "How does Engine.SetTrustedProxies parse the trusted CIDRs, and how does Context.ClientIP use them to pick the client address?"
+gold_files = ["gin.go", "context.go"]
+forbidden_files = ["auth.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_basic_auth"
+prompt = "How does BasicAuth build the credential pairs with processAccounts and reject a request whose Authorization header does not match?"
+gold_files = ["auth.go"]
+forbidden_files = ["recovery.go"]
+expect_seeds_missed = false
+
+[[task]]
+id = "gin_static"
+prompt = "How does RouterGroup.Static register a file-serving handler through createStaticHandler, and what does OnlyFilesFS.Open block?"
+gold_files = ["routergroup.go", "fs.go"]
+forbidden_files = ["auth.go"]
+expect_seeds_missed = false

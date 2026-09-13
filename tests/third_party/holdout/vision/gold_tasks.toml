@@ -1,0 +1,69 @@
+[[task]]
+id = "vision_resnet_make_layer"
+prompt = "How does ResNet._make_layer stack BasicBlock or Bottleneck blocks with a downsample shortcut, and how does _forward_impl run the stages?"
+gold_files = ["torchvision/models/resnet.py"]
+forbidden_files = ["torchvision/models/densenet.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_model_registry"
+prompt = "How does register_model add a builder to the model registry, and how does get_model look a name up with get_model_builder and construct it?"
+gold_files = ["torchvision/models/_api.py"]
+forbidden_files = ["torchvision/models/_meta.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_batched_nms"
+prompt = "How does batched_nms run NMS per class using _batched_nms_coordinate_trick, and when does it fall back to _batched_nms_vanilla?"
+gold_files = ["torchvision/ops/boxes.py"]
+forbidden_files = ["torchvision/ops/roi_align.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_box_iou"
+prompt = "How does box_iou compute pairwise IoU through _box_inter_union, and how does generalized_box_iou extend it with the enclosing box?"
+gold_files = ["torchvision/ops/boxes.py"]
+forbidden_files = ["torchvision/ops/misc.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_coco_getitem"
+prompt = "How does CocoDetection.__getitem__ load the image and annotations for an index, and how does CocoCaptions change what _load_target returns?"
+gold_files = ["torchvision/datasets/coco.py"]
+forbidden_files = ["torchvision/datasets/voc.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_roi_align"
+prompt = "How does the pure-Python _roi_align compute bilinear interpolation over each RoI bin, and how does the RoIAlign module wrap roi_align?"
+gold_files = ["torchvision/ops/roi_align.py"]
+forbidden_files = ["torchvision/ops/ps_roi_align.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_generalized_rcnn"
+prompt = "How does GeneralizedRCNN.forward run the transform, backbone, rpn and roi_heads, and postprocess the detections back to image size?"
+gold_files = ["torchvision/models/detection/generalized_rcnn.py"]
+forbidden_files = ["torchvision/models/detection/ssd.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_roi_heads_training"
+prompt = "How does RoIHeads.select_training_samples match proposals to ground truth and subsample them, and how does fastrcnn_loss score the result?"
+gold_files = ["torchvision/models/detection/roi_heads.py"]
+forbidden_files = ["torchvision/models/detection/rpn.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_anchor_generator"
+prompt = "How does AnchorGenerator.grid_anchors place the base anchors over each feature map, and how does its forward produce anchors per image?"
+gold_files = ["torchvision/models/detection/anchor_utils.py"]
+forbidden_files = ["torchvision/models/detection/transform.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "vision_decode_image"
+prompt = "How does decode_image dispatch on the file format to decode_png or decode_jpeg, and how does read_file load the raw bytes?"
+gold_files = ["torchvision/io/image.py"]
+forbidden_files = ["torchvision/io/video.py"]
+expect_seeds_missed = false
