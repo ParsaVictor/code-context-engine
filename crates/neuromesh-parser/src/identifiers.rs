@@ -309,13 +309,26 @@ pub fn extract_prompt_anchors(prompt: &str) -> PromptAnchors {
         }
     }
 
+    // `Owner.member` with a capitalised owner (`WSGIHandler.__call__`,
+    // `Signal.connect`). The qualified pair goes first, for the same reason
+    // the lowercase branch below emits `req.get`: it is the only form whose
+    // resolution respects the owner (`resolve_dotted_member`), and the bare
+    // member is dropped next to it by `seed::bare_owner`. Emitting only the
+    // halves — as this branch did until F33 — turned `__call__` into a
+    // global identifier seed that matched the first `__call__` in the
+    // graph, in a different class. Invisible on a 6-file repo, the top
+    // precision loss on a 3500-file one.
     for cap in dotted_re.captures_iter(prompt) {
         let owner = cap.get(1).unwrap().as_str();
         let member = cap.get(2).unwrap().as_str();
+        let member_ok = is_code_ident(member) || is_how_does_ident(member);
+        if is_code_ident(owner) && member_ok {
+            push_unique(&mut identifiers, format!("{owner}.{member}"));
+        }
         if is_code_ident(owner) {
             push_unique(&mut identifiers, owner.to_string());
         }
-        if is_code_ident(member) || is_how_does_ident(member) {
+        if member_ok {
             push_unique(&mut identifiers, member.to_string());
         }
     }
@@ -1145,5 +1158,34 @@ mod tests {
         assert!(!is_route_query("crates/neuromesh-mcp/src/tools.rs"));
         assert_eq!(api_path_alias("POST /sms").as_deref(), Some("/sms"));
         assert_eq!(api_path_alias("store"), None);
+    }
+
+    /// F33: a capitalised `Owner.member` must yield the qualified pair, not
+    /// only its halves — a dunder member on its own is a global seed.
+    #[test]
+    fn capitalised_owner_member_yields_qualified_pair() {
+        let a = extract_prompt_anchors(
+            "How does WSGIHandler.__call__ turn a raw WSGI environ into a Django response?",
+        );
+        assert!(
+            a.identifiers.iter().any(|id| id == "WSGIHandler.__call__"),
+            "{:?}",
+            a.identifiers
+        );
+        assert!(a.identifiers.iter().any(|id| id == "WSGIHandler"));
+
+        let b = extract_prompt_anchors("How does Signal.connect register a receiver?");
+        assert!(
+            b.identifiers.iter().any(|id| id == "Signal.connect"),
+            "{:?}",
+            b.identifiers
+        );
+        let first_dotted = b.identifiers.iter().position(|id| id == "Signal.connect");
+        let bare = b.identifiers.iter().position(|id| id == "connect");
+        assert!(
+            bare.is_none() || first_dotted < bare,
+            "qualified pair must come before its bare member: {:?}",
+            b.identifiers
+        );
     }
 }
