@@ -243,9 +243,21 @@ pub fn extract_prompt_anchors(prompt: &str) -> PromptAnchors {
     let qual_re = QUAL_RE.get_or_init(|| {
         Regex::new(r"\b[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+\b").unwrap()
     });
+    // The third alternative is the bare, no-structural-signal scan: any
+    // capitalised word found anywhere in free-flowing prose, not attached to
+    // a `.member`, a `()`, or a "how does X" pattern (those go through
+    // `dotted_re`/`call_re`/`how_does_re`, which do not require multi-hump
+    // capitalisation because they already have a real signal that the word
+    // names code). Without a second capital, this alternative used to catch
+    // any single-hump proper noun mentioned in passing — the framework's
+    // own name ("a Django response"), not a specific class (F34). Requiring
+    // a second uppercase (`WSGIHandler`, `ResNet`, `BasicBlock`) keeps real
+    // multi-word PascalCase while dropping that false-positive path; a
+    // single-hump class name used as an actual subject (`Signal.connect`,
+    // "How does Signal register...") still seeds through the other two.
     let ident_re = IDENT_RE.get_or_init(|| {
         Regex::new(
-            r"\b(?:[a-z][a-z0-9]*(_[a-z0-9]+)+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-zA-Z0-9]{2,})\b",
+            r"\b(?:[a-z][a-z0-9]*(_[a-z0-9]+)+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]*[A-Z][A-Za-z0-9]*)\b",
         )
         .unwrap()
     });
