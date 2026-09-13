@@ -18,8 +18,12 @@
 //!   so they compare directly. Needs the provider's API key in the
 //!   environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, ...); `--provider
 //!   mock --mock-reply <file>` replays a canned reply with no key, for
-//!   exercising patch-apply + `verify` in isolation. Cases without `verify`
-//!   are scored by the oracle and reported as such regardless of `--context`.
+//!   exercising patch-apply + `verify` in isolation. A case with no `verify`
+//!   (an explanation question, not a fix-it task) instead goes through a
+//!   QA-judge path: the model answers the question from the context, then a
+//!   second call grades whether the answer specifically and correctly
+//!   explains the case's `needs` — see `run_qa_judge_case` for the real
+//!   limitation (no gold reference answers exist yet, only symbol names).
 //!
 //! `--json` prints the outcomes and summary as one JSON document after the
 //! table, for the benchmark workflow to keep.
@@ -364,18 +368,16 @@ pub async fn execute(args: &[String]) -> Result<()> {
         let mut outcome = oracle_outcome(case, &view, &registry, latency_ms);
 
         if let (Some(provider), Executor::Model { model, .. }) = (&provider, &executor) {
-            if case.verify.is_some() {
-                let context_text = match context_mode {
-                    ContextMode::Packet => render_packet_text(&view),
-                    ContextMode::WholeGoldFiles => whole_gold_files_context(case, &repo),
-                    ContextMode::Grep => grep_context(case, &repo),
-                };
-                outcome =
-                    run_model_case(case, &repo, context_text, provider.as_ref(), model, outcome)
-                        .await;
+            let context_text = match context_mode {
+                ContextMode::Packet => render_packet_text(&view),
+                ContextMode::WholeGoldFiles => whole_gold_files_context(case, &repo),
+                ContextMode::Grep => grep_context(case, &repo),
+            };
+            outcome = if case.verify.is_some() {
+                run_model_case(case, &repo, context_text, provider.as_ref(), model, outcome).await
             } else {
-                outcome.note = Some("no verify command; scored by oracle".into());
-            }
+                run_qa_judge_case(case, context_text, provider.as_ref(), model, outcome).await
+            };
         }
 
         let needs: Vec<String> = outcome
@@ -436,6 +438,132 @@ fn truncate(s: &str, n: usize) -> String {
         let cut: String = s.chars().take(n - 1).collect();
         format!("{cut}…")
     }
+}
+
+const QA_ANSWER_SYSTEM_PROMPT: &str = "You are answering a question about a codebase you cannot \
+browse directly. You see only the context below: a set of files, some with function bodies folded \
+to markers (expand a marker only by reasoning about the visible signature and surrounding code — \
+you cannot actually call an expand tool here). Answer the question specifically and concretely: \
+name the exact functions/methods/files involved and describe what each one does and how they \
+connect. Do not pad with generic statements that would apply to any codebase. If the context is not \
+enough to answer confidently, say so plainly instead of guessing.";
+
+/// The grader gets the gold `needs` (file::symbol identifiers) but no gold
+/// prose, because none exists — task gold is authored as file/symbol
+/// identifiers, not reference answers (see docs/planning/stage5-findings.fa.md
+/// and the third-party gold sets). The judge is asked to use its own
+/// knowledge of what a symbol with that name/location/signature-shape would
+/// plausibly do, the same way a human reviewer with domain knowledge but no
+/// repository access would grade an answer. This is a real limitation, not a
+/// design nicety: a judge with no ground-truth description can be fooled by a
+/// fluent but wrong answer that happens to name the right symbols. Treat a
+/// QA-judge task_success number as directional, not as strong as the
+/// verify-command path, until gold answers are authored.
+const QA_JUDGE_SYSTEM_PROMPT: &str = "You are grading whether a candidate answer correctly and \
+specifically explains a set of named code elements, based only on the question, the list of \
+elements, and your own knowledge of typical code at those names/locations. A vague answer that \
+merely repeats the element names without describing what they actually do must fail. An answer \
+that gets the mechanism wrong must fail. An answer that plainly says the context was insufficient \
+must fail (it did not complete the task). Reply with exactly one line: PASS or FAIL, followed by a \
+dash and a one-sentence reason — nothing else.";
+
+async fn run_qa_judge_case(
+    case: &TaskCase,
+    context_text: String,
+    provider: &dyn Provider,
+    model: &str,
+    mut outcome: TaskOutcome,
+) -> TaskOutcome {
+    outcome.executor = format!("{}:{model} (qa-judge)", provider.name());
+    let context_tokens = TokenCounter::count_tokens(&context_text);
+    let answer_request = ProviderRequest {
+        model: model.to_string(),
+        messages: vec![
+            ChatMessage {
+                role: "system".into(),
+                content: QA_ANSWER_SYSTEM_PROMPT.into(),
+                name: None,
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: format!("## Question\n{}\n\n## Context\n{context_text}", case.prompt),
+                name: None,
+            },
+        ],
+        temperature: None,
+        max_tokens: Some(4_000),
+        stream: false,
+        api_key: None,
+    };
+    let answer_response = match provider.send(&answer_request).await {
+        Ok(r) => r,
+        Err(e) => {
+            outcome.success = false;
+            outcome.strict_success = false;
+            outcome.note = Some(format!("provider error (answer): {e}"));
+            return outcome;
+        }
+    };
+    let answer = answer_response.content.clone();
+
+    let needs_list = case
+        .needs
+        .iter()
+        .map(|n| format!("- {n}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let judge_user = format!(
+        "## Question asked of the candidate\n{}\n\n## Code elements the answer must correctly explain\n{needs_list}\n\n## Candidate answer\n{answer}",
+        case.prompt
+    );
+    let judge_request = ProviderRequest {
+        model: model.to_string(),
+        messages: vec![
+            ChatMessage {
+                role: "system".into(),
+                content: QA_JUDGE_SYSTEM_PROMPT.into(),
+                name: None,
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: judge_user.clone(),
+                name: None,
+            },
+        ],
+        temperature: None,
+        max_tokens: Some(200),
+        stream: false,
+        api_key: None,
+    };
+    let judge_response = match provider.send(&judge_request).await {
+        Ok(r) => r,
+        Err(e) => {
+            outcome.success = false;
+            outcome.strict_success = false;
+            outcome.note = Some(format!("provider error (judge): {e}"));
+            return outcome;
+        }
+    };
+    let verdict = judge_response.content.trim();
+    let passed = verdict
+        .split(['-', '—', ':'])
+        .next()
+        .unwrap_or(verdict)
+        .trim()
+        .eq_ignore_ascii_case("PASS");
+
+    outcome.success = passed;
+    outcome.strict_success = passed && outcome.strict_success;
+    let judge_prompt_tokens = TokenCounter::count_tokens(&judge_user);
+    outcome.effective_tokens = context_tokens
+        + answer_response.usage.completion_tokens
+        + judge_prompt_tokens
+        + judge_response.usage.completion_tokens;
+    outcome.note = Some(format!(
+        "qa-judge: {verdict} · context {context_tokens} tok, answer {} tok, judge {} tok",
+        answer_response.usage.completion_tokens, judge_response.usage.completion_tokens
+    ));
+    outcome
 }
 
 const PATCH_SYSTEM_PROMPT: &str = "You are completing a coding task in a repository you cannot browse. \
