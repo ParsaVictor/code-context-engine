@@ -360,6 +360,11 @@ impl ContextActivator {
         let seed_resolution_telemetry = seed_result.telemetry.clone();
         let packet_header = seed_result.packet_header.clone();
 
+        crate::seed::bare_owner::prune_bare_owner_seeds(
+            &mut seed_resolutions,
+            &mut seed_energies,
+            &mut seed_reasons,
+        );
         mark_equivalent_file_hits(graph, &mut seed_resolutions, &mut seed_energies);
         cohere_ambiguous_seeds_to_app(graph, &mut seed_resolutions, &mut seed_energies, prompt);
         crate::seed::twin_cohere::cohere_twin_definitions(
@@ -1266,13 +1271,49 @@ fn push_seed_priority_symbol(symbols: &mut HashSet<String>, query: &str) {
     symbols.insert(query.to_lowercase());
 }
 
+/// Receivers that name "the current object", not a type or module: their
+/// member can live on any parent, so they carry no owner constraint.
+const OWNER_WILDCARDS: &[&str] = &["self", "this", "cls", "super", "me"];
+
+enum DottedMember {
+    Hit((NodeId, f32)),
+    /// The graph knows the owner as a receiver, but it has no such member.
+    OwnerLacksMember,
+    /// The owner is not a recorded parent (an instance name, a module): no
+    /// owner constraint applies and the path heuristics decide.
+    Unknown,
+}
+
 fn resolve_dotted_member(
     graph: &NeuralProjectGraph,
     owner: &str,
     member: &str,
     prompt: &str,
-) -> Option<(NodeId, f32)> {
+) -> DottedMember {
     let owner_l = owner.to_lowercase();
+    // The parent the parser recorded wins over every path heuristic below:
+    // `res.json` is the `json` whose parent is `res`, not the body-parser
+    // export in `express.js` that a substring hint (`res` ⊂ `express`) picks.
+    // And when the graph knows `req` as a receiver but has no `req.get`,
+    // `res.get` is a different owner's member, not an answer (F28).
+    if !OWNER_WILDCARDS.contains(&owner_l.as_str()) {
+        let owned: Vec<NodeId> = graph
+            .members_of_owner(owner, member)
+            .into_iter()
+            .filter(|id| seed_path_allowed(graph, id, prompt))
+            .collect();
+        if let Some(first) = owned.first() {
+            let conf = if owned.len() == 1 { 1.0 } else { 0.72 };
+            let ranked = graph
+                .resolve_ranked(member, Some(owner), None)
+                .map(|(id, _)| id)
+                .filter(|id| owned.contains(id));
+            return DottedMember::Hit((ranked.unwrap_or_else(|| first.clone()), conf));
+        }
+        if graph.is_known_owner(owner) {
+            return DottedMember::OwnerLacksMember;
+        }
+    }
     let hints: Vec<&str> = match owner_l.as_str() {
         "app" => vec!["application", "app"],
         _ => vec![owner],
@@ -1287,12 +1328,12 @@ fn resolve_dotted_member(
                     EdgeConfidence::Unresolved => 0.0,
                 };
                 if conf > 0.0 {
-                    return Some((id, conf));
+                    return DottedMember::Hit((id, conf));
                 }
             }
         }
     }
-    None
+    DottedMember::Unknown
 }
 
 /// `owner.member` whose member the graph does not know: fall back to the
@@ -1580,8 +1621,12 @@ fn resolve_seed_query_once(
     }
     if !query.contains(['/', '\\']) && !is_route_query(query) {
         if let Some((owner, member)) = query.split_once('.') {
-            if let Some(hit) = resolve_dotted_member(graph, owner, member, prompt) {
-                return Some(hit);
+            match resolve_dotted_member(graph, owner, member, prompt) {
+                DottedMember::Hit(hit) => return Some(hit),
+                // `req.get` when the graph knows `req` but not its `get`: no
+                // file named `req.get.js`, no `get` of another owner.
+                DottedMember::OwnerLacksMember => return None,
+                DottedMember::Unknown => {}
             }
             let written = prompt.to_lowercase().contains(&query.to_lowercase());
             if let Some(id) = resolve_owner_module(graph, owner, written, prompt) {
