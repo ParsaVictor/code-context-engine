@@ -14,7 +14,7 @@
 | F6 | `file_node_paths()` در هر فراخوانی همه‌ی مسیرها را clone می‌کند؛ path_steer دو بار به‌ازای هر seed query صدا می‌زند. روی ریپوی ۲۰۰ فایلی ناچیز، روی ۵۰k فایل قابل‌اندازه‌گیری | `path_steer.rs`, `graph.rs` | ⏳ باز (اندازه بگیر قبل از بهینه‌سازی) |
 | F7 | fold policy برای بلوک‌های ماژول از prompt استفاده نمی‌کند: بلوکی که جواب سؤال در آن است (ساخت vocab) هم fold می‌شود؛ فقط قابل expand است. تلاش برای امتیازدهی مستقیم به gap ماژول با `FoldPolicy::score` روی فیکسچر `neuromesh_repo` شکست (فایل‌های بزرگ decoy با تطبیق واژه‌ی پرتکرار امتیاز کاذب می‌گرفتند، packet از ۲۷۵۰۰ به ۵۵۸۷۶ توکن پرید) — برگردانده شد. بخشی از ریشه (name_hits فقط `ident_tokens` را می‌دید نه کلمات خام prompt) در PR #26 با `focus_hits` رفع شد اما `GPT.forward` هنوز در نمونه‌ی nanoGPT fold می‌شود چون در رقابت بودجه‌ی exon (`SEED_EXON_BUDGET=4`) با متدهای دیگر همان فایل می‌بازد — تنظیم بودجه/رتبه‌بندی هنوز باز است | `skeleton.rs`, `fold.rs` | ⏳ باز (بخشی #26) — رقابت بودجه‌ی exon هنوز حل نشده |
 | F8 | گیت ریلیز (`eval --release-gates`) روی main با precision 0.383 قرمز است (آستانه‌ی precision_min) — از قبل، نه regression | `neuromesh-cli eval` | ⏳ هدف مرحله ۴: ≥0.73 |
-| F9 | با fold-not-delete packetها کمی بزرگ‌تر شدند (express +۱۲٪) چون کد ماژول دیگر حذف نمی‌شود؛ هیچ گیتی قرمز نشد ولی باید در آیتم ۷ (marker کوتاه‌تر) دیده شود | `skeleton.rs` | ⏳ باز |
+| F9 | با fold-not-delete packetها کمی بزرگ‌تر شدند (express +۱۲٪) چون کد ماژول دیگر حذف نمی‌شود؛ هیچ گیتی قرمز نشد ولی باید در آیتم ۷ (marker کوتاه‌تر) دیده شود | `skeleton.rs` | ✅ PR #30 (marker متد امضا را تکرار نمی‌کند — خط header همان بالا هست؛ `lines folded` → `lines`؛ gap ماژول `module L12-L40`. مجموع توکن گلد ۴۳۹۴۷ → ۳۹۵۷۲ (−۱۰٫۰٪)، task ۴۷۳۴۵ → ۴۲۵۷۲ (−۱۰٫۱٪)؛ recall/precision/oracle بی‌تغییر) |
 | F10 | `pick_dominant_candidate` بین تعریف‌های هم‌نام (۱۴× `SimpleViT`، ۱۸× `posemb_sincos_2d`) با اندازه‌ی بدنه/درجه انتخاب می‌کرد؛ دو seed یک سؤال به دو فایل مختلف می‌رفتند | `graph.rs`, `activator.rs` | ✅ PR #22 (`seed::twin_cohere`: هم‌رخدادی + پوشش کامل stem توسط prompt) |
 | F11 | `tokenize_ident("SimpleViT")` → `["simple","vi"]`؛ حرف تکی `T` حذف می‌شود و `vit` گم می‌شود. برای twin_cohere با «کلمه‌ی چسبیده» دور زده شد؛ ولی هر جای دیگری که به توکن‌های camelCase با حرف بزرگ پایانی تکیه می‌کند همین سوراخ را دارد | `neuromesh-parser/identifiers.rs` | ✅ PR #29 (`tokenize_camel_chunk`: دنباله‌ی حروف بزرگ به کلمه‌ی mixed-case می‌چسبد → `simple`,`vit`؛ `getID` هنوز `get`,`id`؛ `fold::tokenize_name` هم از همان استفاده می‌کند؛ workaround «کلمه‌ی چسبیده» از `twin_cohere::prompt_token_set` حذف شد) |
 | F12 | `vit_sincos` هنوز دو sidecar هم‌ردیف می‌آورد (`simple_vit_with_fft.py`, `vaat.py`) → precision 0.33 به‌جای 1.0 | Physarum sidecar | ⏳ آیتم ۴ |
@@ -45,6 +45,7 @@
 | #27 data-node seeds + weak file-stem seeds (F19, F22) | 1.000 | **0.606** | 4 | 19/21 | 17 |
 | #28 style_noise_penalty عمومی شد (آیتم ۶) | 1.000 | 0.606 | 4 | 19/21 | 17 |
 | #29 tokenize_ident uppercase tail (F11) | 1.000 | 0.606 | 4 | 19/21 | 17 |
+| #30 marker fold کوتاه‌تر (F9، −۱۰٪ توکن) | 1.000 | 0.606 | 4 | 19/21 | 17 |
 
 ## ترتیب باقی‌مانده‌ی مرحله ۴
 
@@ -53,4 +54,4 @@
 4. sidecar Physarum هم‌ردیف‌ها — F17/F18 در #23 نیمی از آن را بست؛ خودِ sidecar Physarum (`vit_sincos` هنوز `simple_vit_with_fft.py`, `vaat.py`) مانده
 5. fold policy (strict) — F7 هم اینجا
 6. ~~حذف `style_noise_penalty` هاردکد~~ ✅ #28 (قاعده‌ی عمومی: در سؤال استایل، فایل کامپوننت/اسکریپتی که prompt نامش را نبرده noise است)
-7. marker fold کوتاه‌تر — F9 هم اینجا
+7. ~~marker fold کوتاه‌تر~~ ✅ #30 (F9)

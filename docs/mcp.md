@@ -168,10 +168,14 @@ Treat `claim` as a **decision signal**, not ground truth. Prefer acting on `part
 Markers look like:
 
 ```
-/* [neuromesh:fold:fold_unused_helper_1 | 12 lines folded | fn unused_helper()] */
+fn unused_helper() {
+/* [neuromesh:fold:fold_unused_helper_1_3f2a1 | 12 lines] */
+}
+
+/* [neuromesh:fold:fold_module_1_9c04e | 29 lines | module L12-L40] */
 ```
 
-Pass that `fold_id` to `neuromesh_expand_fold` as `fold_id`, `node_id`, or `query`. The full marker line also works. Folds persist for the **MCP session** (same process, same project). Folds from the current activation stay resolvable; older activations are LRU-trimmed (cap 2000) so long sessions do not grow without bound. A new project id wipes the registry. Ids include a short path tag so two files that both fold `write` do not collide. Fold **bodies** are never in `get_context` or `get_file_skeleton`; only `expand_fold` restores them.
+A method marker sits under its own signature line and repeats only the handle and the size; a module-level block names its line range. Pass the `fold_id` to `neuromesh_expand_fold` as `fold_id`, `node_id`, or `query`. The full marker line also works. Folds persist for the **MCP session** (same process, same project). Folds from the current activation stay resolvable; older activations are LRU-trimmed (cap 2000) so long sessions do not grow without bound. A new project id wipes the registry. Ids include a short path tag so two files that both fold `write` do not collide. Fold **bodies** are never in `get_context` or `get_file_skeleton`; only `expand_fold` restores them.
 
 ## Learning
 

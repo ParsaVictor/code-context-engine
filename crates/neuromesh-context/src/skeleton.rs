@@ -565,11 +565,11 @@ impl CodeSkeletonizer {
                     // deleted outright. A script's whole logic lives there.
                     let body_content = body_lines.join("\n");
                     let saved_tokens = TokenCounter::count_tokens(&body_content);
-                    let signature = format!("module-level code L{}-L{}", start + 1, end + 1);
+                    let signature = format!("module L{}-L{}", start + 1, end + 1);
                     let fold_id = make_fold_id(file_path, "module", folds.len() + 1, start + 1);
                     let indent = header_indent(lines[start]);
                     result_lines.push(format!(
-                        "{}/* [neuromesh:fold:{} | {} lines folded | {}] */",
+                        "{}/* [neuromesh:fold:{} | {} lines | {}] */",
                         indent,
                         fold_id,
                         end - start + 1,
@@ -628,14 +628,28 @@ impl CodeSkeletonizer {
                     .collect::<String>();
                 let fold_id =
                     make_fold_id(file_path, &span.name, folds.len() + 1, *interior_start + 1);
-                let marker = format!(
-                    "{}/* [neuromesh:fold:{} | {} lines folded | {}] */",
-                    indent,
-                    fold_id,
-                    interior_end.saturating_sub(*interior_start) + 1,
-                    span.signature
-                );
-                if start < *interior_start {
+                // The header line (the signature) is emitted right above the
+                // marker, so repeating it inside the marker only cost tokens
+                // (F9). The marker carries the handle and the size; the
+                // signature is only added when there is no header to show.
+                let header_shown = start < *interior_start;
+                let marker = if header_shown {
+                    format!(
+                        "{}/* [neuromesh:fold:{} | {} lines] */",
+                        indent,
+                        fold_id,
+                        interior_end.saturating_sub(*interior_start) + 1,
+                    )
+                } else {
+                    format!(
+                        "{}/* [neuromesh:fold:{} | {} lines | {}] */",
+                        indent,
+                        fold_id,
+                        interior_end.saturating_sub(*interior_start) + 1,
+                        span.signature
+                    )
+                };
+                if header_shown {
                     result_lines.push(lines[start].to_string());
                 }
                 result_lines.push(marker);
@@ -764,6 +778,21 @@ export function untargetedHeavyHelper2() {
             "signature is not part of the intron: {}",
             res.folds[0].original_body
         );
+        // F9: the header line is right above the marker, so the marker
+        // does not repeat the signature — once per fold, not twice.
+        assert_eq!(
+            res.skeleton_code.matches("fn drop_me()").count(),
+            1,
+            "signature printed once: {}",
+            res.skeleton_code
+        );
+        let marker = res
+            .skeleton_code
+            .lines()
+            .find(|l| l.contains("neuromesh:fold:fold_drop_me"))
+            .unwrap();
+        assert!(marker.contains("| 4 lines]"), "compact marker: {marker}");
+        assert!(!marker.contains("folded"), "compact marker: {marker}");
     }
 
     #[test]
