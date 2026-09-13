@@ -18,18 +18,20 @@
 //! recorder.py and metrics.py are real dependencies, not decoys). Each
 //! constant moves up as F33–F36 land, never down.
 //!
-//! Raised once already: F33 (owner-qualified dunder members, see
-//! `neuromesh-parser/src/identifiers.rs`) fixed `django_wsgi_entry`'s
-//! `asgi.py` forbidden hit — precision 0.173 -> 0.257, forbidden 2 -> 1,
-//! oracle reachable 17/20 -> 18/20.
+//! Raised twice: F33 (owner-qualified dunder members) fixed
+//! `django_wsgi_entry`'s `asgi.py` forbidden hit — precision 0.173 -> 0.257,
+//! forbidden 2 -> 1, oracle reachable 17/20 -> 18/20. F34 (bare single-hump
+//! capitalised words dropped from the no-structural-signal identifier scan,
+//! see `neuromesh-parser/src/identifiers.rs`) raised precision again,
+//! 0.257 -> 0.269, no other metric moved.
 
 #[path = "support/gold_set.rs"]
 mod gold_set;
 
 const MIN_MEAN_RECALL: f32 = 0.94; // measured 0.950
-const MIN_MEAN_PRECISION: f32 = 0.24; // measured 0.257 (F33)
-const MAX_FORBIDDEN_HITS: usize = 1; // measured 1 (F33 fixed asgi.py; ultra_validator_call trainer.py remains)
-const MIN_TASK_REACHABLE: f32 = 0.89; // measured 18/20 (F33)
+const MIN_MEAN_PRECISION: f32 = 0.26; // measured 0.269 (F33+F34)
+const MAX_FORBIDDEN_HITS: usize = 1; // measured 1 (ultra_validator_call trainer.py remains)
+const MIN_TASK_REACHABLE: f32 = 0.89; // measured 18/20
 
 #[test]
 fn large_repositories_gold_and_task_oracle() {
