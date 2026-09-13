@@ -37,12 +37,22 @@ impl Provider for MockProvider {
                 .map(|m| m.content.as_str())
                 .collect();
             let prompt_tokens = TokenCounter::count_tokens(&prompt_text);
-            let completion_tokens = TokenCounter::count_tokens(&self.response_template);
+            // The QA-judge path (tasks without a `verify` command) sends two
+            // requests: one asking for an answer, one asking a grader for a
+            // PASS/FAIL verdict. A static template can't play both roles, so
+            // branch on the judge prompt's fixed instruction line — anything
+            // else gets the configured template, exactly as before.
+            let reply = if prompt_text.contains("Reply with exactly one line: PASS or FAIL") {
+                "PASS — mock judge always agrees".to_string()
+            } else {
+                self.response_template.clone()
+            };
+            let completion_tokens = TokenCounter::count_tokens(&reply);
 
             Ok(ProviderResponse {
                 id: "mock-cmpl-1".to_string(),
                 model: request.model.clone(),
-                content: self.response_template.clone(),
+                content: reply,
                 usage: Usage {
                     prompt_tokens,
                     completion_tokens,
