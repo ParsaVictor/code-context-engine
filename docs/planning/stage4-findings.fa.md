@@ -30,6 +30,10 @@
 | F22 | seed ضعیف (`concept:model` — alias expansion، کلمه‌ای که در prompt نبود) به **فایل** `models.py` با تطبیق stem resolve می‌شد و `expand_file_seeds_to_symbols` آن را به ۸ seed کلاس required تبدیل می‌کرد (precision `fastapi_settings` 0.33). seed ضعیفی که به نود File می‌رسد فقط وقتی می‌ماند که stem فایل در prompt آمده باشد (با تحمل جمع) یا هیچ seed قوی‌ای نباشد | `seed/weak_file_seed.rs` | ✅ PR #27 |
 | F23 | `style_routing.rs` هنوز نام‌های فیکسچر `mini-shop` را هاردکد دارد: `inject_style_seeds` (`ProductCard`، `src/styles/_priceCard.scss`، `price-card-tile`)، `style_token_queries` (`hover-lift`, `focus-within`, `price-card`)، `inject_view_component_seeds` (`checkout`, `cartview`, `setqty`, `stepper`) و `STYLE_KEYWORDS` (`hover-lift`, `price-card`). فقط `style_noise_penalty` در #28 عمومی شد؛ بقیه باید با «stem/token نام‌برده در prompt» جایگزین شوند (اثر روی ریپوهای واقعی صفر است — هیچ style task آنجا نیست) | `style_routing.rs` | ⏳ باز |
 | F24 | هیچ سقفی روی طول prompt در مرز MCP نیست: prompt ۲ مگابایتی (کنترل‌کاراکتر، path traversal، marker جعلی) در تست امنیت مرحله ۴ بی‌خطا و در سقف packet (۷۱ توکن از ۱۲۰۰۰) تمام می‌شود ولی ۱۱٫۳ ثانیه (debug) طول می‌کشد — استخراج signature خطی روی طول prompt است. پیشنهاد: سقف (مثلاً ۳۲ KB) در `neuromesh-mcp` با پیام صریح، نه بریدن بی‌صدا | `neuromesh-mcp`, `neuromesh-task` | ⏳ باز (فقط اندازه‌گیری شد) |
+| F25 | گیت ریلیز `eval --release-gates` (Benchmark A، split holdout) روی این ریپو فقط **۳ سلول** دارد: `handle_tool_call_intent` (prec 0.75)، `physarum_usage` (0.40) و `missing_seed` — که **به‌طور عمدی** seed ندارد و packet خالی می‌دهد، ولی precision آن **۰** حساب می‌شود نه «تعریف‌نشده». میانگین 0.383 = (0.75+0.40+0)/3؛ با این تعریف رسیدن به ≥0.73 ساختاراً ناممکن است. پیشنهاد: سلول‌های no_seed/packet خالی از میانگین precision خارج شوند (→ 0.575) و `physarum_usage` جدا دیده شود (۵ فایل برای ۲ گلد؛ سؤال usage است، پس gating مصرف‌کننده به‌درستی خاموش است) | `benchmark_suite.rs`, `evaluate.rs` | ⏳ باز (اندازه‌گیری شد؛ تغییر تعریف گیت با تأیید) |
+| F26 | seeder آرتیفکت ML (`retrieval::artifact_seeds`) با دیدن «training loop»/«forward» **هر** نود با آن role را seed می‌کند: `artifact:TrainLoop→bench` (`bench.py` forbidden ×۲) و `artifact:Layer→forward → LayerNorm.forward` که با priority ۲۰۰ جای `GPT.forward` را در بودجه‌ی exon می‌گیرد (strict `nano_train_forward`) | `retrieval/artifact_seeds.rs` | ⏳ باز |
+| F27 | seed ضعیف با **زیررشته** به symbol فایل دیگر می‌رسد (`concept:config → GPT.configure_optimizers`) با وجود seed قوی (`configurator.py`) → `model.py` forbidden در `nano_configurator`. خواهر F22 در سطح symbol | `seed/weak_file_seed.rs` (گسترش) | ⏳ باز |
+| F28 | جفت `owner.member` بدون توجه به owner resolve می‌شود: `identifier:req.get → response.js:res.get`، `identifier:res.json → express.js:json`؛ و owner سه‌حرفی خودش seed می‌شود: `identifier:res → View.resolve` (stem-search). سه forbidden express (`view.js`، `response.js` ×۲) | `activator::resolve_seed_query`, `graph::resolve_ranked` | ⏳ باز |
 
 ## اعداد ratchet (ریپوهای واقعی)
 
@@ -47,6 +51,7 @@
 | #28 style_noise_penalty عمومی شد (آیتم ۶) | 1.000 | 0.606 | 4 | 19/21 | 17 |
 | #29 tokenize_ident uppercase tail (F11) | 1.000 | 0.606 | 4 | 19/21 | 17 |
 | #30 marker fold کوتاه‌تر (F9، −۱۰٪ توکن) | 1.000 | 0.606 | 4 | 19/21 | 17 |
+| #31 تست امنیت مرحله ۴ | 1.000 | 0.606 | 4 | 19/21 | 17 |
 
 ## ترتیب باقی‌مانده‌ی مرحله ۴
 
