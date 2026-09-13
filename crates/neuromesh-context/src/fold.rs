@@ -78,6 +78,11 @@ pub struct FoldPolicy {
     /// `Owner.member` pairs written in the prompt, lower-cased. A method the
     /// user named with its class outranks every other `forward` in the file.
     pub qualified: HashSet<(String, String)>,
+    /// `(owner, member)` of every resolved seed that is a method, lower-cased.
+    /// A seed on `GPT.forward` is that method, not every `forward` in the
+    /// file: ranked as a bare name it tied with four siblings for the exon
+    /// budget and lost on line order (F7).
+    pub priority_qualified: HashSet<(String, String)>,
 }
 
 pub const SEED_EXON_BUDGET: usize = 4;
@@ -95,6 +100,7 @@ impl Default for FoldPolicy {
             exon_budget: SEED_EXON_BUDGET,
             priority_symbols: HashSet::new(),
             qualified: HashSet::new(),
+            priority_qualified: HashSet::new(),
         }
     }
 }
@@ -119,6 +125,7 @@ impl FoldPolicy {
             exon_budget: SEED_EXON_BUDGET,
             priority_symbols: active_symbols,
             qualified: HashSet::new(),
+            priority_qualified: HashSet::new(),
         }
     }
 
@@ -159,6 +166,14 @@ impl FoldPolicy {
         for name in names {
             self.priority_symbols.insert(name.to_lowercase());
             self.priority_symbols.insert(name);
+        }
+        self
+    }
+
+    pub fn with_priority_qualified(mut self, pairs: HashSet<(String, String)>) -> Self {
+        for (owner, member) in pairs {
+            self.priority_qualified
+                .insert((owner.to_lowercase(), member.to_lowercase()));
         }
         self
     }
@@ -212,6 +227,12 @@ impl FoldPolicy {
                 .contains(&(owner.to_lowercase(), name.to_lowercase()))
             {
                 return 300.0;
+            }
+            if self
+                .priority_qualified
+                .contains(&(owner.to_lowercase(), name.to_lowercase()))
+            {
+                return 200.0;
             }
         }
         if is_seed_exon(name, &self.priority_symbols) {
@@ -664,5 +685,23 @@ mod qualified_tests {
         let other = policy.score("forward", Some("MLP"), "def forward(self, x):", "");
         assert!(named > other, "named {named} other {other}");
         assert!(named >= 300.0);
+    }
+
+    #[test]
+    fn a_seed_on_a_method_ranks_that_method_not_every_method_of_its_name() {
+        // "GPT model forward" never writes `GPT.forward`, but the seed engine
+        // resolved to that node. Ranking the seed by its bare name gave all
+        // five `forward`s of the file 200 and GPT.forward lost on line order.
+        let signature = neuromesh_task::TaskSignatureExtractor::extract(
+            "How does the training loop call the GPT model forward?",
+        );
+        let mut pairs = HashSet::new();
+        pairs.insert(("GPT".to_string(), "forward".to_string()));
+        let policy =
+            FoldPolicy::from_task(&HashSet::new(), &signature).with_priority_qualified(pairs);
+        let seeded = policy.score("forward", Some("GPT"), "def forward(self, idx):", "");
+        let sibling = policy.score("forward", Some("LayerNorm"), "def forward(self, x):", "");
+        assert!(seeded >= 200.0, "seeded {seeded}");
+        assert!(seeded > sibling, "seeded {seeded} sibling {sibling}");
     }
 }
