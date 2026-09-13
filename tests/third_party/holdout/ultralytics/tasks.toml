@@ -1,0 +1,69 @@
+[[task]]
+id = "ultra_train_loop"
+repo = "ultralytics"
+prompt = "How does BaseTrainer.train kick off training, and how does _do_train run the per-epoch training loop?"
+needs = ["ultralytics/engine/trainer.py::train", "ultralytics/engine/trainer.py::_do_train"]
+forbidden = ["ultralytics/engine/validator.py"]
+
+[[task]]
+id = "ultra_predict_stream"
+repo = "ultralytics"
+prompt = "How does BasePredictor.stream_inference run inference over a stream of frames, and how does postprocess turn raw predictions into results?"
+needs = ["ultralytics/engine/predictor.py::stream_inference", "ultralytics/engine/predictor.py::postprocess"]
+forbidden = ["ultralytics/engine/trainer.py"]
+
+[[task]]
+id = "ultra_model_train_api"
+repo = "ultralytics"
+prompt = "How does Model.train build a Trainer and start training from the high-level Model API?"
+needs = ["ultralytics/engine/model.py::train"]
+forbidden = ["ultralytics/engine/predictor.py"]
+
+[[task]]
+id = "ultra_model_predict_api"
+repo = "ultralytics"
+prompt = "How does Model.predict dispatch to a BasePredictor and return the detection results?"
+needs = ["ultralytics/engine/model.py::predict"]
+forbidden = ["ultralytics/engine/trainer.py"]
+
+[[task]]
+id = "ultra_detection_loss"
+repo = "ultralytics"
+prompt = "How does v8DetectionLoss compute the total detection loss from raw model predictions and targets?"
+needs = ["ultralytics/utils/loss.py::__call__"]
+forbidden = ["ultralytics/utils/metrics.py"]
+
+[[task]]
+id = "ultra_base_model_forward"
+repo = "ultralytics"
+prompt = "How does BaseModel.forward run a forward pass through the network, and how does predict walk the layer graph?"
+needs = ["ultralytics/nn/tasks.py::forward", "ultralytics/nn/tasks.py::predict"]
+forbidden = ["ultralytics/nn/modules/conv.py"]
+
+[[task]]
+id = "ultra_validator_call"
+repo = "ultralytics"
+prompt = "How does BaseValidator.__call__ run validation over the dataloader and compute performance metrics?"
+needs = ["ultralytics/engine/validator.py::__call__"]
+forbidden = ["ultralytics/engine/trainer.py"]
+
+[[task]]
+id = "ultra_dataset_labels"
+repo = "ultralytics"
+prompt = "How does YOLODataset.cache_labels build the label cache, and how does get_labels load it for training?"
+needs = ["ultralytics/data/dataset.py::cache_labels", "ultralytics/data/dataset.py::get_labels"]
+forbidden = ["ultralytics/data/augment.py"]
+
+[[task]]
+id = "ultra_augment_mosaic"
+repo = "ultralytics"
+prompt = "How does the Mosaic augmentation combine four images into one training sample in its __call__?"
+needs = ["ultralytics/data/augment.py::__call__"]
+forbidden = ["ultralytics/data/dataset.py"]
+
+[[task]]
+id = "ultra_device_select"
+repo = "ultralytics"
+prompt = "How does select_device pick the training device, and how does fuse_conv_and_bn fuse a conv layer with its batchnorm?"
+needs = ["ultralytics/utils/torch_utils.py::select_device", "ultralytics/utils/torch_utils.py::fuse_conv_and_bn"]
+forbidden = ["ultralytics/utils/loss.py"]

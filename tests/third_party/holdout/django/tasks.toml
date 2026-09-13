@@ -1,0 +1,69 @@
+[[task]]
+id = "django_dispatch"
+repo = "django"
+prompt = "How does BaseHandler.get_response dispatch a request through the middleware chain and call the view?"
+needs = ["django/core/handlers/base.py::get_response", "django/core/handlers/base.py::_get_response"]
+forbidden = ["django/core/handlers/wsgi.py"]
+
+[[task]]
+id = "django_url_resolve"
+repo = "django"
+prompt = "How does URLResolver.resolve match a request path against urlpatterns and return a ResolverMatch?"
+needs = ["django/urls/resolvers.py::resolve"]
+forbidden = ["django/urls/base.py"]
+
+[[task]]
+id = "django_csrf"
+repo = "django"
+prompt = "How does CsrfViewMiddleware check the CSRF token on an incoming request and reject it if invalid?"
+needs = ["django/middleware/csrf.py::process_view", "django/middleware/csrf.py::_check_token"]
+forbidden = ["django/middleware/clickjacking.py"]
+
+[[task]]
+id = "django_signal"
+repo = "django"
+prompt = "How does Signal.connect register a receiver, and how does Signal.send dispatch to all connected receivers?"
+needs = ["django/dispatch/dispatcher.py::connect", "django/dispatch/dispatcher.py::send"]
+forbidden = ["django/apps/registry.py"]
+
+[[task]]
+id = "django_forms"
+repo = "django"
+prompt = "How does BaseForm.full_clean validate the bound fields, and how does is_valid report whether the form passed?"
+needs = ["django/forms/forms.py::full_clean", "django/forms/forms.py::is_valid"]
+forbidden = ["django/forms/fields.py"]
+
+[[task]]
+id = "django_queryset"
+repo = "django"
+prompt = "How does QuerySet.filter build a filtered clone of the queryset, and how does get_or_create use it to fetch-or-create a row?"
+needs = ["django/db/models/query.py::filter", "django/db/models/query.py::get_or_create"]
+forbidden = ["django/db/models/sql/compiler.py"]
+
+[[task]]
+id = "django_migrations"
+repo = "django"
+prompt = "How does MigrationExecutor.migrate apply a migration plan forward, and how does apply_migration record a single migration as applied?"
+needs = ["django/db/migrations/executor.py::migrate", "django/db/migrations/executor.py::apply_migration"]
+forbidden = ["django/db/migrations/recorder.py"]
+
+[[task]]
+id = "django_template_render"
+repo = "django"
+prompt = "How does Template.render compile a parsed node list into rendered output for a given context?"
+needs = ["django/template/base.py::render"]
+forbidden = ["django/template/context.py"]
+
+[[task]]
+id = "django_wsgi_entry"
+repo = "django"
+prompt = "How does WSGIHandler.__call__ turn a raw WSGI environ into a Django response?"
+needs = ["django/core/handlers/wsgi.py::__call__"]
+forbidden = ["django/core/handlers/asgi.py"]
+
+[[task]]
+id = "django_management_command"
+repo = "django"
+prompt = "How does CommandParser parse command-line arguments for a management command, and how does CommandError report a failure?"
+needs = ["django/core/management/base.py::parse_args"]
+forbidden = ["django/core/management/utils.py"]

@@ -1,0 +1,69 @@
+[[task]]
+id = "ultra_train_loop"
+prompt = "How does BaseTrainer.train kick off training, and how does _do_train run the per-epoch training loop?"
+gold_files = ["ultralytics/engine/trainer.py"]
+forbidden_files = ["ultralytics/engine/validator.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_predict_stream"
+prompt = "How does BasePredictor.stream_inference run inference over a stream of frames, and how does postprocess turn raw predictions into results?"
+gold_files = ["ultralytics/engine/predictor.py"]
+forbidden_files = ["ultralytics/engine/trainer.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_model_train_api"
+prompt = "How does Model.train build a Trainer and start training from the high-level Model API?"
+gold_files = ["ultralytics/engine/model.py"]
+forbidden_files = ["ultralytics/engine/predictor.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_model_predict_api"
+prompt = "How does Model.predict dispatch to a BasePredictor and return the detection results?"
+gold_files = ["ultralytics/engine/model.py"]
+forbidden_files = ["ultralytics/engine/trainer.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_detection_loss"
+prompt = "How does v8DetectionLoss compute the total detection loss from raw model predictions and targets?"
+gold_files = ["ultralytics/utils/loss.py"]
+forbidden_files = ["ultralytics/utils/metrics.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_base_model_forward"
+prompt = "How does BaseModel.forward run a forward pass through the network, and how does predict walk the layer graph?"
+gold_files = ["ultralytics/nn/tasks.py"]
+forbidden_files = ["ultralytics/nn/modules/conv.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_validator_call"
+prompt = "How does BaseValidator.__call__ run validation over the dataloader and compute performance metrics?"
+gold_files = ["ultralytics/engine/validator.py"]
+forbidden_files = ["ultralytics/engine/trainer.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_dataset_labels"
+prompt = "How does YOLODataset.cache_labels build the label cache, and how does get_labels load it for training?"
+gold_files = ["ultralytics/data/dataset.py"]
+forbidden_files = ["ultralytics/data/augment.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_augment_mosaic"
+prompt = "How does the Mosaic augmentation combine four images into one training sample in its __call__?"
+gold_files = ["ultralytics/data/augment.py"]
+forbidden_files = ["ultralytics/data/dataset.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "ultra_device_select"
+prompt = "How does select_device pick the training device, and how does fuse_conv_and_bn fuse a conv layer with its batchnorm?"
+gold_files = ["ultralytics/utils/torch_utils.py"]
+forbidden_files = ["ultralytics/utils/loss.py"]
+expect_seeds_missed = false
