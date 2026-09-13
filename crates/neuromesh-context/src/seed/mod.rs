@@ -7,6 +7,7 @@ use neuromesh_core::{
 use neuromesh_graph::NeuralProjectGraph;
 use std::time::Instant;
 
+pub(crate) mod config_cohere;
 pub mod engine;
 pub mod engines;
 pub mod fallback;
@@ -17,6 +18,7 @@ pub(crate) mod path_steer;
 pub mod ranker;
 pub mod sink;
 pub(crate) mod twin_cohere;
+pub(crate) mod weak_file_seed;
 
 #[cfg(feature = "embeddings")]
 pub mod semantic_embed;

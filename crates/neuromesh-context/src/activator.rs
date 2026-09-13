@@ -374,6 +374,20 @@ impl ContextActivator {
             &mut seed_energies,
             &mut seed_reasons,
         );
+        crate::seed::config_cohere::prune_data_seeds_for_code_question(
+            graph,
+            &mut seed_resolutions,
+            &mut seed_energies,
+            &mut seed_reasons,
+            prompt,
+        );
+        crate::seed::weak_file_seed::prune_weak_file_seeds_unnamed_in_prompt(
+            graph,
+            &mut seed_resolutions,
+            &mut seed_energies,
+            &mut seed_reasons,
+            prompt,
+        );
         expand_file_seeds_to_symbols(
             graph,
             signature,
