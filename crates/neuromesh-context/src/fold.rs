@@ -221,7 +221,12 @@ impl FoldPolicy {
             return 100.0;
         }
         let mut score = 0.0;
-        let name_hits = self.ident_hits(&tokenize_name(name));
+        // A method literally named in the prompt ("how does forward work")
+        // counts even when the name never made it into `ident_tokens`
+        // (built from the extracted signature, not the raw prompt words):
+        // `focus_hits` also checks `prompt_tokens`, `ident_hits` alone does
+        // not.
+        let name_hits = self.focus_hits(&tokenize_name(name));
         let owner_tokens = owner.map(tokenize_name).unwrap_or_default();
         let owner_hits = self.focus_hits(&owner_tokens);
         let body_hits = self.focus_hits(&tokenize_name(body));
@@ -534,6 +539,24 @@ mod tests {
         let policy = FoldPolicy::from_task(&symbols, &gson_bug_signature());
         let helper_body = "return new JsonArray(elements);";
         assert!(!policy.keep_open("deepCopy", Some("JsonArray"), helper_body));
+    }
+
+    #[test]
+    fn prompt_only_method_name_counts_toward_name_hits() {
+        // "wrapping" appears only in the raw prompt text (never in
+        // `identifiers`/`entity`/`related_concepts`), so it never reaches
+        // `ident_tokens` — only `prompt_tokens` picks it up. A method
+        // literally named that must still outscore one that matches nothing.
+        let mut symbols = HashSet::new();
+        symbols.insert("typeadapter".into());
+        let policy = FoldPolicy::from_task(&symbols, &gson_bug_signature());
+        let body = "return value;";
+        let named_in_prompt = policy.score("wrapping", None, "void wrapping()", body);
+        let unrelated = policy.score("unrelatedHelper", None, "void unrelatedHelper()", body);
+        assert!(
+            named_in_prompt > unrelated,
+            "a method literally named in the prompt ({named_in_prompt}) must outscore one that is not ({unrelated})"
+        );
     }
 
     #[test]
