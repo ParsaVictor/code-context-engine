@@ -49,6 +49,14 @@ impl<'res, 'eng, 'rsn> SeedSink<'res, 'eng, 'rsn> {
         self.resolutions
     }
 
+    /// Every node a seed has resolved to so far, in resolution order.
+    pub fn resolved_ids(&self) -> Vec<NodeId> {
+        self.resolutions
+            .iter()
+            .filter_map(|s| s.resolved_id.clone())
+            .collect()
+    }
+
     pub fn resolved_count(&self) -> usize {
         self.resolutions
             .iter()

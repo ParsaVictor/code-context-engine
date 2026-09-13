@@ -92,9 +92,11 @@ pub fn run_seed_resolution(
         // checkpoint or the metric the question was actually about, so a
         // zero-seed guard would never fire. On a graph with no artifact nodes
         // this is one cheap read that returns nothing.
-        for (node_id, score, reason) in
-            crate::retrieval::artifact_seeds::resolve_artifact_seeds(graph, signature)
-        {
+        for (node_id, score, reason) in crate::retrieval::artifact_seeds::resolve_artifact_seeds(
+            graph,
+            signature,
+            &sink.resolved_ids(),
+        ) {
             sink.insert(
                 node_id,
                 score,
