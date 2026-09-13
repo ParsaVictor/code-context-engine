@@ -25,8 +25,9 @@
 | F17 | مصرف‌کننده‌های یک symbol seed (همه‌ی routeهایی که `settings` را import می‌کنند) با امتیاز ثابت 10 و بدون هیچ سیگنال query وارد fill می‌شدند؛ همان «هم‌ردیف بدون امتیاز query» آیتم ۴ | `selector.rs` (`inbound_use`) | ✅ PR #23 (فقط با match نام/stem در focus terms) |
 | F18 | بلوک synaptic fill بی‌جهت بود (۹×وزن روی هر همسایه‌ی seed و فایلش) | `selector.rs` | ✅ PR #23 (فقط یال‌های خروجی از seed) |
 | F20 | gating مصرف‌کننده‌ها دو فیکسچر را شکست (`physarum_usage`: «Where is Physarum used?»، `sms_stored`: «received» ↔ `SmsReceiver`): سؤال‌های usage باید مصرف‌کننده بگیرند و match باید inflection را تحمل کند | `selector.rs` | ✅ PR #23 (`focus_terms_ask_for_consumers`, `same_word_stem`) |
-| F19 | فایل‌های داده (`package.json`, `components.json`) خارج از قاعده‌ی family هستند و هنوز در `fastapi_settings` می‌آیند (`package.json` با utility:36 چون focus term `secrets`/`database`؟) | fill | ⏳ باز |
+| F19 | فایل‌های داده (`package.json`, `components.json`) خارج از قاعده‌ی family هستند و هنوز در `fastapi_settings` می‌آیند (`package.json` با utility:36 چون focus term `secrets`/`database`؟) | fill | ✅ PR #27 (`seed::config_cohere`: نود Config/JSON/YAML/TOML بدون کلمه‌ی config/json/… در prompt، seed سؤال کد نمی‌شود) |
 | F21 | فیکسچرهای کوچک (مثلاً `mini-aspnet::sms_store`) روی دو تعریف هم‌نام (`Store` در `Program.cs` و در `Sms.cshtml`) بدون سیگنال تمایز دیگری تکیه دارند: seed resolution یکی را (اشتباه) انتخاب می‌کند و تنها fill عمومی (بدون قید) فایل درست دیگر را می‌آورد. gate کردن fill بدون قید scale (آیتم ۱/PR سیدکار) این fixture را می‌شکند. فعلاً با آستانه‌ی اندازه‌ی پروژه (`large_project`، >۲۰ فایل) دور زده شد — gate فقط روی ریپوهای واقعی اثر می‌کند. ریشه‌ی واقعی: twin_cohere باید «Store» را به `Program.cs` cohere کند نه `Sms.cshtml` (هم‌رخدادی برابر است، تساوی باید با «handler نه view» شکسته شود) | `seed/twin_cohere.rs` | ⏳ باز |
+| F22 | seed ضعیف (`concept:model` — alias expansion، کلمه‌ای که در prompt نبود) به **فایل** `models.py` با تطبیق stem resolve می‌شد و `expand_file_seeds_to_symbols` آن را به ۸ seed کلاس required تبدیل می‌کرد (precision `fastapi_settings` 0.33). seed ضعیفی که به نود File می‌رسد فقط وقتی می‌ماند که stem فایل در prompt آمده باشد (با تحمل جمع) یا هیچ seed قوی‌ای نباشد | `seed/weak_file_seed.rs` | ✅ PR #27 |
 
 ## اعداد ratchet (ریپوهای واقعی)
 
@@ -39,6 +40,8 @@
 | #23 language family + consumer gating | 1.000 | **0.266** | **9** | 16/21 | 14 |
 | #24 no cross-language Calls edge (F14) | 1.000 | **0.273** | 9 | 16/21 | 14 |
 | #25 sidecar/utility fill gate (F12, آیتم ۴) | 1.000 | **0.572** | **4** | **19/21** | **17** |
+| #26 fold: prompt-named method scores (بخشی از F7) | 1.000 | 0.572 | 4 | 19/21 | 17 |
+| #27 data-node seeds + weak file-stem seeds (F19, F22) | 1.000 | **0.606** | 4 | 19/21 | 17 |
 
 ## ترتیب باقی‌مانده‌ی مرحله ۴
 
