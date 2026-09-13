@@ -418,10 +418,40 @@ fn retype_defs(
         } else {
             continue;
         };
-        // A method is stored under its own name with a parent, so match on the
-        // plain name and let `retype_symbol` prefer the top-level entry.
-        retype_symbol(ast, &def.name, node_type);
+        // A method is stored under its own name with a parent. Retype the one
+        // whose parent is the class this def sits in: matching on the plain
+        // name alone retyped the first `forward` in the file (a LayerNorm)
+        // when the def being classified was `GPT.forward`.
+        let owner = classes
+            .iter()
+            .filter(|c| c.contains(def))
+            .min_by_key(|c| c.end - c.start)
+            .map(|c| c.name.as_str());
+        retype_def(ast, owner, &def.name, node_type);
     }
+}
+
+fn retype_def(
+    ast: &mut AstAnalysisResult,
+    owner: Option<&str>,
+    name: &str,
+    node_type: NodeType,
+) -> bool {
+    if let Some(sym) = ast
+        .symbols
+        .iter_mut()
+        .find(|s| s.name == name && s.parent.as_deref() == owner)
+    {
+        sym.symbol_type = node_type;
+        return true;
+    }
+    // A parser that records no parents at all (a regex fallback) still gets
+    // the plain-name match; one that does is never second-guessed.
+    let parents_known = ast
+        .symbols
+        .iter()
+        .any(|s| s.name == name && s.parent.is_some());
+    !parents_known && retype_symbol(ast, name, node_type)
 }
 
 fn is_train_loop(body: &str) -> bool {
@@ -934,6 +964,70 @@ def evaluate(model, loader):
         }
         pytorch_overlay(Path::new(file), source, &mut ast);
         ast
+    }
+
+    fn type_of_method(ast: &AstAnalysisResult, owner: &str, name: &str) -> Option<NodeType> {
+        ast.symbols
+            .iter()
+            .find(|s| s.name == name && s.parent.as_deref() == Some(owner))
+            .map(|s| s.symbol_type)
+    }
+
+    #[test]
+    fn forward_is_retyped_on_the_model_that_defines_it_not_the_first_forward_in_the_file() {
+        // nanoGPT: LayerNorm.forward is the first `forward` in model.py;
+        // GPT (the model) defines its own further down.
+        const SRC: &str = r#"
+import torch.nn as nn
+
+class LayerNorm(nn.Module):
+    def __init__(self, ndim):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(ndim))
+
+    def forward(self, x):
+        return x * self.weight
+
+class GPT(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.ln_f = LayerNorm(config.n_embd)
+
+    def forward(self, idx):
+        return self.ln_f(idx)
+"#;
+        let mut ast = AstAnalysisResult::default();
+        for (name, parent) in [
+            ("LayerNorm", None),
+            ("forward", Some("LayerNorm")),
+            ("GPT", None),
+            ("forward", Some("GPT")),
+        ] {
+            let mut sym = ParsedSymbol::new(
+                name,
+                if parent.is_none() {
+                    NodeType::Class
+                } else {
+                    NodeType::Function
+                },
+                None,
+                1..2,
+                true,
+            );
+            sym.parent = parent.map(str::to_string);
+            ast.symbols.push(sym);
+        }
+        pytorch_overlay(Path::new("model.py"), SRC, &mut ast);
+        // Every nn.Module's forward is a Layer — but each one its own, not
+        // the first `forward` in the file retyped five times.
+        assert_eq!(
+            type_of_method(&ast, "GPT", "forward"),
+            Some(NodeType::Layer)
+        );
+        assert_eq!(
+            type_of_method(&ast, "LayerNorm", "forward"),
+            Some(NodeType::Layer)
+        );
     }
 
     fn type_of(ast: &AstAnalysisResult, name: &str) -> Option<NodeType> {
