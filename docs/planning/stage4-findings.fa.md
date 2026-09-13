@@ -42,6 +42,7 @@
 | #25 sidecar/utility fill gate (F12, آیتم ۴) | 1.000 | **0.572** | **4** | **19/21** | **17** |
 | #26 fold: prompt-named method scores (بخشی از F7) | 1.000 | 0.572 | 4 | 19/21 | 17 |
 | #27 data-node seeds + weak file-stem seeds (F19, F22) | 1.000 | **0.606** | 4 | 19/21 | 17 |
+| #28 style_noise_penalty عمومی شد (آیتم ۶) | 1.000 | 0.606 | 4 | 19/21 | 17 |
 
 ## ترتیب باقی‌مانده‌ی مرحله ۴
 
@@ -49,5 +50,5 @@
 3. ~~هرس frontend برای سؤال backend~~ ✅ #23 (F15/F16؛ باقی‌مانده: F14 یال cross-language، F19 فایل داده)
 4. sidecar Physarum هم‌ردیف‌ها — F17/F18 در #23 نیمی از آن را بست؛ خودِ sidecar Physarum (`vit_sincos` هنوز `simple_vit_with_fft.py`, `vaat.py`) مانده
 5. fold policy (strict) — F7 هم اینجا
-6. حذف `style_noise_penalty` هاردکد
+6. ~~حذف `style_noise_penalty` هاردکد~~ ✅ #28 (قاعده‌ی عمومی: در سؤال استایل، فایل کامپوننت/اسکریپتی که prompt نامش را نبرده noise است)
 7. marker fold کوتاه‌تر — F9 هم اینجا
