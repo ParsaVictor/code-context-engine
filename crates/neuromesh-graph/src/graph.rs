@@ -1580,6 +1580,12 @@ impl NeuralProjectGraph {
                     {
                         score += 6.0;
                     }
+                    // A symbol lifted out of a template block (`__RazorCode`,
+                    // any `__`-prefixed synthetic owner) is the view's copy;
+                    // the declaration in a real class is the one a name means.
+                    if node.parent.as_deref().is_some_and(|p| p.starts_with("__")) {
+                        score -= 12.0;
+                    }
                     if let Some(range) = &node.line_range {
                         score += range.end.saturating_sub(range.start) as f32;
                     }
