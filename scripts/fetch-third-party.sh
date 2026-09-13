@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
-# Fetch the pinned third-party checkouts listed in tests/third_party/repos.toml
+# Fetch the pinned third-party checkouts listed in a repos.toml manifest
 # into $NM_THIRD_PARTY_DIR (default target/third_party). Idempotent: a
 # checkout already at the pinned revision is left alone.
+#
+# Usage: fetch-third-party.sh [repos.toml] [dest-subdir]
+#   fetch-third-party.sh                                            # dev repos (default)
+#   fetch-third-party.sh tests/third_party/holdout/repos.toml holdout  # phase 5a holdout repos
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
+manifest="${1:-$root/tests/third_party/repos.toml}"
+case "$manifest" in
+  /*) : ;;
+  *) manifest="$root/$manifest" ;;
+esac
 dest="${NM_THIRD_PARTY_DIR:-$root/target/third_party}"
+if [ -n "${2:-}" ]; then
+  dest="$dest/$2"
+fi
 mkdir -p "$dest"
 name=""; url=""; rev=""
 flush() {
@@ -33,5 +45,5 @@ while IFS= read -r line; do
     url*)  url="$(echo "$line" | sed 's/^url *= *"\(.*\)"/\1/')" ;;
     rev*)  rev="$(echo "$line" | sed 's/^rev *= *"\(.*\)"/\1/')" ;;
   esac
-done < "$root/tests/third_party/repos.toml"
+done < "$manifest"
 flush
