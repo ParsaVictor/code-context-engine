@@ -38,7 +38,7 @@
 | # | یافته | کجا (کاندید، هنوز اثبات‌نشده با mutation) | probe |
 |---|---|---|---|
 | F33 ✅ | پرسش‌های شکل `Owner.__call__` (متد dunder به‌جای عضو معمولی): مسیر owner-qualified که F28 برای `req.get`/`res.json` ساخت (`activator::resolve_dotted_member`، seed از `query.split_once('.')` وقتی کوئری یک‌تکه‌ی `"owner.member"` باشد) اینجا هرگز صدا زده نمی‌شود — چیزی قبل از آن، توکنایزر query را به دو seed جدا می‌شکند: `identifier:WSGIHandler` (درست) و `identifier:__call__` (بدون owner، سراسری). `identifier:__call__` با اولین `__call__` دیگری که در گراف پیدا می‌شود match می‌کند (`ASGIHandler.__call__`، @1.00 L1_exact) نه با `WSGIHandler.__call__` که واقعاً پرسیده شده. نتیجه در `django_wsgi_entry`: `asgi.py` forbidden وارد packet شد. این خواهر مستقیم F28 است ولی روی زبانی که متد با `__` شروع می‌شود (Python dunder)، نه روی `owner.member` جاوااسکریپتی | seed query tokenization (قبل از `activator.rs::resolve_dotted_member`؛ منبع دقیق توکن‌سازی pinpoint نشده — کار بعدی) | `NM_PROBE="How does WSGIHandler.__call__ turn a raw WSGI environ into a Django response?"` روی django holdout: `seed identifier:__call__ -> sym:django/core/handlers/asgi.py:ASGIHandler.__call__ @1.00 L1_exact` |
-| F34 | کلمه‌ی عمومی/نام محصول در prompt با هر symbol هم‌نام در کل ریپو (بدون در نظر گرفتن ربط دامنه) match می‌شود: کلمه‌ی «Django» در متن پرسش (توصیف چارچوب، نه اسم کلاس هدف) با `OGRGeomType.django` (attribute کوچک‌حرفی در ماژول GIS کاملاً بی‌ربط) `@1.00 L1_exact` match شد. همچنین در پرسش CSRF، `concept:next` با نود یک آیکون SVG (`calendar-icons.svg:next`) و `concept:middleware` با یک فایل تست فیکسچر (`tests/middleware_exceptions/middleware.py`) match شدند — هر دو فقط چون هم‌نامِ کلمه‌ی عمومی prompt بودند، نه چون مرتبط بودند | seed resolution عمومی (concept/identifier match بدون وزن‌دهی به ربط فایل) | probe CSRF: `seed concept:next -> sym:.../calendar-icons.svg:next @1.00`, `seed concept:middleware -> sym:tests/middleware_exceptions/middleware.py:middleware @1.00`; probe wsgi: `seed identifier:Django -> sym:.../geomtype.py:OGRGeomType.django @1.00` |
+| F34 ✅ | کلمه‌ی عمومی/نام محصول در prompt با هر symbol هم‌نام در کل ریپو (بدون در نظر گرفتن ربط دامنه) match می‌شود: کلمه‌ی «Django» در متن پرسش (توصیف چارچوب، نه اسم کلاس هدف) با `OGRGeomType.django` (attribute کوچک‌حرفی در ماژول GIS کاملاً بی‌ربط) `@1.00 L1_exact` match شد. همچنین در پرسش CSRF، `concept:next` با نود یک آیکون SVG (`calendar-icons.svg:next`) و `concept:middleware` با یک فایل تست فیکسچر (`tests/middleware_exceptions/middleware.py`) match شدند — هر دو فقط چون هم‌نامِ کلمه‌ی عمومی prompt بودند، نه چون مرتبط بودند | seed resolution عمومی (concept/identifier match بدون وزن‌دهی به ربط فایل) | probe CSRF: `seed concept:next -> sym:.../calendar-icons.svg:next @1.00`, `seed concept:middleware -> sym:tests/middleware_exceptions/middleware.py:middleware @1.00`; probe wsgi: `seed identifier:Django -> sym:.../geomtype.py:OGRGeomType.django @1.00` |
 | F35 | یک لیست seed چندزبانه/synonym گسترده برای مفاهیم auth/middleware/token همیشه امتحان می‌شود، حتی وقتی هیچ‌کدام در prompt یا در ریپو معنی ندارند: در probe CSRF این seedها امتحان شدند و همه miss کردند (`bearer`, `app.use`, `validateToken`, `verifyJwt`, `araKatman`, `ara_katman`, `ara katman`, `zwischen`, `middlewares`, `pipeline`, `next()`) — روی dev repos (که یکیشان express است) بعضی از این‌ها واقعاً match دارند (`app.use`)، ولی این یعنی لیست برای واژگان dev-repoها ساخته شده، نه یک مکانیزم عمومی. بی‌ضرر وقتی miss می‌کنند؛ خطرناک وقتی (نادر) به یک symbol هم‌نام تصادفی برخورد کنند — دقیقاً منشأ F34 | seed concept-expansion (فایل دقیق pinpoint نشده) | همان probe CSRF بالا؛ خط `seed ara katman -> - @0.00` و مشابه |
 | F36 | الگوی کلی precision پایین: هر seed hit (حتی وقتی درست است) یک «utility fill» جدا با وزن ۸.۵–۱۶ اضافه می‌کند که خودش یک فایل کامل به packet اضافه می‌کند؛ روی ریپوی بزرگ با تعداد seed بیشتر (چون واژگان prompt عمومی‌تر با چیزهای بیشتری match می‌کند)، تعداد فایل نهایی از تعداد فایل گلد خیلی جلو می‌زند (نمونه: `django_csrf` — ۱ فایل گلد، ۸ فایل packet). این با مرحله ۴ (که دقیقاً همین‌جور قاعده‌ها را برای ۴ ریپوی مشخص محدود کرد) سازگار است: قواعد fill-gating مرحله ۴ (F17–F22) برای واژگان و ساختار همان ۴ ریپو تنظیم شدند و روی واژگان/ساختار جدید (django/ultralytics) همان محدودیت را اعمال نمی‌کنند | `selector.rs`، قواعد fill mرحله ۴ (F17–F22) | استنتاج از الگوی مشترک در هر دو probe؛ ردیابی دقیق‌تر (کدام قاعده‌ی fill کدام فایل را آورد) کار بعدی است، نه این session |
 
@@ -93,6 +93,24 @@ polling قرار نمی‌گیرد چون memory-footprint نه CPU-timing اس�
 
 ratchet در `third_party_large_gold.rs` بالا برده شد (precision 0.17→0.24، forbidden 2→1، reachable 0.85→0.89).
 گیت holdout هنوز رد است (0.258 < 0.60) — طبق انتظار؛ F33 فقط یک الگو را حل می‌کرد، نه کل مشکل precision.
+
+### F34 فیکس شد
+
+در `extract_prompt_anchors`، شاخه‌ی سوم اسکن آزاد identifier (بدون هیچ سیگنال ساختاری مثل نقطه یا «how does»)
+هر کلمه‌ی بزرگ‌حرف ۳+ حرفی را می‌گرفت — یعنی «Django» در جمله‌ی توصیفی همان‌قدر seed می‌شد که «ResNet» یا
+«WSGIHandler». حالا این شاخه فقط PascalCase واقعاً چندقوزی (دو حرف بزرگ به بالا: `ResNet`, `BasicBlock`,
+`WSGIHandler`) را می‌گیرد؛ کلمه‌ی تک‌قوزی (`Django`, `Signal`, `Python`) دیگر از این مسیر seed نمی‌شود —
+ولی اگر واقعاً owner یک `.member` باشد یا سوژه‌ی «how does X» باشد (`Signal.connect`)، از همان دو مسیر دیگر
+که قبلاً هم بودند seed می‌شود، بدون تغییر.
+
+| مجموعه | قبل (بعد از F33) | بعد (F33+F34) |
+|---|---|---|
+| dev-4 | prec 0.856 forbidden 0 oracle 21/21 strict 19 | **prec 0.873** forbidden 0 oracle 21/21 strict 19 |
+| large | prec 0.257 forbidden 1 oracle 18/20 strict 11 | **prec 0.269** forbidden 1 oracle 18/20 strict 11 |
+| holdout-2 | prec 0.258 forbidden 1 oracle 19/20 strict 14 | **prec 0.269** forbidden 1 oracle 19/20 strict 14 |
+
+هر سه مجموعه کمی بهتر شدند، هیچ‌کدام بدتر نشد. ratchet dev-4 هم بالا برده شد (0.85→0.86). گیت holdout هنوز رد
+است (0.269 < 0.60) — طبق انتظار.
 
 ## فاز A (بازنگری پلن ۱۴ سپتامبر) — چرخش holdout، اعداد قبل از هر فیکس
 
