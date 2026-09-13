@@ -724,11 +724,21 @@ impl ContextActivator {
         }
 
         let mut priority_symbols: HashSet<String> = HashSet::new();
+        let mut priority_qualified: HashSet<(String, String)> = HashSet::new();
         for seed in &seed_resolutions {
             if let Some(id) = &seed.resolved_id {
                 if let Some(node) = graph.get_node(id) {
-                    if node.node_type != NodeType::File {
-                        priority_symbols.insert(node.name.to_lowercase());
+                    // A seed on a method is that method, not its name: `forward`
+                    // under `GPT`, not the five `forward`s of the file (F7).
+                    match node.parent.as_deref() {
+                        Some(owner) if node.node_type != NodeType::File => {
+                            priority_qualified
+                                .insert((owner.to_lowercase(), node.name.to_lowercase()));
+                        }
+                        _ if node.node_type != NodeType::File => {
+                            priority_symbols.insert(node.name.to_lowercase());
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -736,7 +746,8 @@ impl ContextActivator {
         }
 
         let fold_policy = FoldPolicy::from_task(&active_symbol_names, signature)
-            .with_priority_symbols(priority_symbols);
+            .with_priority_symbols(priority_symbols)
+            .with_priority_qualified(priority_qualified);
         let packet_limit = packet_cap(effective_mode);
 
         let mut active_nodes = Vec::new();

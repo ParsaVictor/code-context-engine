@@ -78,6 +78,11 @@ pub struct FoldPolicy {
     /// `Owner.member` pairs written in the prompt, lower-cased. A method the
     /// user named with its class outranks every other `forward` in the file.
     pub qualified: HashSet<(String, String)>,
+    /// `(owner, member)` of every resolved seed that is a method, lower-cased.
+    /// A seed on `GPT.forward` is that method, not every `forward` in the
+    /// file: ranked as a bare name it tied with four siblings for the exon
+    /// budget and lost on line order (F7).
+    pub priority_qualified: HashSet<(String, String)>,
 }
 
 pub const SEED_EXON_BUDGET: usize = 4;
@@ -95,6 +100,7 @@ impl Default for FoldPolicy {
             exon_budget: SEED_EXON_BUDGET,
             priority_symbols: HashSet::new(),
             qualified: HashSet::new(),
+            priority_qualified: HashSet::new(),
         }
     }
 }
@@ -119,6 +125,7 @@ impl FoldPolicy {
             exon_budget: SEED_EXON_BUDGET,
             priority_symbols: active_symbols,
             qualified: HashSet::new(),
+            priority_qualified: HashSet::new(),
         }
     }
 
@@ -159,6 +166,14 @@ impl FoldPolicy {
         for name in names {
             self.priority_symbols.insert(name.to_lowercase());
             self.priority_symbols.insert(name);
+        }
+        self
+    }
+
+    pub fn with_priority_qualified(mut self, pairs: HashSet<(String, String)>) -> Self {
+        for (owner, member) in pairs {
+            self.priority_qualified
+                .insert((owner.to_lowercase(), member.to_lowercase()));
         }
         self
     }
@@ -212,6 +227,23 @@ impl FoldPolicy {
                 .contains(&(owner.to_lowercase(), name.to_lowercase()))
             {
                 return 300.0;
+            }
+            let name_l = name.to_lowercase();
+            if self
+                .priority_qualified
+                .contains(&(owner.to_lowercase(), name_l.clone()))
+            {
+                return 200.0;
+            }
+            // The same-named method of another *seeded* class is the override
+            // the question is about (`NullSafeTypeAdapter.write` next to the
+            // seeded `TypeAdapter.write`); the same name under a class the
+            // question never reached is not.
+            if is_seed_exon(owner, &self.priority_symbols)
+                && (is_seed_exon(name, &self.priority_symbols)
+                    || self.priority_qualified.iter().any(|(_, m)| *m == name_l))
+            {
+                return 200.0;
             }
         }
         if is_seed_exon(name, &self.priority_symbols) {
@@ -664,5 +696,41 @@ mod qualified_tests {
         let other = policy.score("forward", Some("MLP"), "def forward(self, x):", "");
         assert!(named > other, "named {named} other {other}");
         assert!(named >= 300.0);
+    }
+
+    #[test]
+    fn a_seed_on_a_method_ranks_that_method_not_every_method_of_its_name() {
+        // "GPT model forward" never writes `GPT.forward`, but the seed engine
+        // resolved to that node. Ranking the seed by its bare name gave all
+        // five `forward`s of the file 200 and GPT.forward lost on line order.
+        let signature = neuromesh_task::TaskSignatureExtractor::extract(
+            "How does the training loop call the GPT model forward?",
+        );
+        let mut pairs = HashSet::new();
+        pairs.insert(("GPT".to_string(), "forward".to_string()));
+        let policy =
+            FoldPolicy::from_task(&HashSet::new(), &signature).with_priority_qualified(pairs);
+        let seeded = policy.score("forward", Some("GPT"), "def forward(self, idx):", "");
+        let sibling = policy.score("forward", Some("LayerNorm"), "def forward(self, x):", "");
+        assert!(seeded >= 200.0, "seeded {seeded}");
+        assert!(seeded > sibling, "seeded {seeded} sibling {sibling}");
+    }
+
+    #[test]
+    fn the_override_in_another_seeded_class_ranks_with_the_seeded_method() {
+        let signature = neuromesh_task::TaskSignatureExtractor::extract(
+            "Where does nullSafe() wrapping live and why are non-null values written as null?",
+        );
+        let mut pairs = HashSet::new();
+        pairs.insert(("TypeAdapter".to_string(), "write".to_string()));
+        let mut classes = HashSet::new();
+        classes.insert("NullSafeTypeAdapter".to_string());
+        let policy = FoldPolicy::from_task(&HashSet::new(), &signature)
+            .with_priority_symbols(classes)
+            .with_priority_qualified(pairs);
+        let override_ = policy.score("write", Some("NullSafeTypeAdapter"), "void write()", "");
+        let elsewhere = policy.score("write", Some("JsonArray"), "void write()", "");
+        assert!(override_ >= 200.0, "override {override_}");
+        assert!(elsewhere < 200.0, "elsewhere {elsewhere}");
     }
 }
