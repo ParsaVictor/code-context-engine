@@ -5,7 +5,8 @@
 #
 # Usage: fetch-third-party.sh [repos.toml] [dest-subdir]
 #   fetch-third-party.sh                                            # dev repos (default)
-#   fetch-third-party.sh tests/third_party/holdout/repos.toml holdout  # phase 5a holdout repos
+#   fetch-third-party.sh tests/third_party/large/repos.toml large      # django + ultralytics (large dev set)
+#   fetch-third-party.sh tests/third_party/holdout/repos.toml holdout  # current holdout pair (never tuned on)
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 manifest="${1:-$root/tests/third_party/repos.toml}"

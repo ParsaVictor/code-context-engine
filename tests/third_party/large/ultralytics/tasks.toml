@@ -31,7 +31,7 @@ id = "ultra_detection_loss"
 repo = "ultralytics"
 prompt = "How does v8DetectionLoss compute the total detection loss from raw model predictions and targets?"
 needs = ["ultralytics/utils/loss.py::__call__"]
-forbidden = ["ultralytics/utils/metrics.py"]
+forbidden = ["ultralytics/utils/plotting.py"]
 
 [[task]]
 id = "ultra_base_model_forward"

@@ -78,6 +78,23 @@ polling قرار نمی‌گیرد چون memory-footprint نه CPU-timing اس�
   حاشیه‌ی کمی دارد و با رشد بیشتر پروژه (که از ~۲۰۰ به ۴۷۹ فایل رسیده) ممکن است در آینده رد شود.
 - مقایسه‌ی رسمی با baseline روی ریپوی بزرگ اندازه‌گیری‌نشده ماند (بالا را ببین) — صادقانه گزارش شد، حدس زده نشد.
 
+## فاز A (بازنگری پلن ۱۴ سپتامبر) — چرخش holdout، اعداد قبل از هر فیکس
+
+Django + ultralytics → `tests/third_party/large/` (dev بزرگ، ratchet جدا در `third_party_large_gold.rs`)؛
+دو گلد اشتباه (G1) اصلاح شد. holdout تازه: **gin** (Go) + **torchvision** — گلد با چک G1، PR #49 قبل از اجرا.
+
+| مجموعه | recall | precision | forbidden | oracle reachable / strict |
+|---|---|---|---|---|
+| dev-4 (بدون تغییر) | 1.000 | 0.856 | 0 | 21/21 / 20 |
+| large (django+ultralytics، گلد اصلاح‌شده) | 0.950 | **0.173** (0.146 قبل از اصلاح گلد) | 2 (asgi.py ← F33؛ trainer.py) | 17/20 / 10 |
+| **holdout-2 (gin+vision)، اولین اجرا** | **1.000** | **0.265** | 1 (`voc.py` کنار `coco.py`) | 19/20 / 14 |
+
+گیت holdout (precision ≥ 0.60) رد شد — انتظار می‌رفت؛ این عدد «قبل از B» است. recall روی هر سه مجموعه کامل یا نزدیک به کامل.
+
+| # | یافته | probe؟ |
+|---|---|---|
+| F37 | فایل‌های test/example/gallery در packet سؤال توضیحی: `gin_test.go`, `githubapi_test.go`, `middleware_test.go`, `test/test_ops.py`, `gallery/others/*.py`, `references/*/presets.py` — در ۱۰ از ۲۰ کیس holdout-2 حداقل یکی هست. برای «این چطور کار می‌کند؟» فایل تست جواب نیست، مگر prompt خودش «test» بگوید | ✗ هنوز؛ بعد از F33 |
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.
