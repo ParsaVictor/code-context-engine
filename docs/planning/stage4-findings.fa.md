@@ -16,7 +16,7 @@
 | F8 | گیت ریلیز (`eval --release-gates`) روی main با precision 0.383 قرمز است (آستانه‌ی precision_min) — از قبل، نه regression | `neuromesh-cli eval` | ⏳ هدف مرحله ۴: ≥0.73 |
 | F9 | با fold-not-delete packetها کمی بزرگ‌تر شدند (express +۱۲٪) چون کد ماژول دیگر حذف نمی‌شود؛ هیچ گیتی قرمز نشد ولی باید در آیتم ۷ (marker کوتاه‌تر) دیده شود | `skeleton.rs` | ⏳ باز |
 | F10 | `pick_dominant_candidate` بین تعریف‌های هم‌نام (۱۴× `SimpleViT`، ۱۸× `posemb_sincos_2d`) با اندازه‌ی بدنه/درجه انتخاب می‌کرد؛ دو seed یک سؤال به دو فایل مختلف می‌رفتند | `graph.rs`, `activator.rs` | ✅ PR #22 (`seed::twin_cohere`: هم‌رخدادی + پوشش کامل stem توسط prompt) |
-| F11 | `tokenize_ident("SimpleViT")` → `["simple","vi"]`؛ حرف تکی `T` حذف می‌شود و `vit` گم می‌شود. برای twin_cohere با «کلمه‌ی چسبیده» دور زده شد؛ ولی هر جای دیگری که به توکن‌های camelCase با حرف بزرگ پایانی تکیه می‌کند همین سوراخ را دارد | `neuromesh-parser/identifiers.rs` | ⏳ باز |
+| F11 | `tokenize_ident("SimpleViT")` → `["simple","vi"]`؛ حرف تکی `T` حذف می‌شود و `vit` گم می‌شود. برای twin_cohere با «کلمه‌ی چسبیده» دور زده شد؛ ولی هر جای دیگری که به توکن‌های camelCase با حرف بزرگ پایانی تکیه می‌کند همین سوراخ را دارد | `neuromesh-parser/identifiers.rs` | ✅ PR #29 (`tokenize_camel_chunk`: دنباله‌ی حروف بزرگ به کلمه‌ی mixed-case می‌چسبد → `simple`,`vit`؛ `getID` هنوز `get`,`id`؛ `fold::tokenize_name` هم از همان استفاده می‌کند؛ workaround «کلمه‌ی چسبیده» از `twin_cohere::prompt_token_set` حذف شد) |
 | F12 | `vit_sincos` هنوز دو sidecar هم‌ردیف می‌آورد (`simple_vit_with_fft.py`, `vaat.py`) → precision 0.33 به‌جای 1.0 | Physarum sidecar | ⏳ آیتم ۴ |
 | F13 | هنگام mutation-test با `git checkout -- <file>` دو بار wiring کامیت‌نشده هم برگشت؛ قاعده: قبل از mutation کامیت یا `git stash push <file>` | فرایند | ✅ قاعده ثبت شد |
 | F14 | یال `Calls` بین دو زبان: فراخوانی `select(...)` (SQLModel) در Python به component `Select` در `frontend/.../select.tsx` resolve شده → فایل TSX به‌عنوان callee *required* (utility:16) وارد packet سؤال backend می‌شود (`fastapi_register`, `fastapi_items_owner`) | `graph.rs::finalize_links` | ✅ PR #24 (`same_language_family` روی هدف `resolve_call_ranked`/`resolve_ranked`؛ `language_family` به `neuromesh-core` منتقل شد) |
@@ -44,6 +44,7 @@
 | #26 fold: prompt-named method scores (بخشی از F7) | 1.000 | 0.572 | 4 | 19/21 | 17 |
 | #27 data-node seeds + weak file-stem seeds (F19, F22) | 1.000 | **0.606** | 4 | 19/21 | 17 |
 | #28 style_noise_penalty عمومی شد (آیتم ۶) | 1.000 | 0.606 | 4 | 19/21 | 17 |
+| #29 tokenize_ident uppercase tail (F11) | 1.000 | 0.606 | 4 | 19/21 | 17 |
 
 ## ترتیب باقی‌مانده‌ی مرحله ۴
 
