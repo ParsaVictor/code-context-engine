@@ -45,7 +45,7 @@ id = "django_migrations"
 repo = "django"
 prompt = "How does MigrationExecutor.migrate apply a migration plan forward, and how does apply_migration record a single migration as applied?"
 needs = ["django/db/migrations/executor.py::migrate", "django/db/migrations/executor.py::apply_migration"]
-forbidden = ["django/db/migrations/recorder.py"]
+forbidden = ["django/db/migrations/writer.py"]
 
 [[task]]
 id = "django_template_render"
