@@ -1,0 +1,69 @@
+[[task]]
+id = "django_dispatch"
+prompt = "How does BaseHandler.get_response dispatch a request through the middleware chain and call the view?"
+gold_files = ["django/core/handlers/base.py"]
+forbidden_files = ["django/core/handlers/wsgi.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_url_resolve"
+prompt = "How does URLResolver.resolve match a request path against urlpatterns and return a ResolverMatch?"
+gold_files = ["django/urls/resolvers.py"]
+forbidden_files = ["django/urls/base.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_csrf"
+prompt = "How does CsrfViewMiddleware check the CSRF token on an incoming request and reject it if invalid?"
+gold_files = ["django/middleware/csrf.py"]
+forbidden_files = ["django/middleware/clickjacking.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_signal"
+prompt = "How does Signal.connect register a receiver, and how does Signal.send dispatch to all connected receivers?"
+gold_files = ["django/dispatch/dispatcher.py"]
+forbidden_files = ["django/apps/registry.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_forms"
+prompt = "How does BaseForm.full_clean validate the bound fields, and how does is_valid report whether the form passed?"
+gold_files = ["django/forms/forms.py"]
+forbidden_files = ["django/forms/fields.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_queryset"
+prompt = "How does QuerySet.filter build a filtered clone of the queryset, and how does get_or_create use it to fetch-or-create a row?"
+gold_files = ["django/db/models/query.py"]
+forbidden_files = ["django/db/models/sql/compiler.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_migrations"
+prompt = "How does MigrationExecutor.migrate apply a migration plan forward, and how does apply_migration record a single migration as applied?"
+gold_files = ["django/db/migrations/executor.py"]
+forbidden_files = ["django/db/migrations/recorder.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_template_render"
+prompt = "How does Template.render compile a parsed node list into rendered output for a given context?"
+gold_files = ["django/template/base.py"]
+forbidden_files = ["django/template/context.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_wsgi_entry"
+prompt = "How does WSGIHandler.__call__ turn a raw WSGI environ into a Django response?"
+gold_files = ["django/core/handlers/wsgi.py"]
+forbidden_files = ["django/core/handlers/asgi.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "django_management_command"
+prompt = "How does CommandParser parse command-line arguments for a management command, and how does CommandError report a failure?"
+gold_files = ["django/core/management/base.py"]
+forbidden_files = ["django/core/management/utils.py"]
+expect_seeds_missed = false
