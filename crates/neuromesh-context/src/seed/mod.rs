@@ -7,6 +7,7 @@ use neuromesh_core::{
 use neuromesh_graph::NeuralProjectGraph;
 use std::time::Instant;
 
+pub(crate) mod bare_owner;
 pub(crate) mod config_cohere;
 pub mod engine;
 pub mod engines;

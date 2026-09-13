@@ -1249,6 +1249,28 @@ impl NeuralProjectGraph {
     /// on the `Calls` path for every language, and tightening it there shifts
     /// call-graph shape across the whole project. This is the artifact layer's
     /// own resolver, where the caller knows the symbol is file-local.
+    /// Every symbol named `member` whose recorded parent is `owner`
+    /// (case-insensitive), in index order. `res.json` in an Express codebase
+    /// is the `json` defined on `res`, never the body-parser export of the
+    /// same name.
+    pub fn members_of_owner(&self, owner: &str, member: &str) -> Vec<NodeId> {
+        let key = format!("{}::{}", owner.to_lowercase(), member.to_lowercase());
+        let data = self.inner.read();
+        let mut ids = data.impl_index.get(&key).cloned().unwrap_or_default();
+        ids.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        ids
+    }
+
+    /// Whether any symbol records `owner` as its parent — whether the graph
+    /// knows `owner` as a receiver at all. A known owner without the
+    /// asked-for member means the member is not on that owner, not that
+    /// another owner's member of the same name should stand in for it.
+    pub fn is_known_owner(&self, owner: &str) -> bool {
+        let prefix = format!("{}::", owner.to_lowercase());
+        let data = self.inner.read();
+        data.impl_index.keys().any(|key| key.starts_with(&prefix))
+    }
+
     pub fn resolve_in_file(&self, name: &str, file: &str) -> Option<NodeId> {
         let name_lower = name.to_lowercase();
         let data = self.inner.read();
