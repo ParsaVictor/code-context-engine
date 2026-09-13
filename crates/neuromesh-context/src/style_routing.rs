@@ -13,9 +13,6 @@ const STYLE_KEYWORDS: &[&str] = &[
     "tokens/mixins",
     "mixins",
     "mixin",
-    "hover-lift",
-    "focus-within",
-    "price-card",
     "_tokens.",
     "_mixins.",
 ];
@@ -75,26 +72,13 @@ pub(crate) fn inject_style_seeds(
         sink.push(graph, prompt, hint.to_string(), 0.95, "style_hint");
     }
 
-    let lower = signature.raw_prompt.to_lowercase();
-    if lower.contains("productcard")
-        || lower.contains("product card")
-        || lower.contains("price-card")
-    {
-        sink.push(graph, prompt, "ProductCard".into(), 0.9, "style_component");
+    // A partial whose stem the prompt names (`price-card` ~ `_priceCard.scss`)
+    // is the target; every hyphenated word (`hover-lift`, `price-card`) is
+    // looked up among style tokens and mixins. A component the prompt names
+    // is already an identifier seed. Nothing here knows any project's names.
+    for path in prompt_named_style_partials(graph, &signature.raw_prompt) {
+        sink.push(graph, prompt, path, 0.88, "style_partial");
     }
-    if lower.contains("price-card") || lower.contains("pricecard") {
-        for hint in [
-            "src/styles/_priceCard.scss",
-            "src/styles/priceCard.scss",
-            "styles/_priceCard.scss",
-        ] {
-            if graph.resolve_file_hint(hint).is_some() {
-                sink.push(graph, prompt, hint.to_string(), 0.88, "style_partial");
-            }
-        }
-        sink.push(graph, prompt, "price-card-tile".into(), 0.75, "style_mixin");
-    }
-
     for token in style_token_queries(signature) {
         for hit in graph.search_symbols(&token, 4) {
             if hit.node_type == neuromesh_core::NodeType::StyleToken
@@ -106,19 +90,60 @@ pub(crate) fn inject_style_seeds(
     }
 }
 
+/// Every hyphenated word of the prompt (`hover-lift`, `price-card`): the
+/// shape of a CSS class, a token or a mixin name.
 fn style_token_queries(signature: &TaskSignature) -> Vec<String> {
     let lower = signature.raw_prompt.to_lowercase();
-    let mut out = Vec::new();
-    for kw in [
-        "hover-lift",
-        "focus-within",
-        "price-card",
-        "price-card-tile",
-    ] {
-        if lower.contains(kw) {
-            out.push(kw.to_string());
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    for word in lower.split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_') {
+        let word = word.trim_matches('-');
+        if word.contains('-')
+            && word.len() >= 5
+            && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            && seen.insert(word)
+        {
+            out.push(word.to_string());
         }
     }
+    out
+}
+
+fn squash(word: &str) -> String {
+    word.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
+
+/// Stylesheets whose stem the prompt names: `price-card` ~ `_priceCard.scss`
+/// (leading underscore of a partial, hyphens and case ignored).
+fn prompt_named_style_partials(graph: &NeuralProjectGraph, prompt: &str) -> Vec<String> {
+    let lower = prompt.to_lowercase();
+    let words: Vec<String> = lower
+        .split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_')
+        .filter(|w| w.len() >= 5 && w.contains(['-', '_']))
+        .map(squash)
+        .collect();
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = graph
+        .file_node_paths()
+        .into_iter()
+        .filter(|(_, path)| is_style_path(path))
+        .filter(|(_, path)| {
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .trim_start_matches('_');
+            let stem = squash(stem);
+            stem.len() >= 5 && words.contains(&stem)
+        })
+        .map(|(_, path)| path.to_string_lossy().replace('\\', "/"))
+        .collect();
+    out.sort();
     out
 }
 
@@ -148,40 +173,77 @@ pub(crate) fn inject_view_component_seeds(
     signature: &TaskSignature,
     sink: &mut SeedSink<'_, '_, '_>,
 ) {
+    // A prompt word that names a view of the project ("checkout" when
+    // `CheckoutView` exists) seeds that view. "cart store" names the store,
+    // not `CartView`: a word followed by store/state/module is the state
+    // module the question is about.
     let lower = signature.raw_prompt.to_lowercase();
-    let view_task = lower.contains("checkout")
-        || lower.contains("cartview")
-        || lower.contains("productcard")
-        || lower.contains("product card")
-        || lower.contains("setqty")
-        || lower.contains("quantity")
-        || lower.contains("stepper");
-    if !view_task {
-        return;
-    }
     let mut candidates: HashSet<String> = HashSet::new();
     for ident in &signature.identifiers {
         if ident.ends_with("View") || ident.ends_with("Component") {
             candidates.insert(ident.clone());
         }
     }
-    for word in ["checkout", "cart", "product", "home", "header"] {
-        if word == "cart"
-            && (prompt_contains_word(&lower, "checkout") || lower.contains("cartview"))
-            && !lower.contains("cart view")
+    for word in prompt_view_words(&lower) {
+        let view = format!("{}View", pascal_case(&word));
+        if graph
+            .nodes_named(&view)
+            .iter()
+            .any(|n| is_component_or_script_path(&n.file_path))
         {
-            continue;
-        }
-        if prompt_contains_word(&lower, word) {
-            candidates.insert(format!("{}View", pascal_case(word)));
+            candidates.insert(view);
         }
     }
+    let mut candidates: Vec<String> = candidates.into_iter().collect();
+    candidates.sort();
     for name in candidates {
         if name.len() < 5 {
             continue;
         }
         sink.push(graph, prompt, name, 0.82, "view_component");
     }
+}
+
+const STATE_MODULE_WORDS: &[&str] = &["store", "state", "module", "slice", "reducer"];
+
+/// Prompt words that could name a view, minus those the prompt uses as a
+/// state module ("cart store").
+fn prompt_view_words(lower: &str) -> Vec<String> {
+    let words: Vec<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    // Deduplicate with a set: a hostile multi-megabyte prompt has a hundred
+    // thousand distinct words, and a linear "seen" scan made this quadratic.
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    for (i, w) in words.iter().enumerate() {
+        if w.len() < 4 {
+            continue;
+        }
+        let names_state = words
+            .get(i + 1)
+            .is_some_and(|next| STATE_MODULE_WORDS.contains(next));
+        if names_state || !seen.insert(w) {
+            continue;
+        }
+        out.push((*w).to_string());
+    }
+    out
+}
+
+/// The state modules the prompt names as "<word> store" (or state/module/…):
+/// the stems to keep when the selection is tightened around a named view.
+fn prompt_state_module_words(lower: &str) -> Vec<String> {
+    let words: Vec<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    words
+        .windows(2)
+        .filter(|pair| pair[0].len() >= 3 && STATE_MODULE_WORDS.contains(&pair[1]))
+        .map(|pair| pair[0].to_string())
+        .collect()
 }
 
 /// In a style task, a component/script file the prompt never names is
@@ -234,12 +296,6 @@ fn stem_named_in_prompt(stem: &str, prompt: &str) -> bool {
     !parts.is_empty() && parts.iter().all(|t| words.contains(t))
 }
 
-fn prompt_contains_word(lower: &str, word: &str) -> bool {
-    lower
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|w| w == word)
-}
-
 /// Keep only files whose extension matches an explicit stylesheet kind (CSS/Less/SCSS).
 pub(crate) fn tighten_style_extension_selection(
     graph: &NeuralProjectGraph,
@@ -277,21 +333,42 @@ pub(crate) fn tighten_style_extension_selection(
     });
 }
 
-/// Drop optional connector fill when checkout/store seeds already anchor the task.
+/// A prompt that names both a view of the project ("checkout" with a
+/// `CheckoutView`) and a state module ("cart store") is anchored: the
+/// answer is that view and that store, and optional connector fill around
+/// them is noise. Nothing is dropped unless both are named.
 pub(crate) fn tighten_focused_view_selection(
     graph: &NeuralProjectGraph,
     signature: &TaskSignature,
     selection: &mut crate::selector::Selection,
 ) {
     let lower = signature.raw_prompt.to_lowercase();
-    let focused_checkout = (lower.contains("setqty") || prompt_contains_word(&lower, "stepper"))
-        && prompt_contains_word(&lower, "checkout");
-    if !focused_checkout {
+    let views: Vec<String> = prompt_view_words(&lower)
+        .into_iter()
+        .map(|w| format!("{}View", pascal_case(&w)))
+        .filter(|view| {
+            graph
+                .nodes_named(view)
+                .iter()
+                .any(|n| is_component_or_script_path(&n.file_path))
+        })
+        .map(|v| v.to_lowercase())
+        .collect();
+    let stores = prompt_state_module_words(&lower);
+    if views.is_empty() || stores.is_empty() {
         return;
     }
-    let keep = |path: &str| {
+    let keep = move |path: &str| {
         let p = path.replace('\\', "/").to_lowercase();
-        p.contains("checkoutview") || p.contains("stores/cart")
+        let stem = std::path::Path::new(&p)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        views.contains(&stem)
+            || stores
+                .iter()
+                .any(|s| stem == *s && (p.contains("/store") || p.contains("/state")))
     };
     selection.optional.retain(|id| {
         graph
@@ -353,6 +430,34 @@ mod tests {
     #[test]
     fn pascal_case_handles_checkout() {
         assert_eq!(pascal_case("checkout"), "Checkout");
+    }
+
+    #[test]
+    fn hyphenated_prompt_words_are_style_token_queries() {
+        let sig = style_sig("Apply hover-lift and the price-card mixin; keep focus-within");
+        let mut q = style_token_queries(&sig);
+        q.sort();
+        assert_eq!(q, vec!["focus-within", "hover-lift", "price-card"]);
+        assert!(style_token_queries(&style_sig("plain words only")).is_empty());
+    }
+
+    #[test]
+    fn a_word_before_store_names_the_store_not_a_view() {
+        let lower = "add quantity stepper in checkout list using setqty from cart store";
+        let views = prompt_view_words(lower);
+        assert!(views.iter().any(|w| w == "checkout"), "{views:?}");
+        assert!(!views.iter().any(|w| w == "cart"), "{views:?}");
+        assert_eq!(prompt_state_module_words(lower), vec!["cart"]);
+        assert!(prompt_view_words("restyle the cart view")
+            .iter()
+            .any(|w| w == "cart"));
+    }
+
+    #[test]
+    fn squash_ignores_case_hyphens_and_underscores() {
+        assert_eq!(squash("price-card"), "pricecard");
+        assert_eq!(squash("_priceCard"), "pricecard");
+        assert_eq!(squash("Price_Card"), "pricecard");
     }
 
     #[test]
