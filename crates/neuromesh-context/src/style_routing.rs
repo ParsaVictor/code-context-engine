@@ -184,23 +184,54 @@ pub(crate) fn inject_view_component_seeds(
     }
 }
 
+/// In a style task, a component/script file the prompt never names is
+/// noise: "following ProductCard styling patterns" wants `ProductCard.vue`
+/// and the stylesheets, not every other component that happens to share a
+/// mixin or a token. Stylesheets are never penalised; a code file is kept
+/// only when the prompt names its stem (`ProductCard`, or both `product`
+/// and `card` as separate words).
 pub fn style_noise_penalty(path: &std::path::Path, signature: &TaskSignature) -> f32 {
     if !is_style_task(signature) {
         return 0.0;
     }
-    let p = path.to_string_lossy().replace('\\', "/").to_lowercase();
     if is_style_path(path) {
         return 0.0;
     }
-    if p.contains("promo")
-        || p.contains("cartdrawer")
-        || p.contains("cartview")
-        || p.contains("/stores/cart")
-        || p.contains("appbutton")
-    {
-        return 28.0;
+    if !is_component_or_script_path(path) {
+        return 0.0;
     }
-    0.0
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    if stem_named_in_prompt(stem, &signature.raw_prompt) {
+        return 0.0;
+    }
+    28.0
+}
+
+fn is_component_or_script_path(path: &std::path::Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        matches!(
+            e.to_ascii_lowercase().as_str(),
+            "vue" | "svelte" | "jsx" | "tsx" | "js" | "ts" | "mjs" | "cjs" | "astro"
+        )
+    })
+}
+
+fn stem_named_in_prompt(stem: &str, prompt: &str) -> bool {
+    let words: std::collections::HashSet<String> = prompt
+        .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+        .filter(|w| !w.is_empty())
+        .map(|w| w.to_lowercase().replace(['_', '-'], ""))
+        .collect();
+    let joined = stem.to_lowercase().replace(['_', '-'], "");
+    if words.contains(&joined) {
+        return true;
+    }
+    let parts: Vec<String> = neuromesh_parser::tokenize_ident(stem)
+        .into_iter()
+        .map(|t| t.to_lowercase())
+        .filter(|t| t.len() >= 3)
+        .collect();
+    !parts.is_empty() && parts.iter().all(|t| words.contains(t))
 }
 
 fn prompt_contains_word(lower: &str, word: &str) -> bool {
@@ -336,5 +367,70 @@ mod tests {
         let hints = style_file_hints(&None);
         assert!(hints.contains(&"src/styles/tokens.scss"));
         assert!(hints.contains(&"src/styles/mixins.scss"));
+    }
+
+    fn style_sig(prompt: &str) -> TaskSignature {
+        TaskSignature {
+            id: "t".into(),
+            intent: neuromesh_core::TaskIntent::Modify,
+            domain: "frontend".into(),
+            technology: "Vue".into(),
+            style: Some("scss".into()),
+            entity: String::new(),
+            goal: "style".into(),
+            risk: neuromesh_core::TaskRisk::Low,
+            related_concepts: vec![],
+            identifiers: vec![],
+            file_hints: vec![],
+            client_keywords: vec![],
+            client_expansion: vec![],
+            client_path_hints: vec![],
+            client_entity_types: vec![],
+            client_intent: None,
+            retrieval_engine_override: None,
+            engine_override: None,
+            embed_min_cosine_override: None,
+            confidence: 0.9,
+            raw_prompt: prompt.into(),
+        }
+    }
+
+    #[test]
+    fn style_noise_penalises_only_unnamed_code_files() {
+        use std::path::Path;
+        let sig = style_sig(
+            "Create a price-card SCSS partial reusing tokens and mixins, following ProductCard styling",
+        );
+        // Named in the prompt: kept.
+        assert_eq!(
+            style_noise_penalty(Path::new("src/components/ProductCard.vue"), &sig),
+            0.0
+        );
+        // Stylesheets are never noise.
+        assert_eq!(
+            style_noise_penalty(Path::new("src/styles/tokens.scss"), &sig),
+            0.0
+        );
+        // A component the prompt never mentions is noise, whatever it is called.
+        assert!(style_noise_penalty(Path::new("src/components/CartDrawer.vue"), &sig) >= 20.0);
+        assert!(style_noise_penalty(Path::new("src/components/Sidebar.vue"), &sig) >= 20.0);
+        assert!(style_noise_penalty(Path::new("src/stores/cart.js"), &sig) >= 20.0);
+        // Two-word stem named as two words.
+        let sig2 = style_sig("restyle the cart drawer with SCSS tokens");
+        assert_eq!(
+            style_noise_penalty(Path::new("src/components/CartDrawer.vue"), &sig2),
+            0.0
+        );
+    }
+
+    #[test]
+    fn style_noise_is_zero_outside_style_tasks() {
+        let mut sig = style_sig("How does the cart store compute totals?");
+        sig.style = None;
+        assert!(!is_style_task(&sig));
+        assert_eq!(
+            style_noise_penalty(std::path::Path::new("src/components/CartDrawer.vue"), &sig),
+            0.0
+        );
     }
 }
