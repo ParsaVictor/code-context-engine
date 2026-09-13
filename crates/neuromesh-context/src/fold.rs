@@ -228,9 +228,20 @@ impl FoldPolicy {
             {
                 return 300.0;
             }
+            let name_l = name.to_lowercase();
             if self
                 .priority_qualified
-                .contains(&(owner.to_lowercase(), name.to_lowercase()))
+                .contains(&(owner.to_lowercase(), name_l.clone()))
+            {
+                return 200.0;
+            }
+            // The same-named method of another *seeded* class is the override
+            // the question is about (`NullSafeTypeAdapter.write` next to the
+            // seeded `TypeAdapter.write`); the same name under a class the
+            // question never reached is not.
+            if is_seed_exon(owner, &self.priority_symbols)
+                && (is_seed_exon(name, &self.priority_symbols)
+                    || self.priority_qualified.iter().any(|(_, m)| *m == name_l))
             {
                 return 200.0;
             }
@@ -703,5 +714,23 @@ mod qualified_tests {
         let sibling = policy.score("forward", Some("LayerNorm"), "def forward(self, x):", "");
         assert!(seeded >= 200.0, "seeded {seeded}");
         assert!(seeded > sibling, "seeded {seeded} sibling {sibling}");
+    }
+
+    #[test]
+    fn the_override_in_another_seeded_class_ranks_with_the_seeded_method() {
+        let signature = neuromesh_task::TaskSignatureExtractor::extract(
+            "Where does nullSafe() wrapping live and why are non-null values written as null?",
+        );
+        let mut pairs = HashSet::new();
+        pairs.insert(("TypeAdapter".to_string(), "write".to_string()));
+        let mut classes = HashSet::new();
+        classes.insert("NullSafeTypeAdapter".to_string());
+        let policy = FoldPolicy::from_task(&HashSet::new(), &signature)
+            .with_priority_symbols(classes)
+            .with_priority_qualified(pairs);
+        let override_ = policy.score("write", Some("NullSafeTypeAdapter"), "void write()", "");
+        let elsewhere = policy.score("write", Some("JsonArray"), "void write()", "");
+        assert!(override_ >= 200.0, "override {override_}");
+        assert!(elsewhere < 200.0, "elsewhere {elsewhere}");
     }
 }
