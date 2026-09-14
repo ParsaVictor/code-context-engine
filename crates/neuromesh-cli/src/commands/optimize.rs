@@ -1,4 +1,5 @@
 use neuromesh_context::gold::packet_file_names;
+use neuromesh_context::task_harness::render_packet_text;
 use neuromesh_context::{ContextActivator, ReversibleContextRegistry};
 use neuromesh_core::{OptimizationMode, Result};
 use neuromesh_graph::NeuralProjectGraph;
@@ -8,7 +9,9 @@ use std::time::Instant;
 
 use super::{configured_walker, FileCapArg};
 
-pub fn execute(task_prompt: Option<String>) -> Result<()> {
+/// `full` prints the packet as a model would read it after the summary —
+/// what a person rates in `scripts/human-eval.sh`.
+pub fn execute(task_prompt: Option<String>, full: bool) -> Result<()> {
     let prompt =
         task_prompt.unwrap_or_else(|| "How does handle_tool_call extract intent?".to_string());
 
@@ -91,6 +94,10 @@ pub fn execute(task_prompt: Option<String>) -> Result<()> {
         task_id: Some(prompt.clone()),
     });
 
+    if full {
+        println!();
+        println!("{}", render_packet_text(&view));
+    }
     println!();
     Ok(())
 }

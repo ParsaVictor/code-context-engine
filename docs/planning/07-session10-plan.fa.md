@@ -65,3 +65,13 @@
 3. بنچمارک ۸ مجموعه به GitHub Actions (workflow دستی + comment روی PR) منتقل می‌شود.
 4. بعد از آن: فاز C ارزان (Haiku، `ANTHROPIC_BASE_URL`) آماده می‌شود؛ ارزیابی انسانی ۱۰ سؤال روی ریپوی B2B با
    Parsa (بدون API) به‌عنوان جانشین ارزان فاز C.
+
+## ارزیابی انسانی (جانشین ارزان فاز C؛ بدون API)
+
+`bash scripts/human-eval.sh <repo> <tasks.toml> <out-dir>` برای هر سؤال یک packet (همان چیزی که مدل می‌بیند،
+`neuromesh optimize --full`) و یک برگه‌ی امتیاز `ratings.md` می‌سازد. برای ریپوی B2B خصوصی ساخته شد:
+`C:\1-1\human-eval\` (۱۲ سؤال، ۲.۵–۱۲k توکن هر packet). کار Parsa: هر `<id>.md` را باز کند و در `ratings.md`
+یکی از سه کلمه بنویسد — **enough** (با همین packet می‌شد جواب داد)، **missing** (فایل لازم نبود)، **too-much**
+(فایل بی‌ربط زیاد). ۵–۱۰ دقیقه. نتیجه (فقط عدد، بی‌نام) به stage5-findings می‌رود و جهت بعدی را تعیین می‌کند:
+missing زیاد → recall واقعی پایین‌تر از گلد است؛ too-much زیاد → همان precision؛ enough اکثریت → ادعا با
+عدد precision فایل‌محور کم‌فروشی می‌شود و فاز C اولویت اول است.
