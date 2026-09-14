@@ -196,6 +196,56 @@ idf را با یک سیگنال *ربط* ترکیب کرد (هم‌پوشانی 
 ذخیره نشده (در کارگزاری برگردانده شد، نه revert از طریق git)، پس اگر لازم شد دوباره باید نوشته شود —
 طراحی‌اش (محل‌ها، امضای `term_idf_weight`، استفاده از `token_to_nodes` موجود) در همین یادداشت ثبت است.
 
+## F40 — باگ case-sensitivity در resolver + صندلی اجباری callee‌ها (فیکس شد، هر سه مجموعه ≥ قبل)
+
+زمینه: بعد از چهار تلاش mixed متوالی (F35/F38/F36/F39)، به‌جای heuristic بعدی، بازبینی داده‌ها: recall روی
+holdout-2 در **هر ۲۰ تسک دقیقاً 1.00** است — یعنی مشکل rank نیست، تعداد فایل‌های اضافه است؛ و فایل‌های اضافه
+hub هستند (`context.go` در ۱۰/۱۰ تسک gin، `engine/model.py` در ۹/۱۰ ultralytics). `packet_probe` با خروجی
+جدید `NM_PROBE_EDGES=1` (edgeهای خروجی هر seed + شمار caller هدف) روی `gin_recovery` و `gin_serve_http`
+دو علت ساختاری نشان داد:
+
+**F40a — باگ صحت در resolver.** ایندکس `name_to_nodes`/`export_index` به حروف کوچک کلید می‌خورد و
+`resolve_unique`/`resolve_call_target`/`resolve_export` با یک match یکتای case-insensitive، edge را **Proven**
+می‌کردند. در Go (و هر زبان پشتیبانی‌شده، همه case-sensitive)، پارامتر `handle` در `CustomRecoveryWithWriter`
+به `ginS.Handle` وصل شد و `engine.pool.Get()`/`Put()` به HTTP-verb wrapperهای `ginS.GET`/`PUT` — هر سه
+Proven، هر سه غلط، و همه وارد packet. فیکس: تابع `case_narrowed`/`narrow_exact_case` در `graph.rs` — اگر
+match با case دقیق وجود دارد فقط همان‌ها؛ اگر فقط match با case متفاوت هست، `resolve_unique` و
+`resolve_call_target` رد می‌کنند و `resolve_ranked`/`resolve_export` نتیجه را به `Likely` تنزل می‌دهند
+(همچنان حل می‌شود — seedهای prompt اغلب lowercase‌اند — ولی دیگر «قطعی» نیست).
+
+**F40b — tier «۳ callee اجباری» سقف مکانیکی precision.** `selector.rs:165-237` تا ۳ فایلی را که seed به
+آن‌ها call دارد *required* (امتیاز ۱۶، بالاتر از خود gold با ۸.۵) می‌کند و جای خالی را همیشه با callee بعدی
+(به ترتیب الفبایی مسیر!) پر می‌کند. برای تسک تک‌فایلی، precision مکانیکی ≤۰.۲۵ — همان اعداد تکراری جدول
+(0.20/0.25/0.33). تلاش اول («callee فقط اگر prompt نامش را برده») dev-4 را شکست (recall 1.000→0.958،
+fastapi_login فایل `security.py` را که gold می‌خواهد ولی prompt نمی‌گوید گم کرد). داده‌ی جداکننده: شمار
+callerِ هدف — callee‌های مطلوب fastapi (`create_access_token`=1، `Token`=1، `authenticate`=4) در مقابل
+callee‌های نامطلوب gin (`cleanPath`=7، `IsDebugging`=7، `WriteHeaderNow`=16، `Context.Next`=25،
+`Context.Set`=99، `Context.Get`=125). قاعده: callee با confidence غیر-Proven، یا با بیش از ۵ caller و
+بدون اشاره‌ی prompt، صندلی اجباری نمی‌گیرد (در fill رتبه‌بندی‌شده با امتیاز ۱۲–۱۵ باقی می‌ماند — خط
+۲۸۶–۳۳۶ قبلاً این کار را می‌کرد). ساختاری و بدون واژگان؛ روی هر سه مجموعه یکنواخت اثر دارد.
+
+| مجموعه | قبل (main 62b4f8b) | بعد (F40a+b) | نتیجه |
+|---|---|---|---|
+| dev-4 | recall 1.000 prec 0.873 forbidden 0 oracle 21/21 strict 19 | **بدون تغییر** | تمیز |
+| large (django+ultralytics) | recall 0.950 prec 0.269 forbidden 1 oracle 18/20 strict 11 | recall 0.950 prec 0.269 forbidden 1 oracle 18/20 strict **12** | برابر/بهتر |
+| holdout-2 (gin+vision) | recall 1.000 prec 0.259 forbidden 1 oracle 19/20 strict 14 | recall 1.000 prec **0.424** forbidden 1 oracle 19/20 strict **15** | +0.165 |
+
+دو نکته‌ی پیاده‌سازی که تست فیکسچر (`gold_harness_on_fixture_repos`، تسک `home_view_twig`) لو داد و بدون آن
+CI قرمز می‌شد: (۱) narrowing باید فقط match‌هایی را که *صرفاً در case* فرق دارند حذف کند — کاندیدی که زیر
+stem/alias ایندکس شده (`hello.twig` برای کلید `hello`) case-mismatch نیست؛ (۲) edge قالب overlay
+(`index → hello.twig`، هدف از نوع File) عمداً `Likely` است و باید صندلی اجباری بگیرد، وگرنه slot آزادشده
+را focus_term با امتیاز ۳۶ (F36) با `Greeter.php` forbidden پر می‌کند — یعنی precision فعلی dev تا حدی به
+«اشغال slot توسط callee» تکیه دارد، نه به رتبه‌بندی درست؛ F36 همچنان باز است.
+
+نتیجه‌ی میانی F40a تنها (بدون b): large 0.269→0.254، holdout 0.259→0.296 — mixed؛ علت: حذف edge غلط فقط جای
+خالی tier را برای callee غلط بعدی آزاد می‌کرد. با هم (a+b) هر سه ≥ قبل — مرج شد.
+
+**هنوز باز (از probe همین تسک‌ها):** در `gin_recovery` سه فایل باقی‌مانده‌ی نامطلوب (`context.go`،
+`routergroup.go`، `githubapi_test.go`) همه از seedهای idiom F35 می‌آیند (`concept:next`، `alias_code:app.use`،
+`client_expansion:route` → فایل تست). یک edge غلط دیگر با case درست: `handle` (پارامتر) → `RouterGroup.handle`
+(متد hom-onym) — ابهام واقعی نام، با case حل نمی‌شود. large هنوز 0.269: احتمالاً سهم بزرگ‌تری از مسیرهای دیگر
+(file_expand، focus_term F36) دارد — probe بعدی روی `ultra_predict_stream`/`django_csrf`.
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.

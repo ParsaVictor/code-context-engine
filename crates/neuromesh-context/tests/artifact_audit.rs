@@ -253,6 +253,39 @@ fn packet_probe() {
             seed.resolution_tier.as_deref().unwrap_or("")
         );
     }
+    if std::env::var("NM_PROBE_EDGES").is_ok() {
+        for seed in &view.seeds {
+            let Some(id) = &seed.resolved_id else {
+                continue;
+            };
+            for (neighbor, edge) in graph.get_connected_neighbors(id) {
+                if edge.source != *id {
+                    continue;
+                }
+                let target = graph
+                    .get_node(&neighbor)
+                    .map(|n| {
+                        format!(
+                            "{} ({})",
+                            n.id,
+                            n.file_path.to_string_lossy().replace('\\', "/")
+                        )
+                    })
+                    .unwrap_or_else(|| neighbor.to_string());
+                let callers = graph
+                    .get_connected_neighbors(&neighbor)
+                    .iter()
+                    .filter(|(_, e)| {
+                        e.edge_type == neuromesh_core::EdgeType::Calls && e.target == neighbor
+                    })
+                    .count();
+                println!(
+                    "    edge {} --{:?}/{:?}--> {} callers={}",
+                    id, edge.edge_type, edge.confidence, target, callers
+                );
+            }
+        }
+    }
     if std::env::var("NM_PROBE_NODES").is_ok() {
         for n in &view.active_nodes {
             println!(

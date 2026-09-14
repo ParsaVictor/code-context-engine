@@ -163,6 +163,7 @@ pub fn select(
     }
 
     const MAX_REQUIRED_CALLEE_FILES: usize = 3;
+    const MAX_FOCUSED_CALLEE_CALLERS: usize = 5;
     let mut callee_candidates: Vec<(NodeId, String, bool, bool, String)> = Vec::new();
     for seed in seeds {
         let Some(seed_node) = graph.get_node(seed) else {
@@ -175,12 +176,15 @@ pub fn select(
             if edge.edge_type != EdgeType::Calls || edge.source != *seed {
                 continue;
             }
-            if edge.confidence == EdgeConfidence::Unresolved {
-                continue;
-            }
             let Some(node) = graph.get_node(&neighbor) else {
                 continue;
             };
+            // A name-only (`Likely`) callee guess is still ranked in the fill
+            // below; a forced seat needs a Proven resolution or a template
+            // overlay (a File target, which the linker marks Likely by design).
+            if edge.confidence != EdgeConfidence::Proven && node.node_type != NodeType::File {
+                continue;
+            }
             if is_common_call(&node.name) {
                 continue;
             }
@@ -195,6 +199,11 @@ pub fn select(
             }
             let stem_focus = focus_terms.iter().any(|t| file_stem_eq(&node.file_path, t));
             let focus = stem_focus || focus_terms.contains(&node.name.to_lowercase());
+            // A callee invoked from many places is shared plumbing (`ctx.Set`,
+            // `cleanPath`), not the substance of a question about its caller.
+            if !focus && caller_count(graph, &neighbor) > MAX_FOCUSED_CALLEE_CALLERS {
+                continue;
+            }
             callee_candidates.push((
                 file_id,
                 node.file_path.to_string_lossy().replace('\\', "/"),
@@ -1015,6 +1024,14 @@ pub fn is_noise_path(path: &Path) -> bool {
         || lower.contains("/editors/")
         || lower.starts_with("editors/")
         || neuromesh_core::is_low_priority_source_path(path)
+}
+
+fn caller_count(graph: &NeuralProjectGraph, id: &NodeId) -> usize {
+    graph
+        .get_connected_neighbors(id)
+        .iter()
+        .filter(|(_, e)| e.edge_type == EdgeType::Calls && e.target == *id)
+        .count()
 }
 
 pub fn is_common_call(name: &str) -> bool {
