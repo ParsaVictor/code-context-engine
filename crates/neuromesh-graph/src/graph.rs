@@ -1204,14 +1204,9 @@ impl NeuralProjectGraph {
     }
 
     pub fn resolve_unique(&self, name: &str, file_hint: Option<&str>) -> Option<NodeId> {
-        let name_lower = name.to_lowercase();
         let data = self.inner.read();
-        let ids = data
-            .name_to_nodes
-            .get(&name_lower)
-            .cloned()
-            .unwrap_or_default();
-        if ids.is_empty() {
+        let (ids, exact) = case_narrowed(&data, name);
+        if ids.is_empty() || !exact {
             return None;
         }
         if ids.len() == 1 {
@@ -1415,14 +1410,9 @@ impl NeuralProjectGraph {
         source_file: &Path,
         imported_files: &HashSet<PathBuf>,
     ) -> Option<NodeId> {
-        let name_lower = name.to_lowercase();
         let data = self.inner.read();
-        let ids = data
-            .name_to_nodes
-            .get(&name_lower)
-            .cloned()
-            .unwrap_or_default();
-        if ids.is_empty() {
+        let (ids, exact) = case_narrowed(&data, name);
+        if ids.is_empty() || !exact {
             return None;
         }
 
@@ -1503,16 +1493,27 @@ impl NeuralProjectGraph {
         if let Some(id) = self.resolve_unique(name, file_hint) {
             return Some((id, EdgeConfidence::Proven));
         }
-        let name_lower = name.to_lowercase();
         let data = self.inner.read();
-        let ids = data
-            .name_to_nodes
-            .get(&name_lower)
-            .cloned()
-            .unwrap_or_default();
+        let (ids, exact) = case_narrowed(&data, name);
         if ids.is_empty() {
             return None;
         }
+        let found = self.resolve_ranked_among(data, ids, name, file_hint, imported_files);
+        if exact {
+            found
+        } else {
+            found.map(|(id, _)| (id, EdgeConfidence::Likely))
+        }
+    }
+
+    fn resolve_ranked_among(
+        &self,
+        data: parking_lot::RwLockReadGuard<'_, GraphData>,
+        ids: Vec<NodeId>,
+        name: &str,
+        file_hint: Option<&str>,
+        imported_files: Option<&HashSet<PathBuf>>,
+    ) -> Option<(NodeId, EdgeConfidence)> {
         if let Some(imported) = imported_files {
             let hinted: Vec<NodeId> = ids
                 .iter()
@@ -1740,7 +1741,8 @@ impl NeuralProjectGraph {
     fn resolve_export(&self, name: &str, file_hint: &str) -> Option<(NodeId, EdgeConfidence)> {
         let name_lower = name.to_lowercase();
         let data = self.inner.read();
-        let ids = data.export_index.get(&name_lower)?;
+        let ids = data.export_index.get(&name_lower)?.clone();
+        let (ids, exact) = narrow_exact_case(&data, ids, name);
         let hinted: Vec<NodeId> = ids
             .iter()
             .filter(|id| {
@@ -1751,8 +1753,8 @@ impl NeuralProjectGraph {
             .cloned()
             .collect();
         match hinted.len() {
-            1 => Some((hinted.into_iter().next().unwrap(), EdgeConfidence::Proven)),
-            n if n > 1 => Some((hinted.into_iter().next().unwrap(), EdgeConfidence::Likely)),
+            1 if exact => Some((hinted.into_iter().next().unwrap(), EdgeConfidence::Proven)),
+            n if n >= 1 => Some((hinted.into_iter().next().unwrap(), EdgeConfidence::Likely)),
             _ => None,
         }
     }
@@ -3046,6 +3048,38 @@ fn normalize_path_hint(value: &str) -> String {
 /// Whether a hint names this exact file. Node paths are workspace-relative and
 /// a hint may be absolute, so either side is allowed to be the longer one — but
 /// only on a full path segment, so `train.py` never matches `pretrain.py`.
+/// Candidates for `name`, narrowed to exact-case matches whenever any exist.
+/// The index is case-folded, but every supported language is case-sensitive:
+/// a Go parameter `handle` must not resolve to an exported `Handle` elsewhere.
+/// Returns `(ids, exact)`; `exact == false` means only case-mismatched hits exist.
+fn case_narrowed(data: &GraphData, name: &str) -> (Vec<NodeId>, bool) {
+    let ids = data
+        .name_to_nodes
+        .get(&name.to_lowercase())
+        .cloned()
+        .unwrap_or_default();
+    narrow_exact_case(data, ids, name)
+}
+
+fn narrow_exact_case(data: &GraphData, ids: Vec<NodeId>, name: &str) -> (Vec<NodeId>, bool) {
+    // A candidate indexed under a stem/alias (`hello.twig` for `hello`) is not
+    // a case mismatch; only a same-spelling-different-case hit is.
+    let kept: Vec<NodeId> = ids
+        .iter()
+        .filter(|id| {
+            data.mesh
+                .node(id)
+                .is_some_and(|n| n.name == name || !n.name.eq_ignore_ascii_case(name))
+        })
+        .cloned()
+        .collect();
+    if kept.is_empty() {
+        (ids, false)
+    } else {
+        (kept, true)
+    }
+}
+
 fn same_file_path(path: &Path, hint: &str) -> bool {
     let path = normalize_path_hint(&path.to_string_lossy());
     let hint = normalize_path_hint(hint);
