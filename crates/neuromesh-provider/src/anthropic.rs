@@ -53,6 +53,8 @@ impl Provider for AnthropicProvider {
                 "model": request.model,
                 "messages": messages,
                 "max_tokens": request.max_tokens.unwrap_or(4096),
+                // Explicit: some gateways (9router) default to SSE otherwise.
+                "stream": false,
             });
 
             // A short verdict ("PASS"/"FAIL", max_tokens ≤ 512) must not be

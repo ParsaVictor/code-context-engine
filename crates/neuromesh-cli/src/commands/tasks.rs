@@ -853,6 +853,8 @@ async fn git_apply(scratch: &Path) -> std::io::Result<std::process::Output> {
         .arg("apply")
         .arg("--whitespace=nowarn")
         .arg("--ignore-whitespace")
+        // Models miscount hunk lengths; `--recount` trusts the lines, not the header.
+        .arg("--recount")
         .arg(".nm-task.patch")
         .current_dir(scratch)
         .output()

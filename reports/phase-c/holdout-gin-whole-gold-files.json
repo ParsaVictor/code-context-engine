@@ -1,0 +1,4 @@
+
+NeuroMesh task harness — executor=model (Anthropic claude-opus-5) context=whole-gold-files judge=anthropic:claude-opus-4-8
+Task                         Repo                              Result  Strict   Packet  Effect.     ms  Needs
+------------------------------------------------------------------------------------------------------------------------

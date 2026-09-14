@@ -1,0 +1,286 @@
+
+NeuroMesh task harness — executor=model (Anthropic gpt-6-astra) context=grep judge=anthropic:gpt-5.6-sol
+Task                         Repo                              Result  Strict   Packet  Effect.     ms  Needs
+------------------------------------------------------------------------------------------------------------------------
+gin_serve_http               gin                                 FAIL       -     2482     2482    111  gin.go::ServeHTTP=Unfolded, gin.go::handleHTTPRequest=Unfolded
+                             note: provider error (answer): Provider error (anthropic): error sending request for url (https://agentrouter.org/v1/messages)
+gin_route_tree               gin                                 FAIL       -     3546     3546     44  tree.go::addRoute=Unfolded, tree.go::getValue=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915033551234536594cc6xbnyxa2tgH)","type":"bad_response_status_code"},"type":"error"}
+gin_group_handle             gin                                 FAIL       -     2323     2323     47  routergroup.go::handle=Unfolded, routergroup.go::calculateAbsolutePath=Unfolded, routergroup.go::GET=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150337431994104835rkw9PzWpb4zR)","type":"bad_response_status_code"},"type":"error"}
+gin_context_next             gin                                 FAIL       -     5707     5707     49  context.go::Next=Unfolded, context.go::Abort=Unfolded
+                             note: provider error (answer): Provider error (anthropic): error sending request for url (https://agentrouter.org/v1/messages)
+gin_bind_json                gin                                 FAIL       -     5790     5790     92  context.go::ShouldBindJSON=Unfolded, context.go::ShouldBindWith=Unfolded, context.go::MustBindWith=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915033951731399710gfvh2CMYmh69z)","type":"bad_response_status_code"},"type":"error"}
+gin_recovery                 gin                                 FAIL       -     5963     6192     72  recovery.go::CustomRecoveryWithWriter=Unfolded, recovery.go::stack=Folded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915034144637994741wmrhfhPoQtD8K)","type":"bad_response_status_code"},"type":"error"}
+gin_logger                   gin                                 FAIL       -     7700     7700     40  logger.go::LoggerWithConfig=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915034335141111877mf54mp2b74GKo)","type":"bad_response_status_code"},"type":"error"}
+gin_trusted_proxies          gin                                 FAIL       -     7515     7700    199  gin.go::SetTrustedProxies=Unfolded, gin.go::prepareTrustedCIDRs=Folded, context.go::ClientIP=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150345297447928158mz7rPTz91qjE)","type":"bad_response_status_code"},"type":"error"}
+gin_basic_auth               gin                                 FAIL       -     6224     6224     88  auth.go::BasicAuth=Unfolded, auth.go::processAccounts=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915034720293090796c42r6Rls9DnWW)","type":"bad_response_status_code"},"type":"error"}
+gin_static                   gin                                 FAIL       -     1931     1931     90  routergroup.go::Static=Unfolded, routergroup.go::createStaticHandler=Unfolded, fs.go::Open=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915034911160018875x9wfSpVmFvwz)","type":"bad_response_status_code"},"type":"error"}
+
+Task success (anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)): 0/10 = 0.000 (strict 0.000) · mean effective tokens 4960 · success per 1k tokens 0.000 · forbidden hits 0
+{
+  "outcomes": [
+    {
+      "effective_tokens": 2482,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_serve_http",
+      "latency_ms": 111,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "gin.go::ServeHTTP",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "gin.go::handleHTTPRequest",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): error sending request for url (https://agentrouter.org/v1/messages)",
+      "packet_tokens": 2482,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 3546,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_route_tree",
+      "latency_ms": 44,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "tree.go::addRoute",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "tree.go::getValue",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915033551234536594cc6xbnyxa2tgH)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 3546,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 2323,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_group_handle",
+      "latency_ms": 47,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "routergroup.go::handle",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "routergroup.go::calculateAbsolutePath",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "routergroup.go::GET",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150337431994104835rkw9PzWpb4zR)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 2323,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 5707,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_context_next",
+      "latency_ms": 49,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "context.go::Next",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "context.go::Abort",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): error sending request for url (https://agentrouter.org/v1/messages)",
+      "packet_tokens": 5707,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 5790,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_bind_json",
+      "latency_ms": 92,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "context.go::ShouldBindJSON",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "context.go::ShouldBindWith",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "context.go::MustBindWith",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915033951731399710gfvh2CMYmh69z)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 5790,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 6192,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_recovery",
+      "latency_ms": 72,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "recovery.go::CustomRecoveryWithWriter",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 229,
+          "need": "recovery.go::stack",
+          "presence": "folded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915034144637994741wmrhfhPoQtD8K)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 5963,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 7700,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_logger",
+      "latency_ms": 40,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "logger.go::LoggerWithConfig",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915034335141111877mf54mp2b74GKo)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 7700,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 7700,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_trusted_proxies",
+      "latency_ms": 199,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "gin.go::SetTrustedProxies",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 185,
+          "need": "gin.go::prepareTrustedCIDRs",
+          "presence": "folded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "context.go::ClientIP",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150345297447928158mz7rPTz91qjE)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 7515,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 6224,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_basic_auth",
+      "latency_ms": 88,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "auth.go::BasicAuth",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "auth.go::processAccounts",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915034720293090796c42r6Rls9DnWW)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 6224,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 1931,
+      "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+      "forbidden_hit": [],
+      "id": "gin_static",
+      "latency_ms": 90,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "routergroup.go::Static",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "routergroup.go::createStaticHandler",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "fs.go::Open",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915034911160018875x9wfSpVmFvwz)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 1931,
+      "strict_success": false,
+      "success": false
+    }
+  ],
+  "summary": {
+    "cases": 10,
+    "executor": "anthropic:gpt-6-astra (qa-judge anthropic:gpt-5.6-sol)",
+    "forbidden_hits": 0,
+    "mean_effective_tokens": 4959.5,
+    "strict_succeeded": 0,
+    "strict_success_rate": 0.0,
+    "succeeded": 0,
+    "success_per_1k_tokens": 0.0,
+    "success_rate": 0.0
+  }
+}

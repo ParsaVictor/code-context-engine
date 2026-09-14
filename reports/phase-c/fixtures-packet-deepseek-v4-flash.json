@@ -1,0 +1,660 @@
+
+NeuroMesh task harness — executor=model (Anthropic deepseek-v4-flash) context=packet judge=anthropic:glm-5.3
+Task                         Repo                              Result  Strict   Packet  Effect.     ms  Needs
+------------------------------------------------------------------------------------------------------------------------
+py_sms_receive               tests/fixtures/mini-python            ok      ok       59     4712     13  src/receiver.py::on_receive=Unfolded, src/sms_store.py::SmsStore.save=Unfolded
+                             note: qa-judge: PASS - The answer specifically describes both elements' code (on_receive calling `SmsStore.save(body)` on the class rather than an instance, and `save` delegating to `self.persist`), and its explanation of the resulting failure (TypeError from the unbound instance method missing the `body` argument) is mechanically correct Python semantics. · context 99 tok, answer 1824 tok, judge 2193 tok
+py_persist_chain             tests/fixtures/mini-python            ok      ok       59     2987     12  src/sms_store.py::SmsStore.persist=Unfolded
+                             note: qa-judge: PASS - The answer correctly and specifically explains that `SmsStore.persist` in `src/sms_store.py` should return `body.strip()` to remove leading/trailing whitespace before returning the body, accurately describing the strip mechanism and how the change propagates through the code. · context 102 tok, answer 1482 tok, judge 923 tok
+kt_sms_receive               tests/fixtures/mini-kotlin            ok      ok       96     1644     11  src/SmsReceiver.kt::onReceive=Unfolded, src/SmsStore.kt::save=Unfolded
+                             note: qa-judge: PASS — The answer specifically and correctly traces the call chain: onReceive forwards the nullable `body` unchanged to `SmsStore.save`, which delegates to the empty private `persist` no-op, accurately describing the pass-through mechanism rather than just repeating names. · context 132 tok, answer 558 tok, judge 481 tok
+rs_process_job               tests/fixtures/mini-queue             ok      ok      152     3496     10  src/worker.rs::process_job=Unfolded, src/queue.rs::enqueue=Unfolded, src/queue.rs::dequeue=Unfolded
+                             note: qa-judge: PASS - The answer specifically and coherently explains all three elements: enqueue pushes the item onto a Vec-based queue, dequeue removes and returns the front element (with an is_empty guard), and process_job performs an enqueue-then-dequeue round trip on a local queue, returning the dequeued value via unwrap_or_default. · context 190 tok, answer 728 tok, judge 1816 tok
+rs_session_token             tests/fixtures/mini-service           ok      ok      138     3897     14  src/session.rs::start_session=Unfolded, src/auth.rs::issue_token=Unfolded
+                             note: qa-judge: PASS — The answer specifically and coherently explains the call chain (`start_session` delegating to `issue_token`, which builds a deterministic `tok_{user}_secret` string, followed by a length-based `verify_token` check), including an internally consistent analysis of why the failure branch is effectively dead code. · context 176 tok, answer 907 tok, judge 2272 tok
+rs_router_handle             tests/fixtures/mini-router            ok      ok      160     1910     19  src/handler.rs::handle_request=Unfolded, src/extract.rs::extract_route=Unfolded
+                             note: qa-judge: PASS - The answer gives a specific, concrete mechanism (handle_request delegates to extract_route, which trims whitespace and wraps the string in a Route struct, followed by dispatch formatting) rather than vague name-dropping or a claim of insufficient context. · context 219 tok, answer 569 tok, judge 555 tok
+ts_cart_add                  tests/fixtures/mini-store             ok      ok      220     3794     11  src/cart.ts::addToCart=Unfolded, src/store.ts::createStore=Unfolded
+                             note: qa-judge: PASS — The answer concretely and coherently explains both elements (createStore's shallow-copied private state with get/set closures, and addToCart's per-call instantiation via `{ [item]: 0 }` followed by the get/set round trip), correctly deriving the non-accumulating behavior instead of vaguely repeating names or claiming insufficiency. · context 258 tok, answer 1367 tok, judge 1589 tok
+ts_sms_api                   tests/fixtures/mini-express           ok      ok      100     2190     11  src/app.ts::store=Unfolded, src/sms_store.ts::saveSms=Unfolded
+                             note: qa-judge: PASS — The answer concretely describes the mechanism: `store` in `src/app.ts` is a thin wrapper that forwards its string argument to `saveSms` and returns its result, while `saveSms` in `src/sms_store.ts` delegates the body to a private `persist` helper (currently a no-op stub), which is a specific, plausible, and non-vague explanation of how the two elements interact. · context 140 tok, answer 568 tok, judge 1055 tok
+ts_safeparse                 tests/fixtures/mini-schema            ok      ok      159     2130     10  packages/schema/src/core/parse.ts::safeParse=Unfolded
+                             note: qa-judge: PASS — The answer correctly identifies `safeParse`'s location in `packages/schema/src/core/parse.ts` and specifically explains its mechanism as a thin exported wrapper that delegates to the private `_parse` worker, seeding it with an empty path accumulator, plus its relationship to sibling functions, so the task was completed despite the noted folding limitation. · context 184 tok, answer 739 tok, judge 707 tok
+vue_qty_stepper              tests/fixtures/mini-shop              ok      ok      608     4932     20  src/stores/cart.js::setQty=Unfolded, src/views/CheckoutView.vue=Unfolded
+                             note: qa-judge: PASS — The answer correctly explains setQty's mechanism (finds item by id, floors qty at 1 via Math.max, in-place mutation with reactive getter recomputation) and CheckoutView.vue's structure (cart.items iteration in template, existing cart binding, placeOrder flow), and gives a concrete, correct stepper wiring using cart.setQty. · context 671 tok, answer 2424 tok, judge 667 tok
+vue_dead_gocart              tests/fixtures/mini-shop              ok      ok     2171     8646     16  src/stores/ui.js::goCart=Unfolded, src/App.vue=Unfolded, src/components/CartDrawer.vue=Unfolded, src/components/Header.vue=Unfolded
+                             note: qa-judge: PASS - The answer specifically and mechanistically explains all four elements: goCart as the Pinia ui-store action setting currentView='cart', App.vue's read-only consumption of currentView for rendering CartView, the dead hidden-button call site in CartDrawer.vue, and the Header.vue logo · context 2252 tok, answer 1515 tok, judge 4000 tok
+react_stat_card              tests/fixtures/mini-pinoox            ok      ok       57     3318      8  theme/spark/src/StatCard.tsx::StatCard=Unfolded
+                             note: qa-judge: PASS — The answer gives a specific, mechanistically correct account of how the StatCard FC renders its label (prop destructuring, JSX child placement compiling to a text-node child via createElement), directly addressing the named element rather than vaguely restating it. · context 79 tok, answer 339 tok, judge 2540 tok
+ml_train_loss                tests/fixtures/ml-pytorch-detec…      ok      ok      600     3769     13  engine/train.py::train_one_epoch=Unfolded, models/detector.py::detection_loss=Unfolded, models/detector.py::Detector.forward=Unfolded
+                             note: qa-judge: PASS — The answer specifically explains all three elements: train_one_epoch's per-iteration delegation of the loss to detection_loss, Detector.forward's backbone → global-average-pool → Linear(num_classes*5) pipeline producing the predictions tensor, and detection_loss being a plain F.mse_loss between predictions and a fixed-shape targets tensor with no anchor matching or separate cls/reg terms. · context 660 tok, answer 1473 tok, judge 596 tok
+ml_dataset_transforms        tests/fixtures/ml-pytorch-detec…      ok      ok      721     3713     11  data/dataset.py::CocoDetection.__getitem__=Unfolded, data/dataset.py::build_transforms=Unfolded
+                             note: qa-judge: PASS — The answer correctly identifies that the pipeline assembled by `build_transforms` (called at construction time from the train/evaluate entry points) is stored on the dataset and applied per-image inside `CocoDetection.__getitem__` via `self.transforms(image)`, explaining both required elements' mechanisms specifically. · context 784 tok, answer 937 tok, judge 1319 tok
+ml_loss_sees_model_folded    tests/fixtures/ml-pytorch-detec…      ok       -      153     5504     14  models/detector.py::detection_loss=Unfolded, models/detector.py::Detector.forward=Folded
+                             note: qa-judge: PASS - The answer gives a specific, mechanistically correct explanation of detection_loss (a single F.mse_loss call with default mean reduction over both tensors, no classification/regression separation, no anchor matching or weighting, plus shape/broadcasting contract), correctly identifies Detector.forward as the prediction producer feeding it, and its honest scoping of the folded forward body does not undermine the direct, detailed answer to the question asked. · context 172 tok, answer 1088 tok, judge 3432 tok
+cjs_save_returns_body        tests/fixtures/mini-cjs               ok      ok      166      612     10  src/saveSms.cjs::saveSms=Unfolded, src/store.js::createStore=Unfolded
+                             note: verify exit 0; context 204 tok; model in/out tokens 335/408; 
+orders_apply_discount        tests/fixtures/mini-orders          FAIL       -       82       82      7  src/pricing.js::applyDiscount=Unfolded
+                             note: patch did not apply: error: corrupt patch at .nm-task.patch:13
+orders_total_with_tax        tests/fixtures/mini-orders          FAIL       -       82       82      9  src/pricing.js::totalFor=Unfolded
+                             note: patch did not apply: error: corrupt patch at .nm-task.patch:12
+orders_stock_of_unknown      tests/fixtures/mini-orders          FAIL       -      481      481      9  src/inventory.js::stockOf=Unfolded, src/store.js::createStore=Unfolded
+                             note: patch did not apply: error: corrupt patch at .nm-task.patch:12
+orders_remove_item_underflow tests/fixtures/mini-orders            ok       -      501     2088     12  src/inventory.js::removeItem=Unfolded, src/inventory.js::addItem=Folded
+                             note: verify exit 0; context 539 tok; model in/out tokens 641/1549; 
+orders_format_money_rounding tests/fixtures/mini-orders            ok      ok      108     8385      9  src/format.js::formatMoney=Unfolded
+                             note: verify exit 0; context 127 tok; model in/out tokens 298/8258; 
+orders_place_order_decrements tests/fixtures/mini-orders            ok      ok      879     1699     12  src/orders.js::placeOrder=Unfolded, src/inventory.js::removeItem=Unfolded
+                             note: verify exit 0; context 960 tok; model in/out tokens 1026/739; 
+nm_handle_tool_call          .                                     ok      ok    27007    33602    361  crates/neuromesh-mcp/src/tools.rs::handle_tool_call=Unfolded, crates/neuromesh-context/src/activator.rs::activate=Unfolded
+                             note: qa-judge: PASS — The answer gives a detailed, mechanism-level explanation of both `handle_tool_call` (gate evaluation, proxy/semantic-cache early exits, `activate_tiered` invocation, ContextView-to-packet assembly) and the activator (`activate`→`activate_with_hops`→`activate_inner` with hops, seeding, pruning, and selection), correctly noting the premise that `activate` itself is not the direct entry point, with only a minor honest caveat about folded function bodies. · context 26596 tok, answer 4000 tok, judge 1165 tok
+nm_physarum_sidecar          .                                     ok      ok    23178    31919    418  crates/neuromesh-context/src/activator.rs::activate=Unfolded, crates/neuromesh-graph/src/graph.rs::solve_physarum_tube=Unfolded
+                             note: qa-judge: PASS — The answer precisely locates the tube solve in activate's inner path (guarded on physarum_sidecar, seed count ≥ 2, and !call_graph_task, calling solve_physarum_tube with hops.min(2)), explains in concrete detail how tube nodes become scored, deduped, capped sidecar files via selection.optional/seed_reasons, and enumerates solve_physarum_tube's actual bounds (seed-count early return with iterations_converged: 0, the MAX_NODES 250 / MAX_EDGES 400 neighborhood bail-out, and the fixed hot_path budget of 6 outer iterations with 8 SOR sweeps plus convergence early-exits). · context 23307 tok, answer 4000 tok, judge 2714 tok
+nm_fold_expand               .                                     ok       -     1159     6009    103  crates/neuromesh-context/src/expansion.rs::expand_fold=Unfolded, crates/neuromesh-context/src/registry.rs::get_fold=Folded
+                             note: qa-judge: PASS - The answer concretely and plausibly explains both elements: expand_fold delegates to registry.get_fold (a read-locked lookup in FoldStore.by_id returning a StoredFold) and restores the body by cloning the FoldedIntron's retained original_body into a FoldExpansion, hedging only on folded-away internal details rather than declining the task. · context 1209 tok, answer 1638 tok, judge 2265 tok
+nm_notebook_read             .                                     ok      ok    22262    28578    236  crates/neuromesh-index/src/notebook.rs::read_source_text=Unfolded
+                             note: qa-judge: PASS — The answer gives a concrete, mechanism-level account of the .ipynb→Python pipeline (is_notebook dispatch, bounded UTF-8 read with MAX_NOTEBOOK_BYTES enforced via take(+1), serde_json parsing through tolerant Source/Cells/Worksheets visitors, and a render pass emitting `# %%` cell markers with sanitized headers, code bodies, markdown digests, error outputs, and view-size truncation), consistent with the real notebook format, and it appropriately flags folded helpers as inferred rather than claiming insufficient context. · context 22307 tok, answer 3184 tok, judge 1491 tok
+
+Task success (anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)): 23/26 = 0.885 (strict 0.769) · mean effective tokens 6545 · success per 1k tokens 0.135 · forbidden hits 0
+{
+  "outcomes": [
+    {
+      "effective_tokens": 4712,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "py_sms_receive",
+      "latency_ms": 13,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/receiver.py::on_receive",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/sms_store.py::SmsStore.save",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS - The answer specifically describes both elements' code (on_receive calling `SmsStore.save(body)` on the class rather than an instance, and `save` delegating to `self.persist`), and its explanation of the resulting failure (TypeError from the unbound instance method missing the `body` argument) is mechanically correct Python semantics. · context 99 tok, answer 1824 tok, judge 2193 tok",
+      "packet_tokens": 59,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 2987,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "py_persist_chain",
+      "latency_ms": 12,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/sms_store.py::SmsStore.persist",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS - The answer correctly and specifically explains that `SmsStore.persist` in `src/sms_store.py` should return `body.strip()` to remove leading/trailing whitespace before returning the body, accurately describing the strip mechanism and how the change propagates through the code. · context 102 tok, answer 1482 tok, judge 923 tok",
+      "packet_tokens": 59,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 1644,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "kt_sms_receive",
+      "latency_ms": 11,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/SmsReceiver.kt::onReceive",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/SmsStore.kt::save",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer specifically and correctly traces the call chain: onReceive forwards the nullable `body` unchanged to `SmsStore.save`, which delegates to the empty private `persist` no-op, accurately describing the pass-through mechanism rather than just repeating names. · context 132 tok, answer 558 tok, judge 481 tok",
+      "packet_tokens": 96,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 3496,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "rs_process_job",
+      "latency_ms": 10,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/worker.rs::process_job",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/queue.rs::enqueue",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/queue.rs::dequeue",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS - The answer specifically and coherently explains all three elements: enqueue pushes the item onto a Vec-based queue, dequeue removes and returns the front element (with an is_empty guard), and process_job performs an enqueue-then-dequeue round trip on a local queue, returning the dequeued value via unwrap_or_default. · context 190 tok, answer 728 tok, judge 1816 tok",
+      "packet_tokens": 152,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 3897,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "rs_session_token",
+      "latency_ms": 14,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/session.rs::start_session",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/auth.rs::issue_token",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer specifically and coherently explains the call chain (`start_session` delegating to `issue_token`, which builds a deterministic `tok_{user}_secret` string, followed by a length-based `verify_token` check), including an internally consistent analysis of why the failure branch is effectively dead code. · context 176 tok, answer 907 tok, judge 2272 tok",
+      "packet_tokens": 138,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 1910,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "rs_router_handle",
+      "latency_ms": 19,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/handler.rs::handle_request",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/extract.rs::extract_route",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS - The answer gives a specific, concrete mechanism (handle_request delegates to extract_route, which trims whitespace and wraps the string in a Route struct, followed by dispatch formatting) rather than vague name-dropping or a claim of insufficient context. · context 219 tok, answer 569 tok, judge 555 tok",
+      "packet_tokens": 160,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 3794,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "ts_cart_add",
+      "latency_ms": 11,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/cart.ts::addToCart",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/store.ts::createStore",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer concretely and coherently explains both elements (createStore's shallow-copied private state with get/set closures, and addToCart's per-call instantiation via `{ [item]: 0 }` followed by the get/set round trip), correctly deriving the non-accumulating behavior instead of vaguely repeating names or claiming insufficiency. · context 258 tok, answer 1367 tok, judge 1589 tok",
+      "packet_tokens": 220,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 2190,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "ts_sms_api",
+      "latency_ms": 11,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/app.ts::store",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/sms_store.ts::saveSms",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer concretely describes the mechanism: `store` in `src/app.ts` is a thin wrapper that forwards its string argument to `saveSms` and returns its result, while `saveSms` in `src/sms_store.ts` delegates the body to a private `persist` helper (currently a no-op stub), which is a specific, plausible, and non-vague explanation of how the two elements interact. · context 140 tok, answer 568 tok, judge 1055 tok",
+      "packet_tokens": 100,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 2130,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "ts_safeparse",
+      "latency_ms": 10,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "packages/schema/src/core/parse.ts::safeParse",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer correctly identifies `safeParse`'s location in `packages/schema/src/core/parse.ts` and specifically explains its mechanism as a thin exported wrapper that delegates to the private `_parse` worker, seeding it with an empty path accumulator, plus its relationship to sibling functions, so the task was completed despite the noted folding limitation. · context 184 tok, answer 739 tok, judge 707 tok",
+      "packet_tokens": 159,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 4932,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "vue_qty_stepper",
+      "latency_ms": 20,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/stores/cart.js::setQty",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/views/CheckoutView.vue",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer correctly explains setQty's mechanism (finds item by id, floors qty at 1 via Math.max, in-place mutation with reactive getter recomputation) and CheckoutView.vue's structure (cart.items iteration in template, existing cart binding, placeOrder flow), and gives a concrete, correct stepper wiring using cart.setQty. · context 671 tok, answer 2424 tok, judge 667 tok",
+      "packet_tokens": 608,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 8646,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "vue_dead_gocart",
+      "latency_ms": 16,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/stores/ui.js::goCart",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/App.vue",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/components/CartDrawer.vue",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/components/Header.vue",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS - The answer specifically and mechanistically explains all four elements: goCart as the Pinia ui-store action setting currentView='cart', App.vue's read-only consumption of currentView for rendering CartView, the dead hidden-button call site in CartDrawer.vue, and the Header.vue logo · context 2252 tok, answer 1515 tok, judge 4000 tok",
+      "packet_tokens": 2171,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 3318,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "react_stat_card",
+      "latency_ms": 8,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "theme/spark/src/StatCard.tsx::StatCard",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer gives a specific, mechanistically correct account of how the StatCard FC renders its label (prop destructuring, JSX child placement compiling to a text-node child via createElement), directly addressing the named element rather than vaguely restating it. · context 79 tok, answer 339 tok, judge 2540 tok",
+      "packet_tokens": 57,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 3769,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "ml_train_loss",
+      "latency_ms": 13,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "engine/train.py::train_one_epoch",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "models/detector.py::detection_loss",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "models/detector.py::Detector.forward",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer specifically explains all three elements: train_one_epoch's per-iteration delegation of the loss to detection_loss, Detector.forward's backbone → global-average-pool → Linear(num_classes*5) pipeline producing the predictions tensor, and detection_loss being a plain F.mse_loss between predictions and a fixed-shape targets tensor with no anchor matching or separate cls/reg terms. · context 660 tok, answer 1473 tok, judge 596 tok",
+      "packet_tokens": 600,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 3713,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "ml_dataset_transforms",
+      "latency_ms": 11,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "data/dataset.py::CocoDetection.__getitem__",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "data/dataset.py::build_transforms",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer correctly identifies that the pipeline assembled by `build_transforms` (called at construction time from the train/evaluate entry points) is stored on the dataset and applied per-image inside `CocoDetection.__getitem__` via `self.transforms(image)`, explaining both required elements' mechanisms specifically. · context 784 tok, answer 937 tok, judge 1319 tok",
+      "packet_tokens": 721,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 5504,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "ml_loss_sees_model_folded",
+      "latency_ms": 14,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "models/detector.py::detection_loss",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 27,
+          "need": "models/detector.py::Detector.forward",
+          "presence": "folded"
+        }
+      ],
+      "note": "qa-judge: PASS - The answer gives a specific, mechanistically correct explanation of detection_loss (a single F.mse_loss call with default mean reduction over both tensors, no classification/regression separation, no anchor matching or weighting, plus shape/broadcasting contract), correctly identifies Detector.forward as the prediction producer feeding it, and its honest scoping of the folded forward body does not undermine the direct, detailed answer to the question asked. · context 172 tok, answer 1088 tok, judge 3432 tok",
+      "packet_tokens": 153,
+      "strict_success": false,
+      "success": true
+    },
+    {
+      "effective_tokens": 612,
+      "executor": "anthropic:deepseek-v4-flash",
+      "forbidden_hit": [],
+      "id": "cjs_save_returns_body",
+      "latency_ms": 10,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/saveSms.cjs::saveSms",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/store.js::createStore",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "verify exit 0; context 204 tok; model in/out tokens 335/408; ",
+      "packet_tokens": 166,
+      "strict_success": true,
+      "success": true,
+      "verify_exit": 0
+    },
+    {
+      "effective_tokens": 82,
+      "executor": "anthropic:deepseek-v4-flash",
+      "forbidden_hit": [],
+      "id": "orders_apply_discount",
+      "latency_ms": 7,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/pricing.js::applyDiscount",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "patch did not apply: error: corrupt patch at .nm-task.patch:13",
+      "packet_tokens": 82,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 82,
+      "executor": "anthropic:deepseek-v4-flash",
+      "forbidden_hit": [],
+      "id": "orders_total_with_tax",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/pricing.js::totalFor",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "patch did not apply: error: corrupt patch at .nm-task.patch:12",
+      "packet_tokens": 82,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 481,
+      "executor": "anthropic:deepseek-v4-flash",
+      "forbidden_hit": [],
+      "id": "orders_stock_of_unknown",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/inventory.js::stockOf",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/store.js::createStore",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "patch did not apply: error: corrupt patch at .nm-task.patch:12",
+      "packet_tokens": 481,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 2088,
+      "executor": "anthropic:deepseek-v4-flash",
+      "forbidden_hit": [],
+      "id": "orders_remove_item_underflow",
+      "latency_ms": 12,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/inventory.js::removeItem",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 40,
+          "need": "src/inventory.js::addItem",
+          "presence": "folded"
+        }
+      ],
+      "note": "verify exit 0; context 539 tok; model in/out tokens 641/1549; ",
+      "packet_tokens": 501,
+      "strict_success": false,
+      "success": true,
+      "verify_exit": 0
+    },
+    {
+      "effective_tokens": 8385,
+      "executor": "anthropic:deepseek-v4-flash",
+      "forbidden_hit": [],
+      "id": "orders_format_money_rounding",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/format.js::formatMoney",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "verify exit 0; context 127 tok; model in/out tokens 298/8258; ",
+      "packet_tokens": 108,
+      "strict_success": true,
+      "success": true,
+      "verify_exit": 0
+    },
+    {
+      "effective_tokens": 1699,
+      "executor": "anthropic:deepseek-v4-flash",
+      "forbidden_hit": [],
+      "id": "orders_place_order_decrements",
+      "latency_ms": 12,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/orders.js::placeOrder",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/inventory.js::removeItem",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "verify exit 0; context 960 tok; model in/out tokens 1026/739; ",
+      "packet_tokens": 879,
+      "strict_success": true,
+      "success": true,
+      "verify_exit": 0
+    },
+    {
+      "effective_tokens": 33602,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "nm_handle_tool_call",
+      "latency_ms": 361,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-mcp/src/tools.rs::handle_tool_call",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-context/src/activator.rs::activate",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer gives a detailed, mechanism-level explanation of both `handle_tool_call` (gate evaluation, proxy/semantic-cache early exits, `activate_tiered` invocation, ContextView-to-packet assembly) and the activator (`activate`→`activate_with_hops`→`activate_inner` with hops, seeding, pruning, and selection), correctly noting the premise that `activate` itself is not the direct entry point, with only a minor honest caveat about folded function bodies. · context 26596 tok, answer 4000 tok, judge 1165 tok",
+      "packet_tokens": 27007,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 31919,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "nm_physarum_sidecar",
+      "latency_ms": 418,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-context/src/activator.rs::activate",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-graph/src/graph.rs::solve_physarum_tube",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer precisely locates the tube solve in activate's inner path (guarded on physarum_sidecar, seed count ≥ 2, and !call_graph_task, calling solve_physarum_tube with hops.min(2)), explains in concrete detail how tube nodes become scored, deduped, capped sidecar files via selection.optional/seed_reasons, and enumerates solve_physarum_tube's actual bounds (seed-count early return with iterations_converged: 0, the MAX_NODES 250 / MAX_EDGES 400 neighborhood bail-out, and the fixed hot_path budget of 6 outer iterations with 8 SOR sweeps plus convergence early-exits). · context 23307 tok, answer 4000 tok, judge 2714 tok",
+      "packet_tokens": 23178,
+      "strict_success": true,
+      "success": true
+    },
+    {
+      "effective_tokens": 6009,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "nm_fold_expand",
+      "latency_ms": 103,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-context/src/expansion.rs::expand_fold",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 258,
+          "need": "crates/neuromesh-context/src/registry.rs::get_fold",
+          "presence": "folded"
+        }
+      ],
+      "note": "qa-judge: PASS - The answer concretely and plausibly explains both elements: expand_fold delegates to registry.get_fold (a read-locked lookup in FoldStore.by_id returning a StoredFold) and restores the body by cloning the FoldedIntron's retained original_body into a FoldExpansion, hedging only on folded-away internal details rather than declining the task. · context 1209 tok, answer 1638 tok, judge 2265 tok",
+      "packet_tokens": 1159,
+      "strict_success": false,
+      "success": true
+    },
+    {
+      "effective_tokens": 28578,
+      "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+      "forbidden_hit": [],
+      "id": "nm_notebook_read",
+      "latency_ms": 236,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-index/src/notebook.rs::read_source_text",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "qa-judge: PASS — The answer gives a concrete, mechanism-level account of the .ipynb→Python pipeline (is_notebook dispatch, bounded UTF-8 read with MAX_NOTEBOOK_BYTES enforced via take(+1), serde_json parsing through tolerant Source/Cells/Worksheets visitors, and a render pass emitting `# %%` cell markers with sanitized headers, code bodies, markdown digests, error outputs, and view-size truncation), consistent with the real notebook format, and it appropriately flags folded helpers as inferred rather than claiming insufficient context. · context 22307 tok, answer 3184 tok, judge 1491 tok",
+      "packet_tokens": 22262,
+      "strict_success": true,
+      "success": true
+    }
+  ],
+  "summary": {
+    "cases": 26,
+    "executor": "anthropic:deepseek-v4-flash (qa-judge anthropic:glm-5.3)",
+    "forbidden_hits": 0,
+    "mean_effective_tokens": 6545.34619140625,
+    "strict_succeeded": 20,
+    "strict_success_rate": 0.7692307829856873,
+    "succeeded": 23,
+    "success_per_1k_tokens": 0.13515180349349976,
+    "success_rate": 0.8846153616905212
+  }
+}
