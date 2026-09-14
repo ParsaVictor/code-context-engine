@@ -708,7 +708,10 @@ impl NeuralProjectGraph {
                             &imported_files,
                             rel.receiver_hint.as_deref(),
                         )
-                        .filter(|(target, _)| self.same_language_family(target, &rel.source_file))
+                        .filter(|(target, _)| {
+                            self.same_language_family(target, &rel.source_file)
+                                && !self.is_config_node(target)
+                        })
                     {
                         if target != source {
                             self.add_edge_with_confidence(
@@ -725,7 +728,10 @@ impl NeuralProjectGraph {
                             Some(&rel.source_file.to_string_lossy()),
                             Some(&imported_files),
                         )
-                        .filter(|(target, _)| self.same_language_family(target, &rel.source_file))
+                        .filter(|(target, _)| {
+                            self.same_language_family(target, &rel.source_file)
+                                && !self.is_config_node(target)
+                        })
                     {
                         if target != source {
                             self.add_edge_with_confidence(
@@ -802,6 +808,34 @@ impl NeuralProjectGraph {
                 // 3-file project makes every artifact edge run through a hub
                 // that already touches everything — the chain stops meaning
                 // anything. Resolve both ends like a call instead.
+                // Config→Code: `self.args.lr0` in trainer.py is a def that a
+                // key in a YAML/JSON file parameterizes. The generic artifact
+                // arm below cannot bind it — it keeps edges inside one language
+                // and import scope, which is right for `generate -> Model` and
+                // wrong for a `.yaml`. The key is looked up among Config nodes
+                // only: in the file the module named, else the single file
+                // that has it, else the dominant one. Edge direction is
+                // key -> reader ("parameterizes").
+                EdgeType::Parameterizes => {
+                    let reader = self
+                        .resolve_in_file(&rel.source_symbol, &rel.source_file.to_string_lossy())
+                        .unwrap_or_else(|| file_id.clone());
+                    match self
+                        .resolve_config_key(&rel.target_symbol, rel.target_file_hint.as_deref())
+                    {
+                        Some((key, confidence)) if key != reader => {
+                            self.add_edge_with_confidence(
+                                key,
+                                reader,
+                                EdgeType::Parameterizes,
+                                confidence,
+                            );
+                            true
+                        }
+                        Some(_) => true,
+                        None => false,
+                    }
+                }
                 other if other.is_artifact() => {
                     // File-local first: the source is usually a def in this very
                     // file, and that is the only reading that survives a name
@@ -1213,6 +1247,7 @@ impl NeuralProjectGraph {
     pub fn resolve_unique(&self, name: &str, file_hint: Option<&str>) -> Option<NodeId> {
         let data = self.inner.read();
         let (ids, exact) = case_narrowed(&data, name);
+        let ids = without_prose_config_keys(&data, ids, name);
         if ids.is_empty() || !exact {
             return None;
         }
@@ -1320,6 +1355,65 @@ impl NeuralProjectGraph {
         })
     }
 
+    /// A YAML/JSON key or an argparse flag: data, never a call target.
+    pub fn is_config_node(&self, id: &NodeId) -> bool {
+        self.get_node(id)
+            .is_some_and(|n| matches!(n.node_type, NodeType::Config | NodeType::Hyperparameter))
+    }
+
+    /// A configuration key by name, among `Config`/`Hyperparameter` nodes
+    /// only. With a file hint, only keys in a file matching it; without one,
+    /// a unique key wins outright and several fall back to
+    /// `pick_dominant_candidate` as `Likely` — `lr0` in `cfg/default.yaml`
+    /// and in a docs snippet is the former, not the latter, and the ranking
+    /// bonus already prefers the shallower, non-doc path.
+    pub fn resolve_config_key(
+        &self,
+        key: &str,
+        file_hint: Option<&str>,
+    ) -> Option<(NodeId, EdgeConfidence)> {
+        let ids: Vec<NodeId> = {
+            let data = self.inner.read();
+            data.name_to_nodes
+                .get(&key.to_lowercase())
+                .into_iter()
+                .flatten()
+                .filter(|id| {
+                    data.mesh.node(id).is_some_and(|n| {
+                        matches!(n.node_type, NodeType::Config | NodeType::Hyperparameter)
+                    })
+                })
+                .cloned()
+                .collect()
+        };
+        if ids.is_empty() {
+            return None;
+        }
+        if let Some(hint) = file_hint {
+            let hint_norm = normalize_path_hint(hint);
+            let hinted: Vec<NodeId> = ids
+                .iter()
+                .filter(|id| {
+                    self.get_node(id).is_some_and(|n| {
+                        let p = normalize_path_hint(&n.file_path.to_string_lossy());
+                        p == hint_norm
+                            || p.ends_with(&format!("/{hint_norm}"))
+                            || p.ends_with(&hint_norm)
+                    })
+                })
+                .cloned()
+                .collect();
+            if !hinted.is_empty() {
+                return self.pick_dominant_candidate(&hinted, key);
+            }
+        }
+        if ids.len() == 1 {
+            return Some((ids[0].clone(), EdgeConfidence::Proven));
+        }
+        self.pick_dominant_candidate(&ids, key)
+            .map(|(id, _)| (id, EdgeConfidence::Likely))
+    }
+
     pub fn resolve_file_hint(&self, hint: &str) -> Option<NodeId> {
         let data = self.inner.read();
         let hint_norm = normalize_path_hint(hint);
@@ -1419,6 +1513,9 @@ impl NeuralProjectGraph {
     ) -> Option<NodeId> {
         let data = self.inner.read();
         let (ids, exact) = case_narrowed(&data, name);
+        // A YAML key or an argparse flag is data, never a callee: `Profile(...)`
+        // must not bind to `profile: False` in default.yaml.
+        let ids = without_config_nodes(&data, ids);
         if ids.is_empty() || !exact {
             return None;
         }
@@ -1502,6 +1599,12 @@ impl NeuralProjectGraph {
         }
         let data = self.inner.read();
         let (ids, exact) = case_narrowed(&data, name);
+        // A configuration key answers only to a code-shaped name. `lr0`,
+        // `batch_size`, `numWorkers` name a key; `metric`, `model`, `seed`
+        // are English words that happen to be keys in some YAML or argparse
+        // file, and a prose word must not pull that file into every packet
+        // that uses the word (the F36 path).
+        let ids = without_prose_config_keys(&data, ids, name);
         if ids.is_empty() {
             return None;
         }
@@ -1716,6 +1819,18 @@ impl NeuralProjectGraph {
     }
 
     fn resolve_call_ranked(
+        &self,
+        name: &str,
+        source_file: &Path,
+        imported_files: &HashSet<PathBuf>,
+        receiver_hint: Option<&str>,
+    ) -> Option<(NodeId, EdgeConfidence)> {
+        // Whatever path found it: a config key is never what a call names.
+        self.resolve_call_ranked_inner(name, source_file, imported_files, receiver_hint)
+            .filter(|(id, _)| !self.is_config_node(id))
+    }
+
+    fn resolve_call_ranked_inner(
         &self,
         name: &str,
         source_file: &Path,
@@ -2337,6 +2452,13 @@ impl NeuralProjectGraph {
                     continue;
                 }
                 for (neighbor_id, edge) in data.mesh.neighbors(node_id) {
+                    // A config key is read from dozens of places; walked
+                    // backwards it is a hub that joins every reader of
+                    // `conf` to every other. Energy follows the edge only
+                    // the way it points: key -> reader.
+                    if edge.edge_type == EdgeType::Parameterizes && edge.source != *node_id {
+                        continue;
+                    }
                     let spread =
                         energy * decay * edge.pheromone_weight * edge.edge_type.attenuation();
                     if spread >= min_cutoff {
@@ -3170,6 +3292,46 @@ fn normalize_path_hint(value: &str) -> String {
 /// The index is case-folded, but every supported language is case-sensitive:
 /// a Go parameter `handle` must not resolve to an exported `Handle` elsewhere.
 /// Returns `(ids, exact)`; `exact == false` means only case-mismatched hits exist.
+/// `lr0`, `batch_size`, `numWorkers`, `lr_backbone`: a name with an
+/// underscore, a digit, or an inner capital is written the way code names a
+/// key. A single lower-case word is prose until proven otherwise.
+fn config_key_shaped(name: &str) -> bool {
+    name.contains('_')
+        || name.chars().any(|c| c.is_ascii_digit())
+        || name.chars().skip(1).any(|c| c.is_ascii_uppercase())
+}
+
+/// Drop every Config/Hyperparameter candidate: for call resolution.
+fn without_config_nodes(data: &GraphData, ids: Vec<NodeId>) -> Vec<NodeId> {
+    ids.into_iter()
+        .filter(|id| {
+            data.mesh.node(id).is_some_and(|n| {
+                !matches!(n.node_type, NodeType::Config | NodeType::Hyperparameter)
+            })
+        })
+        .collect()
+}
+
+/// Drop YAML-key and argparse candidates when `name` is not code-shaped.
+/// JSON keys (`json.rs`) keep their old reach: the dev golds were written
+/// against it and a `package.json` script named `build` is a real handle.
+fn without_prose_config_keys(data: &GraphData, ids: Vec<NodeId>, name: &str) -> Vec<NodeId> {
+    if config_key_shaped(name) {
+        return ids;
+    }
+    ids.into_iter()
+        .filter(|id| {
+            data.mesh.node(id).is_some_and(|n| {
+                let yaml_key = n.node_type == NodeType::Config
+                    && n.file_path
+                        .extension()
+                        .is_some_and(|e| e == "yaml" || e == "yml");
+                !(yaml_key || n.node_type == NodeType::Hyperparameter)
+            })
+        })
+        .collect()
+}
+
 fn case_narrowed(data: &GraphData, name: &str) -> (Vec<NodeId>, bool) {
     let ids = data
         .name_to_nodes

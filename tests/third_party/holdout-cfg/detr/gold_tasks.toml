@@ -1,0 +1,37 @@
+# facebookresearch/detr @ 29901c51 — argparse keys defined in main.py, read elsewhere.
+# Gold = main.py (the add_argument) + the reader.
+
+[[task]]
+id = "detr_hidden_dim"
+prompt = "How does the hidden_dim argument reach build_transformer as d_model and build_position_encoding as N_steps?"
+gold_files = ["main.py", "models/transformer.py", "models/position_encoding.py"]
+forbidden_files = ["models/matcher.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "detr_matcher_costs"
+prompt = "How do set_cost_class, set_cost_bbox and set_cost_giou from the argument parser configure HungarianMatcher in build_matcher?"
+gold_files = ["main.py", "models/matcher.py"]
+forbidden_files = ["models/backbone.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "detr_backbone_lr"
+prompt = "How does lr_backbone decide train_backbone in build_backbone, and how is dilation passed to Backbone?"
+gold_files = ["main.py", "models/backbone.py"]
+forbidden_files = ["models/transformer.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "detr_num_queries_eos"
+prompt = "Where are num_queries and eos_coef consumed when build constructs DETR and SetCriterion?"
+gold_files = ["main.py", "models/detr.py"]
+forbidden_files = ["models/position_encoding.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "detr_masks_flag"
+prompt = "How does the masks flag change return_masks in the coco dataset builder and return_interm_layers in build_backbone?"
+gold_files = ["main.py", "datasets/coco.py", "models/backbone.py"]
+forbidden_files = ["models/matcher.py"]
+expect_seeds_missed = false

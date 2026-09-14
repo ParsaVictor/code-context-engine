@@ -55,3 +55,25 @@ done
 
 ۲۲ تسک فیکسچر + ۲۱ dev + ۲۰ large + ۲۰ holdout ≈ ۸۳ تسک × ۳ context × ۲ باینری ≈ ۵۰۰ جفت فراخوانی (پاسخ + داور
 یا patch)؛ context ≈ ۱–۲۰k توکن. با opus/sonnet در حد چند ده دلار. اگر محدودیت بود: فقط holdout + فیکسچر (۴۲ تسک).
+
+## حالت ارزان (session 10 — تصمیم بعد از تست کلید بدون اعتبار)
+
+Parsa بودجه‌ی «چند ده دلار» را نمی‌پذیرد؛ حداقل شارژ Anthropic ۵ دلار است. اجرای زیر برآورد ~۱ دلار دارد:
+
+```bash
+export ANTHROPIC_API_KEY=...          # فقط در shell
+# فقط holdout + فیکسچر، فقط باینری فعلی، پاسخ‌دهنده Haiku، داور Sonnet (کوتاه، ارزان)
+for ctx in packet whole-gold-files grep; do
+  ./target/release/neuromesh eval --tasks --executor model --context $ctx \
+    --model claude-haiku-4-5-20251001 --judge-model claude-sonnet-5 --json \
+    > "reports/phase-c/cheap-$ctx.json"
+done
+```
+
+حجم: ۲۲ تسک فیکسچر + ۲۰ holdout = ۴۲ تسک × ۳ context ≈ ۱۲۶ پاسخ (Haiku، ~۱۰k ورودی) + ۱۲۶ داوری (Sonnet، ~۲k)
+≈ ۱.۳M توکن Haiku ورودی + ۰.۳M Sonnet ≈ **زیر ۲ دلار**. baseline `7442600` حذف شده (دو برابر هزینه؛ فقط اگر بودجه بود).
+گیت‌ها همان سه گیت بالا؛ عدد Haiku به‌عنوان «کف» گزارش می‌شود، نه عدد نهایی.
+
+`ANTHROPIC_BASE_URL` (متغیر رسمی SDK) از session 10 خوانده می‌شود — برای پروکسی/گیت‌وی. روترهای رایگان
+(agentrouter و مشابه) رد شدند: فقط یک مدل، استخر بودجه‌ی مشترک خالی، فیلتر User-Agent، اصالت مدل نامعلوم —
+عددشان قابل دفاع نیست و برای ریپوی خصوصی ممنوع است.

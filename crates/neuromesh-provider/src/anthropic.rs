@@ -27,7 +27,13 @@ impl Provider for AnthropicProvider {
 
     fn send<'a>(&'a self, request: &'a ProviderRequest) -> BoxFuture<'a, Result<ProviderResponse>> {
         Box::pin(async move {
-            let url = "https://api.anthropic.com/v1/messages";
+            // `ANTHROPIC_BASE_URL` (the same variable the official SDKs read)
+            // points the call at a proxy or gateway; the path is fixed.
+            let base = std::env::var("ANTHROPIC_BASE_URL")
+                .ok()
+                .filter(|b| !b.trim().is_empty())
+                .unwrap_or_else(|| "https://api.anthropic.com".to_string());
+            let url = format!("{}/v1/messages", base.trim_end_matches('/'));
 
             let mut system_prompt = None;
             let mut messages = Vec::new();

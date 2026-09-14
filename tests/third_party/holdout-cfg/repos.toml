@@ -1,0 +1,17 @@
+# Config→Code domain holdout (phase D, session 10). Never tuned on. Gold
+# written from reading configs + source before any engine run; G1 checked.
+#
+#   hydra — ashleve/lightning-hydra-template: Hydra YAML configs read as
+#           cfg.x / cfg.get("x") / self.hparams.x in Lightning modules
+#   detr  — facebookresearch/detr: one argparse parser in main.py, keys read
+#           as args.x by build_* functions in other files
+
+[[repo]]
+name = "hydra"
+url = "https://github.com/ashleve/lightning-hydra-template"
+rev = "bddbc24b82ab6ccfa6243e815a49dc5bfe8d4144"
+
+[[repo]]
+name = "detr"
+url = "https://github.com/facebookresearch/detr"
+rev = "29901c51d7fe8712168b8d0d64351170bc0f83e0"

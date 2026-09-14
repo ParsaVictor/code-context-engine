@@ -3,7 +3,7 @@
 Every number here comes from one command on a pinned checkout:
 
 ```bash
-bash scripts/benchmark-holdout.sh          # all five sets, ~25 min on a laptop
+bash scripts/benchmark-holdout.sh          # all seven public sets, ~30 min on a laptop
 bash scripts/benchmark-holdout.sh holdout  # one set
 ```
 
@@ -15,12 +15,13 @@ not the project's number.** Only the holdout rows are.
 | set | repos | role | recall | precision | forbidden | oracle reachable / strict |
 |---|---|---|---|---|---|---|
 | dev-4 | nanoGPT, express, vit-pytorch, full-stack-fastapi | tuning set | 1.000 | 0.906 | 0 | 21/21 · 19 |
-| large | django (3.5k files), ultralytics | tuning set, large | 0.950 | 0.507 | 0 | 19/20 · 14 |
+| large | django (3.5k files), ultralytics | tuning set, large | 0.950 | 0.502 | 0 | 19/20 · 14 |
 | **holdout-2** | gin (Go), torchvision (Python) | never tuned on | **1.000** | **0.496** | **0** | 20/20 · 16 |
 | **holdout-c** | libuv (C), fmt (C++) | never tuned on | **1.000** | **0.656** | **0** | 16/16 · 10 |
 | **holdout-lang** | os-lib (Scala), r-lib/cli (R), Flux.jl (Julia) | never tuned on | **1.000** | **0.502** | **1** | 14/15 · 9 |
 | **holdout-ml** | keras-io examples (Keras), setfit (Hugging Face) | never tuned on | **1.000** | **0.360** | **0** | 10/10 · 8 |
-| **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.601** | **0** | — |
+| **holdout-cfg** | lightning-hydra-template (Hydra YAML), detr (argparse) | never tuned on; Config→Code questions | **0.879** | **0.610** | **0** | — |
+| **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.587** | **0** | — |
 
 - **recall / precision** are file-level against a hand-written gold (`gold_files`) per question.
   A forbidden file in the packet zeroes that question's precision.

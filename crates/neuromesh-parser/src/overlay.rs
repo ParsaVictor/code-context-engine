@@ -21,6 +21,7 @@ pub fn apply(path: &Path, content: &str, language: SourceLanguage, ast: &mut Ast
             django_overlay(path, content, ast);
             fastapi_overlay(content, ast);
             crate::ml_overlay::pytorch_overlay(path, content, ast);
+            crate::config_reads::config_reads_overlay(path, content, ast);
             if language == SourceLanguage::Notebook {
                 crate::notebook_cells::notebook_overlay(path, content, ast);
             }

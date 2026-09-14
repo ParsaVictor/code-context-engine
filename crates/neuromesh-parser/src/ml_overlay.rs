@@ -124,8 +124,8 @@ fn has_torch_evidence(content: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-struct PyBlock {
-    name: String,
+pub(crate) struct PyBlock {
+    pub(crate) name: String,
     /// Base classes, empty for a `def`.
     bases: Vec<String>,
     line: usize,
@@ -144,7 +144,7 @@ impl PyBlock {
     }
 }
 
-fn python_defs(content: &str) -> Vec<PyBlock> {
+pub(crate) fn python_defs(content: &str) -> Vec<PyBlock> {
     static DEF_RE: OnceLock<Regex> = OnceLock::new();
     let re = DEF_RE.get_or_init(|| {
         Regex::new(r"(?m)^([ \t]*)(?:async[ \t]+)?def[ \t]+([A-Za-z_]\w*)").unwrap()
@@ -219,7 +219,7 @@ fn block_end(content: &str, header_start: usize, indent: usize) -> usize {
     content.len()
 }
 
-fn line_of(content: &str, byte: usize) -> usize {
+pub(crate) fn line_of(content: &str, byte: usize) -> usize {
     content
         .get(..byte)
         .map(|head| head.bytes().filter(|b| *b == b'\n').count() + 1)
@@ -826,7 +826,7 @@ fn push_metrics(content: &str, defs: &[PyBlock], ast: &mut AstAnalysisResult) {
 
 /// The innermost block containing this byte offset — smallest span wins, so a
 /// nested def beats its parent and both beat the synthetic module-level block.
-fn enclosing_def(defs: &[PyBlock], byte: usize) -> Option<&PyBlock> {
+pub(crate) fn enclosing_def(defs: &[PyBlock], byte: usize) -> Option<&PyBlock> {
     defs.iter()
         .filter(|d| byte >= d.start && byte < d.end)
         .min_by_key(|d| d.end - d.start)
@@ -879,7 +879,7 @@ fn backward_calls(content: &str) -> impl Iterator<Item = usize> + '_ {
     content.match_indices(".backward(").map(|(at, _)| at)
 }
 
-fn push_symbol(
+pub(crate) fn push_symbol(
     ast: &mut AstAnalysisResult,
     name: &str,
     node_type: NodeType,
@@ -899,7 +899,7 @@ fn push_symbol(
     ));
 }
 
-fn push_relationship(
+pub(crate) fn push_relationship(
     ast: &mut AstAnalysisResult,
     source: &str,
     target: &str,

@@ -1,0 +1,67 @@
+name: Holdout benchmark
+
+# The seven public gold sets, one table, posted as a comment on the PR.
+# Manual (workflow_dispatch) or by labelling a PR `benchmark`: a full run is
+# ~25 minutes and every PR does not need one. Not a gate — the ratchet rule
+# (docs/planning/07-session10-plan.fa.md) is applied by reading the table.
+# The private 5b set cannot run here: its gold and checkout are not in the tree.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  holdout:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'benchmark'
+    name: Seven gold sets
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Cache third-party checkouts
+        uses: actions/cache@v4
+        with:
+          path: target/third_party
+          key: third-party-${{ hashFiles('tests/third_party/**/repos.toml') }}
+      - name: Benchmark
+        run: |
+          CARGO_BUILD_JOBS=4 bash scripts/benchmark-holdout.sh | tee benchmark.txt
+      - name: Table
+        id: table
+        run: |
+          {
+            echo 'body<<EOF'
+            echo "### Holdout benchmark — \`${GITHUB_SHA::7}\`"
+            echo
+            echo '```'
+            cat benchmark.txt
+            echo '```'
+            echo
+            echo 'Ratchet: a set regresses only on precision −0.02, recall −0.01, or a new forbidden hit.'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: process.env.BODY,
+            });
+        env:
+          BODY: ${{ steps.table.outputs.body }}
+      - name: Summary
+        run: cat benchmark.txt >> "$GITHUB_STEP_SUMMARY"

@@ -551,3 +551,31 @@ walker: `.claude/`، `.cursor/`، `.codex/`، `.windsurf/`، `.aider/` مثل `.
 index 2186→2610ms (۱.۱۹×)، query p50 960→1068ms (۱.۱۱×) — گیت ≤۱.۵× pass. `eval --release-gates`: precision
 0.383 یکسان؛ `l1_p95` base **55ms**، F54 **53ms** — هر دو بالای سقف ۵۰ تحت بار امروز (۴۷ در آخرین اندازه‌گیری آرام)؛
 به F54 نسبت داده نمی‌شود، ولی G5 می‌گوید در اولین فرصت آرام دوباره بسنج.
+
+## Config→Code — ساخته و اندازه‌گیری شد (session 10)
+
+پنج قطعه: `yaml.rs` (کلید YAML → نود Config، لیست/workflow/`.github` بیرون، سقف ۲۰۰)، `config_reads.rs` (Python:
+`cfg.x`/`args.x`/`config["x"]`/`cfg.get("x")` → یال Parameterizes با hint فایل از `load("x.yaml")`/Hydra
+`config_name`؛ `add_argument("--x")` → نود Hyperparameter)، arm جدید linker (`resolve_config_key`: فقط بین
+نودهای Config/Hyperparameter، hint→فایل، یکتا→Proven، چند→dominant/Likely)، تست یکپارچه، holdout دامنه
+`holdout-cfg` (lightning-hydra-template + detr، ۱۱ تسک، گلد قبل از اجرا).
+
+سه درس از سه افت (هر کدام probe شد):
+| افت | علت | قاعده |
+|---|---|---|
+| holdout-ml 0.360→0.347، dev 0.906→0.866 (v2) | نود Hyperparameter `metric`/`dataset` از اسکریپت argparse با کلمه‌ی انگلیسی prompt در حلقه‌ی ۳۶ match شد؛ فیلتر اول JSON را هم گرفت و dev افتاد | کلید YAML/argparse فقط با نام **کدشکل** (`_`، رقم، camel) حل می‌شود؛ کلید JSON رفتار قبلی |
+| large `ultra_predict_stream` 0.25→0.17 | سه call `thop.profile(...)` به کلید YAML `profile` وصل شدند؛ بعد از فیلتر، `Profile` از ۷ به ۴ caller *واقعی* رسید → «callee متمرکز» → `ops.py` وارد packet. یعنی روی main یک یال غلط، یک گلد را نجات می‌داد | کلید Config/Hyperparameter هرگز هدف Calls نیست (سه مسیر resolver: `resolve_call_target`، `resolve_call_ranked`، fallback `resolve_ranked`) |
+| hub در spreading | کلید `conf` با ده‌ها خواننده، انرژی را از یک خواننده به بقیه می‌برد | `spread_energies` یال Parameterizes را فقط در جهت کلید→خواننده می‌پیماید |
+
+| مجموعه | main (#76) | Config→Code |
+|---|---|---|
+| holdout-cfg | — | 0.879 / **0.610** / 0 |
+| holdout-ml | 0.360 | 0.360 |
+| large | 0.507 | 0.502 (−۰.۰۰۵، علت بالا) |
+| private | 0.601 | 0.587 (−۰.۰۱۴: یک فایل در `b2b_totp_verify` — `auth.controller.ts`؛ زیر آستانه‌ی ۰.۰۲) |
+| dev / holdout-2 / c / lang | 0.906 / 0.496 / 0.656 / 0.502 | بی‌تغییر |
+
+recall holdout-cfg 0.879: دو تسک hydra که کلید فقط از طریق `self.hparams.x` خوانده می‌شود و `hparams` با
+`save_hyperparameters()` پر می‌شود — یالی به YAML نیست چون نام فایل config در آن ماژول نیامده (Hydra `_target_`
+آن را instantiate می‌کند). ثبت (F55): «کلید بی‌hint در ریپوی چند-config» — hint از `_target_: module.Class`
+در YAML به کلاس Python قابل استخراج است؛ انجام نشد (precision-tuning بسته).
