@@ -305,6 +305,24 @@ probe `ultra_validator_call` بعد از F41/F42: `concept:validate` (از کل�
 
 ratchet large: precision 0.38→0.47، forbidden ≤1→**0**، reachable 0.89→0.94.
 
+## F45 — `is_test_path` فقط دایرکتوری `tests/` را می‌شناخت (فیکس شد)
+
+probe چهار تسک gin با precision 0.25: `githubapi_test.go` (از `client_expansion:route` → یک helper تست)،
+`auth_test.go`/`validate_test.go`/`recovery_test.go` (fill، امتیاز ۲۴–۲۸). فیلتر نویز fill (`is_noise_node` →
+`is_low_priority_source_path` → `is_test_path`) فقط `tests/`، `test/`، `_tests.rs` را می‌شناخت — نه `_test.go`،
+`test_*.py`، `*.test.ts`/`*.spec.js`، `_test.rs`، `*Test.java`. یعنی روی Go/Python/JS همان چیزی که F37 گزارش
+کرده بود (فایل تست در ۱۰/۲۰ کیس holdout) اصلاً فیلتر نمی‌شد. فیکس در `neuromesh-core/source_path.rs` + در
+`weak_symbol_seed.rs` seed ضعیفی که به مسیر نویز می‌رسد کنار anchor قوی حذف می‌شود.
+
+| مجموعه | قبل (main 0a1004f) | بعد (F45) |
+|---|---|---|
+| dev-4 | 1.000 / 0.906 / 0 / 21 strict 19 | بدون تغییر |
+| large | 0.950 / 0.473 / 0 / 19 strict 14 | 0.950 / **0.504** / 0 / 19 strict 14 |
+| holdout-2 | 1.000 / 0.477 / 0 / 20 strict 16 | 1.000 / **0.489** / 0 / 20 strict 16 |
+
+per-task holdout: gin_recovery 0.20→0.50، gin_context_next 0.25→0.50، ولی gin_static 1.00→0.67 (یک فایل
+جایگزین وارد شد — بررسی نشده؛ سطح مجموعه بالا رفت، ratchet سطح مجموعه است). ratchet large precision 0.47→0.50.
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.

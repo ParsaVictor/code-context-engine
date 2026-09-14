@@ -55,11 +55,32 @@ pub fn is_locale_path(path: &Path) -> bool {
 
 pub fn is_test_path(path: &Path) -> bool {
     let lower = normalized_source_path(path);
-    has_dir_segment(path, &["tests", "test"])
+    if has_dir_segment(path, &["tests", "test", "__tests__"])
         || lower.contains("_tests.rs")
         || lower.ends_with("/tests.rs")
         || lower.contains("quality_tests")
         || lower.contains("repo_quality_tests")
+    {
+        return true;
+    }
+    // Per-language test file naming: `x_test.go`, `test_x.py`/`x_test.py`,
+    // `x.test.ts`/`x.spec.js`, `x_test.rs`, `XTest.java`/`XTests.cs`.
+    let file = lower.rsplit('/').next().unwrap_or(&lower);
+    let Some((stem, ext)) = file.rsplit_once('.') else {
+        return false;
+    };
+    match ext {
+        "go" => stem.ends_with("_test"),
+        "py" => stem.starts_with("test_") || stem.ends_with("_test") || stem == "conftest",
+        "rs" => stem.ends_with("_test"),
+        "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" => {
+            stem.ends_with(".test") || stem.ends_with(".spec")
+        }
+        "java" | "kt" | "cs" | "php" | "rb" | "swift" => {
+            stem.ends_with("test") || stem.ends_with("tests") || stem.ends_with("_spec")
+        }
+        _ => false,
+    }
 }
 
 pub fn is_example_path(path: &Path) -> bool {
