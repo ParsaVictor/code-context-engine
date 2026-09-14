@@ -151,6 +151,55 @@ pub(crate) fn steer_same_name_file(
     }
 }
 
+/// The symbol-level twin of [`steer_same_name_file`]: libuv defines `uv_run`
+/// in both `src/unix/core.c` and `src/win/core.c`. A question that says
+/// "on Unix" names the directory; the seed moves to the same-named symbol
+/// whose directory the prompt names, when exactly one does.
+pub(crate) fn steer_same_name_symbol(
+    graph: &NeuralProjectGraph,
+    resolved: &NodeId,
+    prompt: &str,
+) -> Option<NodeId> {
+    let node = graph.get_node(resolved)?;
+    if node.node_type == neuromesh_core::NodeType::File {
+        return None;
+    }
+    let twins: Vec<(NodeId, PathBuf)> = graph
+        .nodes_named(&node.name)
+        .into_iter()
+        .filter(|n| n.node_type == node.node_type && n.parent == node.parent)
+        .map(|n| {
+            let rel = relative_to_workspace(graph, &n.file_path);
+            (n.id, rel)
+        })
+        .collect();
+    if twins.len() < 2 {
+        return None;
+    }
+    let tokens = steer_tokens(prompt, "");
+    let mut best: Option<(usize, &NodeId)> = None;
+    let mut tied = false;
+    for (id, r) in &twins {
+        let segs = dir_segments(r);
+        let score = tokens
+            .iter()
+            .filter(|t| segs.iter().any(|s| s == *t))
+            .count();
+        match best {
+            Some((b, _)) if score < b => {}
+            Some((b, _)) if score == b => tied = true,
+            _ => {
+                best = Some((score, id));
+                tied = false;
+            }
+        }
+    }
+    match best {
+        Some((score, id)) if score > 0 && !tied && id != resolved => Some(id.clone()),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

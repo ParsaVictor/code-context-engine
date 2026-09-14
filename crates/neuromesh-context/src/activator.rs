@@ -1650,6 +1650,8 @@ pub(crate) fn resolve_seed_query(
         Some((id, conf)) => {
             let id =
                 crate::seed::path_steer::steer_same_name_file(graph, &id, prompt).unwrap_or(id);
+            let id =
+                crate::seed::path_steer::steer_same_name_symbol(graph, &id, prompt).unwrap_or(id);
             Some((id, conf))
         }
         None => crate::seed::path_steer::resolve_dir_segment_seed(graph, query, prompt)

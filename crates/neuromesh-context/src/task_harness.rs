@@ -244,9 +244,39 @@ fn code_defines_symbol(code: &str, symbol: &str) -> bool {
             if keyword_before || (before.is_empty() && body_opener) {
                 return true;
             }
+            // `int uv_timer_start(uv_timer_t* handle,` / `void Foo::bar(int x) {`:
+            // a return-type-first definition (C, C++, Java, C#) has only
+            // type-shaped tokens before the name and a parameter list after it.
+            if after.starts_with('(') && c_style_type_prefix(before) {
+                return true;
+            }
         }
     }
     false
+}
+
+/// Whether `before` (the text left of a symbol name) reads as a C-family
+/// return type: identifiers, `*`/`&`, `::`, template brackets — no call
+/// punctuation, no assignment, no `return`.
+fn c_style_type_prefix(before: &str) -> bool {
+    let before = before.trim();
+    if before.is_empty() {
+        return false;
+    }
+    if before.contains(['=', '(', ')', ',', ';', '"', '\'']) {
+        return false;
+    }
+    const NOT_A_TYPE: &[&str] = &["return", "else", "if", "while", "for", "switch", "case"];
+    let tokens: Vec<&str> = before
+        .split(|c: char| c.is_whitespace() || c == '*' || c == '&')
+        .filter(|t| !t.is_empty())
+        .collect();
+    !tokens.is_empty()
+        && tokens.iter().all(|t| {
+            !NOT_A_TYPE.contains(t)
+                && t.chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '<' || c == '>')
+        })
 }
 
 /// Score a packet against a case without running a model.

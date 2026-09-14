@@ -1,0 +1,61 @@
+# libuv gold — written from reading the source at v1.49.2 before any engine
+# run. Prompts say "on Unix" where the same function also exists under
+# src/win/, so a platform-blind resolver is a real failure, not gold noise.
+# G1: every forbidden file checked by grep — not included by and no function
+# of it called from the gold files.
+
+[[task]]
+id = "uv_timer_start_and_run"
+prompt = "How does uv_timer_start register a timer in the loop's heap, and how does uv__run_timers fire the expired ones?"
+gold_files = ["src/timer.c"]
+forbidden_files = ["src/unix/tty.c"]
+expect_seeds_missed = false
+
+[[task]]
+id = "uv_run_loop_unix"
+prompt = "On Unix, how does uv_run iterate the event loop: uv__loop_alive, pending/idle/prepare phases, uv__io_poll with uv__backend_timeout, then check and closing handles?"
+gold_files = ["src/unix/core.c"]
+forbidden_files = ["src/win/core.c"]
+expect_seeds_missed = false
+
+[[task]]
+id = "uv_async_send_wakeup"
+prompt = "On Unix, how does uv_async_send use the pending and busy atomics to wake the loop through uv__async_send exactly once?"
+gold_files = ["src/unix/async.c"]
+forbidden_files = ["src/unix/signal.c"]
+expect_seeds_missed = false
+
+[[task]]
+id = "uv_threadpool_queue_work"
+prompt = "How does uv_queue_work hand a request to the thread pool through uv__work_submit, and how does the worker function pick work off the queue?"
+gold_files = ["src/threadpool.c"]
+forbidden_files = ["src/unix/random-devurandom.c"]
+expect_seeds_missed = false
+
+[[task]]
+id = "uv_listen_tcp_unix"
+prompt = "On Unix, how does uv_listen dispatch a TCP stream to uv__tcp_listen, and how does uv__tcp_listen start the io watcher with uv__server_io?"
+gold_files = ["src/unix/stream.c", "src/unix/tcp.c"]
+forbidden_files = ["src/unix/poll.c"]
+expect_seeds_missed = false
+
+[[task]]
+id = "uv_signal_start_register"
+prompt = "On Unix, how does uv_signal_start go through uv__signal_start to register a handler with uv__signal_register_handler when no watcher exists for that signum yet?"
+gold_files = ["src/unix/signal.c"]
+forbidden_files = ["src/unix/process.c"]
+expect_seeds_missed = false
+
+[[task]]
+id = "uv_getaddrinfo_request"
+prompt = "On Unix, how does uv_getaddrinfo validate its arguments, convert the hostname with uv__idna_toascii, and pack hostname, service and hints into one buffer?"
+gold_files = ["src/unix/getaddrinfo.c"]
+forbidden_files = ["src/unix/getnameinfo.c"]
+expect_seeds_missed = false
+
+[[task]]
+id = "uv_loop_init_unix"
+prompt = "On Unix, how does uv_loop_init allocate the internal fields, initialise the timer heap and handle queues, and what does it undo on failure?"
+gold_files = ["src/unix/loop.c"]
+forbidden_files = ["src/unix/loop-watcher.c"]
+expect_seeds_missed = false

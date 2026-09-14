@@ -3,9 +3,9 @@ use crate::html::HtmlParser;
 use crate::json::JsonParser;
 use crate::python_lang::PythonParser;
 use crate::query_extract::{
-    self, Grammar, QueryOptions, CSHARP_QUERIES, DART_QUERIES, GO_QUERIES, JAVA_QUERIES,
-    KOTLIN_QUERIES, PHP_QUERIES, PYTHON_QUERIES, RUBY_QUERIES, RUST_QUERIES, SWIFT_QUERIES,
-    TYPESCRIPT_QUERIES,
+    self, Grammar, QueryOptions, CPP_QUERIES, CSHARP_QUERIES, C_QUERIES, DART_QUERIES, GO_QUERIES,
+    JAVA_QUERIES, KOTLIN_QUERIES, PHP_QUERIES, PYTHON_QUERIES, RUBY_QUERIES, RUST_QUERIES,
+    SWIFT_QUERIES, TYPESCRIPT_QUERIES,
 };
 use crate::rust_lang::RustParser;
 use crate::scss::ScssParser;
@@ -163,11 +163,18 @@ impl LanguageSpec {
                 options: QueryOptions::typescript(),
                 fallback: Fallback::Html,
             },
-            SourceLanguage::C | SourceLanguage::Cpp => Self {
+            SourceLanguage::C => Self {
                 language,
-                grammar: None,
-                queries: None,
-                options: QueryOptions::java(),
+                grammar: Some(Grammar::C),
+                queries: Some(C_QUERIES),
+                options: QueryOptions::c(),
+                fallback: Fallback::Generic,
+            },
+            SourceLanguage::Cpp => Self {
+                language,
+                grammar: Some(Grammar::Cpp),
+                queries: Some(CPP_QUERIES),
+                options: QueryOptions::c(),
                 fallback: Fallback::Generic,
             },
             SourceLanguage::JSON => Self {
@@ -242,6 +249,8 @@ mod tests {
             SourceLanguage::Dart,
             SourceLanguage::Swift,
             SourceLanguage::Ruby,
+            SourceLanguage::C,
+            SourceLanguage::Cpp,
         ] {
             let spec = LanguageSpec::get(language);
             assert!(
@@ -249,7 +258,7 @@ mod tests {
                 "{language:?} should have a query grammar"
             );
         }
-        let c = LanguageSpec::get(SourceLanguage::C);
-        assert!(c.grammar.is_none());
+        let json = LanguageSpec::get(SourceLanguage::JSON);
+        assert!(json.grammar.is_none());
     }
 }

@@ -98,7 +98,9 @@ impl SourceLanguage {
             "swift" => SourceLanguage::Swift,
             "dart" => SourceLanguage::Dart,
             "rb" | "rake" => SourceLanguage::Ruby,
-            "c" | "h" => SourceLanguage::C,
+            "c" => SourceLanguage::C,
+            // A `.h` may be C or C++; the C++ grammar is the superset.
+            "h" => SourceLanguage::Cpp,
             "cpp" | "hpp" | "cc" | "cxx" => SourceLanguage::Cpp,
             "json" | "jsonc" => SourceLanguage::JSON,
             "yaml" | "yml" => SourceLanguage::YAML,

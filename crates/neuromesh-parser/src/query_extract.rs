@@ -14,6 +14,8 @@ pub const RUST_QUERIES: &str = include_str!("queries/rust.scm");
 pub const TYPESCRIPT_QUERIES: &str = include_str!("queries/typescript.scm");
 pub const PYTHON_QUERIES: &str = include_str!("queries/python.scm");
 pub const GO_QUERIES: &str = include_str!("queries/go.scm");
+pub const C_QUERIES: &str = include_str!("queries/c.scm");
+pub const CPP_QUERIES: &str = include_str!("queries/cpp.scm");
 pub const JAVA_QUERIES: &str = include_str!("queries/java.scm");
 pub const KOTLIN_QUERIES: &str = include_str!("queries/kotlin.scm");
 pub const PHP_QUERIES: &str = include_str!("queries/php.scm");
@@ -35,6 +37,8 @@ pub enum Grammar {
     Dart,
     Swift,
     Ruby,
+    C,
+    Cpp,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -46,6 +50,7 @@ pub enum ImportStyle {
     Go,
     Path,
     Ruby,
+    CInclude,
 }
 
 #[derive(Clone, Copy)]
@@ -155,6 +160,15 @@ impl QueryOptions {
         }
     }
 
+    pub fn c() -> Self {
+        Self {
+            import: ImportStyle::CInclude,
+            export: ExportStyle::NotUnderscore,
+            skip_cfg_test: false,
+            scan_type_uses: true,
+        }
+    }
+
     pub fn ruby() -> Self {
         Self {
             import: ImportStyle::Ruby,
@@ -206,6 +220,8 @@ impl Grammar {
             Grammar::Dart => tree_sitter_dart_orchard::LANGUAGE.into(),
             Grammar::Swift => tree_sitter_swift::LANGUAGE.into(),
             Grammar::Ruby => tree_sitter_ruby::LANGUAGE.into(),
+            Grammar::C => tree_sitter_c::LANGUAGE.into(),
+            Grammar::Cpp => tree_sitter_cpp::LANGUAGE.into(),
         })
     }
 }
@@ -271,6 +287,14 @@ fn compiled_query(
             load(&Q, language, source)
         }
         Grammar::Ruby => {
+            static Q: OnceLock<Option<Query>> = OnceLock::new();
+            load(&Q, language, source)
+        }
+        Grammar::C => {
+            static Q: OnceLock<Option<Query>> = OnceLock::new();
+            load(&Q, language, source)
+        }
+        Grammar::Cpp => {
             static Q: OnceLock<Option<Query>> = OnceLock::new();
             load(&Q, language, source)
         }
@@ -434,6 +458,7 @@ fn extract(
             ImportStyle::Go => collect_go_import(node, filename, src, &mut result),
             ImportStyle::Path => collect_path_import(node, filename, src, &mut result),
             ImportStyle::Ruby => {}
+            ImportStyle::CInclude => collect_c_include(node, filename, src, &mut result),
         }
     }
     if options.import == ImportStyle::Ruby {
@@ -871,6 +896,33 @@ fn collect_go_import(node: Node, filename: &str, src: &[u8], result: &mut AstAna
     );
 }
 
+/// `#include "dir/name.h"` names a project file; `<stdio.h>` names the
+/// system and is not a graph edge. The imported symbol is the header stem,
+/// the path hint the quoted path itself.
+fn collect_c_include(node: Node, filename: &str, src: &[u8], result: &mut AstAnalysisResult) {
+    let raw = text(node, src);
+    let Some(start) = raw.find('"') else {
+        return;
+    };
+    let rest = &raw[start + 1..];
+    let Some(end) = rest.find('"') else {
+        return;
+    };
+    let path = rest[..end].trim().replace('\\', "/");
+    if path.is_empty() {
+        return;
+    }
+    let stem = Path::new(&path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+    if stem.is_empty() || stem == filename {
+        return;
+    }
+    record_import(result, filename, stem, path, node.start_position().row + 1);
+}
+
 fn collect_path_import(node: Node, filename: &str, src: &[u8], result: &mut AstAnalysisResult) {
     let line = node.start_position().row + 1;
     let mut spec = text(node, src).trim().trim_end_matches(';').to_string();
@@ -961,8 +1013,13 @@ fn is_cfg_test_mod(node: Node, src: &[u8]) -> bool {
 
 fn extract_ident(node: Node, src: &[u8]) -> Option<String> {
     match node.kind() {
-        "type_identifier" | "identifier" | "simple_identifier" | "name" | "field_identifier"
-        | "package_identifier" => Some(text(node, src)),
+        "type_identifier"
+        | "identifier"
+        | "simple_identifier"
+        | "name"
+        | "field_identifier"
+        | "package_identifier"
+        | "namespace_identifier" => Some(text(node, src)),
         "generic_type" | "pointer_type" | "slice_type" | "array_type" | "channel_type"
         | "nullable_type" | "user_type" => node
             .child_by_field_name("type")
@@ -1324,6 +1381,109 @@ class SmsReceiver {
                 && r.target_symbol == "save"
                 && r.receiver_hint.as_deref() == Some("type:SmsStore")
         }));
+    }
+
+    #[test]
+    fn c_functions_structs_includes_and_calls() {
+        let code = r#"
+#include <stdio.h>
+#include "sds.h"
+#include "util/hash.h"
+
+typedef struct listNode {
+    struct listNode *next;
+    void *value;
+} listNode;
+
+enum color { RED, BLUE };
+
+static int helper(int x) { return x + 1; }
+
+sds sdscatlen(sds s, const void *t, size_t len) {
+    size_t curlen = sdslen(s);
+    s = sdsMakeRoomFor(s, len);
+    return helper(curlen);
+}
+"#;
+        let ast = parse_lang(Grammar::C, C_QUERIES, QueryOptions::c(), "sds.c", code);
+        let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"sdscatlen"), "{names:?}");
+        assert!(names.contains(&"helper"), "{names:?}");
+        assert!(names.contains(&"listNode"), "{names:?}");
+        assert!(names.contains(&"color"), "{names:?}");
+        let imported: Vec<&str> = ast
+            .imports
+            .iter()
+            .flat_map(|i| i.imported_symbols.iter().map(String::as_str))
+            .collect();
+        assert!(imported.contains(&"hash"), "{imported:?}");
+        assert!(
+            !imported.contains(&"stdio"),
+            "system includes are not edges: {imported:?}"
+        );
+        assert!(
+            !imported.contains(&"sds"),
+            "self include is skipped: {imported:?}"
+        );
+        assert!(ast
+            .relationships
+            .iter()
+            .any(|r| { r.source_symbol == "sdscatlen" && r.target_symbol == "sdsMakeRoomFor" }));
+        assert!(ast
+            .relationships
+            .iter()
+            .any(|r| r.source_symbol == "sdscatlen" && r.target_symbol == "helper"));
+    }
+
+    #[test]
+    fn cpp_methods_carry_their_class_as_parent() {
+        let code = r#"
+#include "format.h"
+namespace fmt {
+class Formatter {
+public:
+    void format(int x);
+    int width() const { return width_; }
+private:
+    int width_;
+};
+
+void Formatter::format(int x) {
+    auto w = width();
+    emit_padding(w);
+}
+
+enum class Align { Left, Right };
+using Buffer = std::vector<char>;
+}
+"#;
+        let ast = parse_lang(
+            Grammar::Cpp,
+            CPP_QUERIES,
+            QueryOptions::c(),
+            "format.cc",
+            code,
+        );
+        let format = ast
+            .symbols
+            .iter()
+            .find(|s| s.name == "format")
+            .expect("Formatter::format");
+        assert_eq!(format.parent.as_deref(), Some("Formatter"));
+        let width = ast
+            .symbols
+            .iter()
+            .find(|s| s.name == "width")
+            .expect("width");
+        assert_eq!(width.parent.as_deref(), Some("Formatter"));
+        let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"Formatter"), "{names:?}");
+        assert!(names.contains(&"Align"), "{names:?}");
+        assert!(names.contains(&"Buffer"), "{names:?}");
+        assert!(ast
+            .relationships
+            .iter()
+            .any(|r| r.source_symbol == "format" && r.target_symbol == "emit_padding"));
     }
 
     #[test]
