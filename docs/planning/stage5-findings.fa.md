@@ -428,6 +428,41 @@ per-language: Scala precision 0.80 (تمیز)، Julia 0.47، R **0.24** — پک
   django از همین مسیر فایل خواهر را می‌گیرند. باز هم F36: هر تغییر آن حلقه روی large می‌شکند.
 - **دیسک پر شد** (۹G آزاد): `target/debug/incremental` ۷.۸G + build مقایسه‌ای `/tmp/nm-base-target` ۱.۵G پاک شدند.
 
+## فاز D-۳ — overlay Keras / Hugging Face + holdout دامنه (keras-io، setfit)
+
+overlay ML (`ml_overlay.rs`) torch-gated بود. حالا: شواهد `tensorflow`/`keras`/`transformers`؛ base‌های `Model`/`Layer`
+(Keras)، `TFPreTrainedModel`/`FlaxPreTrainedModel`/`PeftModel` (HF)؛ TrainLoop با `.fit(`، `trainer.train(`،
+`GradientTape`+`apply_gradients`؛ EvalLoop با `.evaluate(`، `trainer.predict(`؛ Checkpoint با `.save`/`.save_weights`/
+`.save_pretrained`/`.push_to_hub` و `.load_weights`/`.from_pretrained`/`load_model`؛ نام checkpoint از هر literal
+(`"bert-base-uncased"`، `"out/final"`) نه فقط پسوند `.pt`. دو تست واحد (Keras، HF).
+
+**Holdout:** `tests/third_party/holdout-ml/` — keras-io (۲۷۷ اسکریپت example با آینه‌ی ipynb و md) + setfit (HF
+Trainer-shaped)، ۵+۵ تسک، گلد قبل از اجرا، G1 (model_card.py چون import می‌شد رد شد → data.py).
+
+| اجرا | recall | precision | forbidden | reachable / strict |
+|---|---|---|---|---|
+| اول (overlay جدید) | 0.500 | 0.203 | 0 | 5/10 / 3 |
+| + walker: `examples/` وقتی هسته‌ی ریپوست ایندکس می‌شود | 0.600 | 0.203 | 1 | 5/10 / 3 |
+| + ترجیح کد بر ipynb/md هم‌stem | 0.700 | 0.223 | 1 | 6/10 / 4 |
+| + `file_by_stem` (کلمه‌ی کدشکل = stem فایل، بعد از جست‌وجوی symbol) | 0.900 | 0.307 | 1 | 8/10 / 6 |
+| + steering با کلمات stem (وزن ۲) + seed artifact هم‌نامِ seed قبلی وارد نشود | **0.900** | **0.340** | **0** | **9/10** / 7 |
+
+یافته‌ها (همه ساختاری، نه واژگانی):
+- **walker هر `examples/` را مطلقاً نادیده می‌گرفت** (`walker.rs` لیست ثابت). برای keras-io یعنی هیچ‌چیز از محتوای
+  اصلی. حالا یک‌بار با examples قدم می‌زند و بعد تصمیم می‌گیرد: اگر ≥۵۰٪ فایل‌های *زبان برنامه‌نویسی* (نه md/json/html)
+  زیر `examples/` باشند، examples هسته است و می‌ماند؛ وگرنه مثل قبل حذف. `NeuralProjectGraph::examples_are_core()`
+  (هر فایل example ایندکس‌شده = تصمیم گرفته شده) در جریمه‌ی ranking (`is_fixture_path_in`)، فیلتر نویز selector و
+  هرس seed ضعیف استفاده می‌شود؛ `is_low_priority_source_path_in(path, examples_are_core)` در core.
+- **سه آینه‌ی هم‌stem** (`x.py`، `ipynb/x.ipynb`، `md/x.md`): ranking فایل md را می‌گرفت. tiebreak: md/rst/txt −۸،
+  ipynb −۴.
+- **stem فایل به‌عنوان query**: `image_classification_from_scratch` با `search_symbols(…, 12)` هیچ‌وقت به فایل نمی‌رسید. `file_by_stem` بعد از جست‌وجوی symbol، فقط برای نام‌های snake/kebab با ≥۳ بخش — نسخه‌ی «هر کلمه‌ی کدشکل» holdout-2 را ۰.۰۰۳ پایین آورد (`roi_heads` در prompt → `roi_heads.py`، که gold نمی‌خواهد)؛ قبل از جست‌وجوی symbol، `physarum_usage` فیکسچر را می‌شکست.
+
+  دو فایل کد هم‌stem = مبهم = هیچ. اسکریپت دوبخشی (`mnist_convnet`) از جست‌وجوی symbol resolve می‌شود، نه از این مسیر.
+- **twin هم‌نام در اسکریپت‌های خواهر** (`CTCLayer` در captcha_ocr و handwriting_recognition): steering با کلمات stem
+  فایل با وزن ۲ («captcha»، «ocr»)؛ و seed نوع artifact که هم‌نام seed قبلی است دیگر وارد نمی‌شود.
+- **F50 (باز)**: اسکریپت با نام یک کلمه‌ی انگلیسی ساده (`autoencoder.py`) — extractor identifier نمی‌سازد، پس
+  `file_by_stem` هرگز پرسیده نمی‌شود؛ recall 0.
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.

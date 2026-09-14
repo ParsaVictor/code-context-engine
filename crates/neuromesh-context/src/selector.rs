@@ -880,7 +880,7 @@ fn promote_high_learning_into_emitted(
 fn is_noise_node(graph: &NeuralProjectGraph, id: &NodeId) -> bool {
     graph
         .get_node(id)
-        .is_some_and(|n| is_noise_path(&n.file_path))
+        .is_some_and(|n| is_noise_path_in(&n.file_path, graph.examples_are_core()))
 }
 
 fn crate_dir(path: &Path) -> String {
@@ -1014,6 +1014,12 @@ fn required_owns_term_stem(
 }
 
 pub fn is_noise_path(path: &Path) -> bool {
+    is_noise_path_in(path, false)
+}
+
+/// Repository-relative: `examples/` is noise only when the repository has a
+/// non-example core (`NeuralProjectGraph::examples_are_core`).
+pub fn is_noise_path_in(path: &Path, examples_core: bool) -> bool {
     let lower = path.to_string_lossy().replace('\\', "/").to_lowercase();
     lower.ends_with(".md")
         || lower.ends_with(".txt")
@@ -1023,7 +1029,7 @@ pub fn is_noise_path(path: &Path) -> bool {
         || lower.ends_with("/license")
         || lower.contains("/editors/")
         || lower.starts_with("editors/")
-        || neuromesh_core::is_low_priority_source_path(path)
+        || neuromesh_core::is_low_priority_source_path_in(path, examples_core)
 }
 
 fn caller_count(graph: &NeuralProjectGraph, id: &NodeId) -> usize {

@@ -1,0 +1,34 @@
+[[task]]
+id = "kerasio_captcha_ocr_ctc"
+repo = "kerasio"
+prompt = "In the captcha OCR example, how does CTCLayer compute ctc_batch_cost in call, and how does build_model wire it into the model that is trained with model.fit?"
+needs = ["examples/vision/captcha_ocr.py::CTCLayer", "examples/vision/captcha_ocr.py::build_model", "examples/vision/captcha_ocr.py::ctc_batch_cost"]
+forbidden = ["examples/vision/handwriting_recognition.py"]
+
+[[task]]
+id = "kerasio_image_classification_scratch"
+repo = "kerasio"
+prompt = "In image_classification_from_scratch, how does make_model build the Xception-style network with data_augmentation, and where is it compiled and fitted?"
+needs = ["examples/vision/image_classification_from_scratch.py::make_model", "examples/vision/image_classification_from_scratch.py::data_augmentation"]
+forbidden = ["examples/vision/image_classification_with_vision_transformer.py"]
+
+[[task]]
+id = "kerasio_text_classification_scratch"
+repo = "kerasio"
+prompt = "In text_classification_from_scratch, how do custom_standardization and vectorize_text prepare the IMDB text before model.fit and model.evaluate?"
+needs = ["examples/nlp/text_classification_from_scratch.py::custom_standardization", "examples/nlp/text_classification_from_scratch.py::vectorize_text"]
+forbidden = ["examples/nlp/text_classification_with_transformer.py"]
+
+[[task]]
+id = "kerasio_autoencoder_denoise"
+repo = "kerasio"
+prompt = "In the autoencoder example, how do preprocess and noise prepare the MNIST arrays, and how is the autoencoder fitted twice — first clean, then noisy?"
+needs = ["examples/vision/autoencoder.py::preprocess", "examples/vision/autoencoder.py::noise"]
+forbidden = ["examples/generative/vae.py"]
+
+[[task]]
+id = "kerasio_mnist_convnet"
+repo = "kerasio"
+prompt = "In mnist_convnet, how is the Sequential model defined, compiled, fitted with validation_split and evaluated on x_test?"
+needs = ["examples/vision/mnist_convnet.py"]
+forbidden = ["examples/vision/mnist_siamese_graph.py"]

@@ -171,6 +171,21 @@ pub fn is_name_collision_decoy(path: &Path) -> bool {
 
 /// Test / bench / example / testdata / locale / legacy — indexed but not
 /// first-class for ordinary "how does X work" questions.
+/// Like [`is_low_priority_source_path`] but for a repository whose content *is*
+/// its examples (keras-io: every script lives under `examples/`). There the
+/// example directory is the core, not a demo of it.
+pub fn is_low_priority_source_path_in(path: &Path, examples_are_core: bool) -> bool {
+    if examples_are_core && is_example_path(path) {
+        return is_test_path(path)
+            || is_bench_path(path)
+            || is_locale_path(path)
+            || is_legacy_path(path)
+            || is_alt_surface_path(path)
+            || is_testdata_path(path);
+    }
+    is_low_priority_source_path(path)
+}
+
 pub fn is_low_priority_source_path(path: &Path) -> bool {
     is_test_path(path)
         || is_bench_path(path)

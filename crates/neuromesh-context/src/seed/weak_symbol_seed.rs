@@ -78,7 +78,7 @@ pub(crate) fn prune_weak_substring_symbol_seeds(
         // `client_expansion:route` → a helper in `githubapi_test.go`: a guessed
         // word landing in a test or doc file is not an anchor for a question
         // that already has a real one.
-        if crate::selector::is_noise_path(&node.file_path)
+        if crate::selector::is_noise_path_in(&node.file_path, graph.examples_are_core())
             && !strong_files.contains(&node.file_path)
         {
             dropped.push(id.clone());

@@ -1,0 +1,36 @@
+# setfit gold — written from the source before any engine run. G1 checked.
+
+[[task]]
+id = "setfit_trainer_train"
+prompt = "How does Trainer.train run train_embeddings and then train_classifier, and how does it apply TrainingArguments overrides?"
+gold_files = ["src/setfit/trainer.py"]
+forbidden_files = ["src/setfit/trainer_distillation.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "setfit_trainer_evaluate"
+prompt = "How does Trainer.evaluate compute the metric on a dataset with metric_key_prefix, and how does push_to_hub upload the trained model?"
+gold_files = ["src/setfit/trainer.py"]
+forbidden_files = ["src/setfit/data.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "setfit_model_fit_head"
+prompt = "How does SetFitModel.fit train the classification head, and how do predict and predict_proba use the body and the head?"
+gold_files = ["src/setfit/modeling.py"]
+forbidden_files = ["src/setfit/sampler.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "setfit_head_dense"
+prompt = "How does SetFitHead extend Dense with predict and predict_proba for the differentiable head?"
+gold_files = ["src/setfit/modeling.py"]
+forbidden_files = ["src/setfit/losses.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "setfit_save_pretrained"
+prompt = "How does SetFitModel._save_pretrained write the body, head and config to save_directory, and how is a model loaded back with from_pretrained?"
+gold_files = ["src/setfit/modeling.py"]
+forbidden_files = ["src/setfit/exporters/onnx.py"]
+expect_seeds_missed = false

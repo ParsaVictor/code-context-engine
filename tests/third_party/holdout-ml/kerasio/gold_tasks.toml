@@ -1,0 +1,39 @@
+# keras-io gold — written from the source before any engine run. Every
+# example is a standalone script; the question names the script's subject so
+# a same-named `make_model`/`build_model` in another example is a homonym.
+# G1 checked: forbidden scripts are unrelated examples in the same folder.
+
+[[task]]
+id = "kerasio_captcha_ocr_ctc"
+prompt = "In the captcha OCR example, how does CTCLayer compute ctc_batch_cost in call, and how does build_model wire it into the model that is trained with model.fit?"
+gold_files = ["examples/vision/captcha_ocr.py"]
+forbidden_files = ["examples/vision/handwriting_recognition.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "kerasio_image_classification_scratch"
+prompt = "In image_classification_from_scratch, how does make_model build the Xception-style network with data_augmentation, and where is it compiled and fitted?"
+gold_files = ["examples/vision/image_classification_from_scratch.py"]
+forbidden_files = ["examples/vision/image_classification_with_vision_transformer.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "kerasio_text_classification_scratch"
+prompt = "In text_classification_from_scratch, how do custom_standardization and vectorize_text prepare the IMDB text before model.fit and model.evaluate?"
+gold_files = ["examples/nlp/text_classification_from_scratch.py"]
+forbidden_files = ["examples/nlp/text_classification_with_transformer.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "kerasio_autoencoder_denoise"
+prompt = "In the autoencoder example, how do preprocess and noise prepare the MNIST arrays, and how is the autoencoder fitted twice — first clean, then noisy?"
+gold_files = ["examples/vision/autoencoder.py"]
+forbidden_files = ["examples/generative/vae.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "kerasio_mnist_convnet"
+prompt = "In mnist_convnet, how is the Sequential model defined, compiled, fitted with validation_split and evaluated on x_test?"
+gold_files = ["examples/vision/mnist_convnet.py"]
+forbidden_files = ["examples/vision/mnist_siamese_graph.py"]
+expect_seeds_missed = false

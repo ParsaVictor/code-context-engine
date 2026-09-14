@@ -1,0 +1,34 @@
+[[task]]
+id = "setfit_trainer_train"
+repo = "setfit"
+prompt = "How does Trainer.train run train_embeddings and then train_classifier, and how does it apply TrainingArguments overrides?"
+needs = ["src/setfit/trainer.py::train", "src/setfit/trainer.py::train_embeddings", "src/setfit/trainer.py::train_classifier"]
+forbidden = ["src/setfit/trainer_distillation.py"]
+
+[[task]]
+id = "setfit_trainer_evaluate"
+repo = "setfit"
+prompt = "How does Trainer.evaluate compute the metric on a dataset with metric_key_prefix, and how does push_to_hub upload the trained model?"
+needs = ["src/setfit/trainer.py::evaluate", "src/setfit/trainer.py::push_to_hub"]
+forbidden = ["src/setfit/data.py"]
+
+[[task]]
+id = "setfit_model_fit_head"
+repo = "setfit"
+prompt = "How does SetFitModel.fit train the classification head, and how do predict and predict_proba use the body and the head?"
+needs = ["src/setfit/modeling.py::fit", "src/setfit/modeling.py::predict", "src/setfit/modeling.py::predict_proba"]
+forbidden = ["src/setfit/sampler.py"]
+
+[[task]]
+id = "setfit_head_dense"
+repo = "setfit"
+prompt = "How does SetFitHead extend Dense with predict and predict_proba for the differentiable head?"
+needs = ["src/setfit/modeling.py::SetFitHead"]
+forbidden = ["src/setfit/losses.py"]
+
+[[task]]
+id = "setfit_save_pretrained"
+repo = "setfit"
+prompt = "How does SetFitModel._save_pretrained write the body, head and config to save_directory, and how is a model loaded back with from_pretrained?"
+needs = ["src/setfit/modeling.py::_save_pretrained"]
+forbidden = ["src/setfit/exporters/onnx.py"]

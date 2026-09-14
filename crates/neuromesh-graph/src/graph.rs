@@ -16,7 +16,7 @@ use crate::query::{
 use crate::synapse::{StdpConfig, SynapticPlasticityEngine};
 use chrono::Utc;
 use neuromesh_core::{
-    hmvc_app_prefix, is_core_source_path, is_json_schema_path, is_low_priority_source_path,
+    hmvc_app_prefix, is_core_source_path, is_json_schema_path, is_low_priority_source_path_in,
     is_name_collision_decoy, name_match_specificity, ContextEdge, ContextNode, EdgeConfidence,
     EdgeId, EdgeType, IndexMeta, NodeId, NodeType, ProjectId, UnresolvedRef,
 };
@@ -132,6 +132,8 @@ impl IndexGate {
 struct DerivedIndexes {
     learning_revision: Option<u64>,
     learning_boost: Arc<HashMap<NodeId, f32>>,
+    examples_revision: Option<u64>,
+    examples_are_core: bool,
 }
 
 #[derive(Clone)]
@@ -1037,6 +1039,7 @@ impl NeuralProjectGraph {
             return Vec::new();
         }
         let limit = limit.clamp(1, 80);
+        let examples_core = self.examples_are_core();
         let query_lower = query.to_lowercase();
         let query_tokens = tokenize(query);
         let data = self.inner.read();
@@ -1120,7 +1123,11 @@ impl NeuralProjectGraph {
             .into_iter()
             .filter_map(|(id, (score, reason))| {
                 data.mesh.node(&id).map(|node| {
-                    SearchHit::from_node(node, score + ranking_bonus(node, query), reason)
+                    SearchHit::from_node(
+                        node,
+                        score + ranking_bonus(node, query, examples_core),
+                        reason,
+                    )
                 })
             })
             .collect();
@@ -1554,6 +1561,86 @@ impl NeuralProjectGraph {
         None
     }
 
+    /// Whether this repository's content *is* its examples: at least half of
+    /// the indexed source files live under an `examples/` directory (keras-io).
+    /// Then `examples/` is the core, and the usual demo-directory penalty
+    /// would hide every real answer behind the guides. Cached per revision.
+    pub fn examples_are_core(&self) -> bool {
+        let data = self.inner.read();
+        let revision = data.mesh.node_revision();
+        {
+            let cached = self.derived.read();
+            if cached.examples_revision == Some(revision) {
+                return cached.examples_are_core;
+            }
+        }
+        // The walker admits `examples/` only when it is the repository's code
+        // (see `ProjectWalker::scan_report_with`), so any indexed example file
+        // means that decision was made.
+        let core = data
+            .file_to_nodes
+            .keys()
+            .any(|p| neuromesh_core::is_example_path(p));
+        drop(data);
+        let mut derived = self.derived.write();
+        derived.examples_revision = Some(revision);
+        derived.examples_are_core = core;
+        core
+    }
+
+    /// The one source file whose stem equals `query` (case-insensitive, `-`
+    /// and `_` alike). Among same-stem twins a code file wins over a notebook,
+    /// which wins over markdown; two code files with the stem are ambiguous
+    /// and resolve to nothing.
+    pub fn file_by_stem(&self, query: &str) -> Option<NodeId> {
+        let want = query.to_lowercase().replace('-', "_");
+        let rank = |p: &Path| -> u8 {
+            match p
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase())
+                .as_deref()
+            {
+                Some("md" | "rst" | "txt") => 2,
+                Some("ipynb") => 1,
+                _ => 0,
+            }
+        };
+        let data = self.inner.read();
+        let mut best: Option<(u8, NodeId)> = None;
+        let mut tied = false;
+        for path in data.file_to_nodes.keys() {
+            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if stem.to_lowercase().replace('-', "_") != want {
+                continue;
+            }
+            let id = NodeId::from_file_path(&path.to_string_lossy().replace('\\', "/"));
+            if data.mesh.node(&id).is_none() {
+                continue;
+            }
+            let r = rank(path);
+            match &best {
+                Some((b, _)) if r > *b => {}
+                Some((b, _)) if r == *b => tied = true,
+                _ => {
+                    best = Some((r, id));
+                    tied = false;
+                }
+            }
+        }
+        match best {
+            Some((_, id)) if !tied => Some(id),
+            _ => None,
+        }
+    }
+
+    /// Repository-relative low-priority test: see [`Self::examples_are_core`].
+    pub fn is_low_priority_path(&self, path: &Path) -> bool {
+        neuromesh_core::is_low_priority_source_path_in(path, self.examples_are_core())
+    }
+
     fn pick_dominant_candidate(
         &self,
         ids: &[NodeId],
@@ -1565,12 +1652,13 @@ impl NeuralProjectGraph {
         if ids.len() == 1 {
             return Some((ids[0].clone(), EdgeConfidence::Proven));
         }
+        let examples_core = self.examples_are_core();
         let mut ranked: Vec<(f32, NodeId)> = ids
             .iter()
             .map(|id| {
                 let mut score = 0.0;
                 if let Some(node) = self.get_node(id) {
-                    score += ranking_bonus(&node, query);
+                    score += ranking_bonus(&node, query, examples_core);
                     // `Dense` names the type; its constructors and same-named
                     // helpers (`Dense(in, out) = ...`) are secondary definitions.
                     if node.node_type == NodeType::Class
@@ -1580,7 +1668,10 @@ impl NeuralProjectGraph {
                     }
                     // A shim in `deprecations.jl` or `compat/` is the old spelling,
                     // not the definition a name means.
-                    if neuromesh_core::is_low_priority_source_path(&node.file_path) {
+                    if neuromesh_core::is_low_priority_source_path_in(
+                        &node.file_path,
+                        examples_core,
+                    ) {
                         score -= 12.0;
                     }
                     if is_crate_path(&node.file_path) {
@@ -3006,7 +3097,7 @@ pub fn node_learning_bonus(node: &ContextNode) -> f32 {
     (access + relevance - demerit).max(0.0)
 }
 
-fn ranking_bonus(node: &ContextNode, query: &str) -> f32 {
+fn ranking_bonus(node: &ContextNode, query: &str, examples_core: bool) -> f32 {
     let mut bonus = match node.node_type {
         NodeType::Function
         | NodeType::Class
@@ -3043,10 +3134,25 @@ fn ranking_bonus(node: &ContextNode, query: &str) -> f32 {
             bonus += 10.0;
         }
     }
+    // Same stem, three files (keras-io ships `x.py`, `ipynb/x.ipynb`, `md/x.md`):
+    // the script is the code; the notebook mirrors it; the markdown describes it.
+    if node.node_type == NodeType::File {
+        match node
+            .file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("md" | "rst" | "txt") => bonus -= 8.0,
+            Some("ipynb") => bonus -= 4.0,
+            _ => {}
+        }
+    }
     if is_json_schema_path(&node.file_path) {
         bonus -= 20.0;
     }
-    if is_fixture_path(&node.file_path) {
+    if is_fixture_path_in(&node.file_path, examples_core) {
         bonus -= if decoy { 40.0 } else { 24.0 };
     }
     bonus += node_learning_bonus(node);
@@ -3167,8 +3273,12 @@ pub fn path_echoes_symbol(path: &Path, query: &str) -> bool {
 }
 
 fn is_fixture_path(path: &Path) -> bool {
+    is_fixture_path_in(path, false)
+}
+
+fn is_fixture_path_in(path: &Path, examples_core: bool) -> bool {
     let lower = path.to_string_lossy().replace('\\', "/").to_lowercase();
-    is_low_priority_source_path(path)
+    is_low_priority_source_path_in(path, examples_core)
         || lower.contains("/editors/")
         || lower.starts_with("editors/")
 }

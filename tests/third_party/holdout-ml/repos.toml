@@ -1,0 +1,17 @@
+# Phase D-3 domain holdout for the Keras / Hugging Face artifact overlay.
+# Never used to tune the engine. Gold written from the source before any
+# engine run; G1 checked by grep on every forbidden file.
+#
+#   kerasio — keras-team/keras-io: hundreds of standalone example scripts,
+#             module-level `model.fit(...)`, `keras.Model` subclasses
+#   setfit  — huggingface/setfit: a Hugging Face Trainer-shaped library
+
+[[repo]]
+name = "kerasio"
+url = "https://github.com/keras-team/keras-io"
+rev = "bc58bcd7ecc24921b38b3c0ae85289a4e3bcdec4"
+
+[[repo]]
+name = "setfit"
+url = "https://github.com/huggingface/setfit"
+rev = "5690772b75d4e55c7d35ac9ed8e132f21b43494f"

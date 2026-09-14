@@ -223,9 +223,18 @@ impl ProjectWalker {
     }
 
     pub fn is_ignored(path: &Path) -> bool {
+        Self::is_ignored_keeping_examples(path, false)
+    }
+
+    /// `examples/` is dropped by default; a repository whose content *is* its
+    /// examples (keras-io) decides after the walk (see `scan_report_with`).
+    pub fn is_ignored_keeping_examples(path: &Path, keep_examples: bool) -> bool {
         for component in path.components() {
             let s = component.as_os_str().to_string_lossy();
             let s_lower = s.to_lowercase();
+            if keep_examples && s_lower == "examples" {
+                continue;
+            }
             if s_lower == "node_modules"
                 || s_lower == "target"
                 || s_lower == ".git"
@@ -311,7 +320,10 @@ impl ProjectWalker {
             .max_depth(10)
             .follow_links(false)
             .into_iter()
-            .filter_entry(|e| !Self::is_ignored_within(&walk_root, e.path()))
+            .filter_entry(|e| {
+                let rel = e.path().strip_prefix(&walk_root).unwrap_or(e.path());
+                !Self::is_ignored_keeping_examples(rel, true)
+            })
             .filter_map(|e| e.ok())
         {
             if !entry.file_type().is_file() {
@@ -349,6 +361,40 @@ impl ProjectWalker {
                 .map(|t| t.into())
                 .unwrap_or_else(|_| Utc::now());
             candidates.push((relative_path, full_path, metadata.len(), last_modified));
+        }
+
+        // `examples/` walked but not yet admitted: it stays out when the repository
+        // has a non-example core, and becomes the core when it is most of the tree.
+        // Counted over code files only: keras-io is 600 example scripts next to
+        // 1,700 templates, images and markdown, and the code is what a question
+        // is about.
+        let is_code = |rel: &PathBuf| {
+            !matches!(
+                SourceLanguage::from_path(rel),
+                SourceLanguage::Unknown
+                    | SourceLanguage::Markdown
+                    | SourceLanguage::JSON
+                    | SourceLanguage::YAML
+                    | SourceLanguage::HTML
+                    | SourceLanguage::Svg
+                    | SourceLanguage::CSS
+                    | SourceLanguage::SCSS
+                    | SourceLanguage::Less
+                    | SourceLanguage::SQL
+                    | SourceLanguage::Twig
+            )
+        };
+        let code_total = candidates
+            .iter()
+            .filter(|(rel, _, _, _)| is_code(rel))
+            .count();
+        let example_count = candidates
+            .iter()
+            .filter(|(rel, _, _, _)| is_code(rel) && neuromesh_core::is_example_path(rel))
+            .count();
+        let examples_are_core = example_count > 0 && example_count * 2 >= code_total;
+        if !examples_are_core {
+            candidates.retain(|(rel, _, _, _)| !neuromesh_core::is_example_path(rel));
         }
 
         candidates.sort_by(|a, b| {
