@@ -1,0 +1,44 @@
+# lightning-hydra-template @ bddbc24b — Config→Code questions.
+# Gold = the YAML that defines the key + the Python that reads it.
+
+[[task]]
+id = "hydra_optimizer_lr"
+prompt = "Where is the optimizer lr and weight_decay from configs/model/mnist.yaml consumed when configure_optimizers builds the optimizer from self.hparams?"
+gold_files = ["configs/model/mnist.yaml", "src/models/mnist_module.py"]
+forbidden_files = ["src/utils/rich_utils.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "hydra_batch_size_split"
+prompt = "How do batch_size and train_val_test_split from configs/data/mnist.yaml flow into MNISTDataModule.setup and the dataloaders?"
+gold_files = ["configs/data/mnist.yaml", "src/data/mnist_datamodule.py"]
+forbidden_files = ["src/models/mnist_module.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "hydra_extras_flags"
+prompt = "How does extras read ignore_warnings, enforce_tags and print_config from the extras config and act on each?"
+gold_files = ["configs/extras/default.yaml", "src/utils/utils.py"]
+forbidden_files = ["src/data/mnist_datamodule.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "hydra_train_entry"
+prompt = "How does train in src/train.py use cfg.seed, cfg.train, cfg.test and ckpt_path from configs/train.yaml to decide what to run?"
+gold_files = ["configs/train.yaml", "src/train.py"]
+forbidden_files = ["src/data/mnist_datamodule.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "hydra_early_stopping"
+prompt = "Which config sets the early_stopping monitor and patience, and where are the callbacks instantiated by instantiate_callbacks?"
+gold_files = ["configs/callbacks/default.yaml", "src/utils/instantiators.py"]
+forbidden_files = ["src/eval.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "hydra_compile_flag"
+prompt = "How does the compile key in the model config make MNISTLitModule.setup call torch.compile?"
+gold_files = ["configs/model/mnist.yaml", "src/models/mnist_module.py"]
+forbidden_files = ["src/utils/utils.py"]
+expect_seeds_missed = false
