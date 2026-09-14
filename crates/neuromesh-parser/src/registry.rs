@@ -13,6 +13,7 @@ use crate::sql::SqlParser;
 use crate::types::AstAnalysisResult;
 use crate::typescript::TypeScriptParser;
 use crate::vue::VueParser;
+use crate::yaml::YamlParser;
 use neuromesh_index::SourceLanguage;
 use std::path::Path;
 
@@ -39,6 +40,7 @@ enum Fallback {
     Less,
     Json,
     Sql,
+    Yaml,
     None,
 }
 
@@ -212,7 +214,14 @@ impl LanguageSpec {
                 options: QueryOptions::typescript(),
                 fallback: Fallback::Sql,
             },
-            SourceLanguage::YAML | SourceLanguage::Markdown | SourceLanguage::Unknown => Self {
+            SourceLanguage::YAML => Self {
+                language,
+                grammar: None,
+                queries: None,
+                options: QueryOptions::typescript(),
+                fallback: Fallback::Yaml,
+            },
+            SourceLanguage::Markdown | SourceLanguage::Unknown => Self {
                 language,
                 grammar: None,
                 queries: None,
@@ -246,6 +255,7 @@ impl Fallback {
             Fallback::Less => ScssParser::parse_less(path, content),
             Fallback::Json => JsonParser::parse(path, content),
             Fallback::Sql => SqlParser::parse(path, content),
+            Fallback::Yaml => YamlParser::parse(path, content),
             Fallback::None => AstAnalysisResult::default(),
         }
     }

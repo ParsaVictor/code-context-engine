@@ -1,4 +1,5 @@
 pub mod calls;
+pub mod config_reads;
 pub mod engine;
 pub mod generic;
 pub mod html;
@@ -20,6 +21,7 @@ pub mod tree_sitter_lang;
 pub mod types;
 pub mod typescript;
 pub mod vue;
+pub mod yaml;
 
 pub use engine::CodeIntelligenceEngine;
 pub use html::HtmlParser;

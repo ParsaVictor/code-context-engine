@@ -802,6 +802,34 @@ impl NeuralProjectGraph {
                 // 3-file project makes every artifact edge run through a hub
                 // that already touches everything — the chain stops meaning
                 // anything. Resolve both ends like a call instead.
+                // Config→Code: `self.args.lr0` in trainer.py is a def that a
+                // key in a YAML/JSON file parameterizes. The generic artifact
+                // arm below cannot bind it — it keeps edges inside one language
+                // and import scope, which is right for `generate -> Model` and
+                // wrong for a `.yaml`. The key is looked up among Config nodes
+                // only: in the file the module named, else the single file
+                // that has it, else the dominant one. Edge direction is
+                // key -> reader ("parameterizes").
+                EdgeType::Parameterizes => {
+                    let reader = self
+                        .resolve_in_file(&rel.source_symbol, &rel.source_file.to_string_lossy())
+                        .unwrap_or_else(|| file_id.clone());
+                    match self
+                        .resolve_config_key(&rel.target_symbol, rel.target_file_hint.as_deref())
+                    {
+                        Some((key, confidence)) if key != reader => {
+                            self.add_edge_with_confidence(
+                                key,
+                                reader,
+                                EdgeType::Parameterizes,
+                                confidence,
+                            );
+                            true
+                        }
+                        Some(_) => true,
+                        None => false,
+                    }
+                }
                 other if other.is_artifact() => {
                     // File-local first: the source is usually a def in this very
                     // file, and that is the only reading that survives a name
@@ -1318,6 +1346,59 @@ impl NeuralProjectGraph {
                 .and_then(|e| e.to_str())
                 .is_some_and(|e| e.eq_ignore_ascii_case(&ext_l))
         })
+    }
+
+    /// A configuration key by name, among `Config`/`Hyperparameter` nodes
+    /// only. With a file hint, only keys in a file matching it; without one,
+    /// a unique key wins outright and several fall back to
+    /// `pick_dominant_candidate` as `Likely` — `lr0` in `cfg/default.yaml`
+    /// and in a docs snippet is the former, not the latter, and the ranking
+    /// bonus already prefers the shallower, non-doc path.
+    pub fn resolve_config_key(
+        &self,
+        key: &str,
+        file_hint: Option<&str>,
+    ) -> Option<(NodeId, EdgeConfidence)> {
+        let ids: Vec<NodeId> = {
+            let data = self.inner.read();
+            data.name_to_nodes
+                .get(&key.to_lowercase())
+                .into_iter()
+                .flatten()
+                .filter(|id| {
+                    data.mesh.node(id).is_some_and(|n| {
+                        matches!(n.node_type, NodeType::Config | NodeType::Hyperparameter)
+                    })
+                })
+                .cloned()
+                .collect()
+        };
+        if ids.is_empty() {
+            return None;
+        }
+        if let Some(hint) = file_hint {
+            let hint_norm = normalize_path_hint(hint);
+            let hinted: Vec<NodeId> = ids
+                .iter()
+                .filter(|id| {
+                    self.get_node(id).is_some_and(|n| {
+                        let p = normalize_path_hint(&n.file_path.to_string_lossy());
+                        p == hint_norm
+                            || p.ends_with(&format!("/{hint_norm}"))
+                            || p.ends_with(&hint_norm)
+                    })
+                })
+                .cloned()
+                .collect();
+            if !hinted.is_empty() {
+                return self.pick_dominant_candidate(&hinted, key);
+            }
+        }
+        if ids.len() == 1 {
+            return Some((ids[0].clone(), EdgeConfidence::Proven));
+        }
+        self.pick_dominant_candidate(&ids, key)
+            .map(|(id, _)| (id, EdgeConfidence::Likely))
     }
 
     pub fn resolve_file_hint(&self, hint: &str) -> Option<NodeId> {
