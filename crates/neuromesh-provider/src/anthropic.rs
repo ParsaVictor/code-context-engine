@@ -64,6 +64,15 @@ impl Provider for AnthropicProvider {
                 .post(url)
                 .header("x-api-key", &self.api_key)
                 .header("anthropic-version", "2023-06-01")
+                // Some gateways admit only clients they recognise;
+                // `ANTHROPIC_USER_AGENT` sets the header, nothing is spoofed by default.
+                .header(
+                    "user-agent",
+                    std::env::var("ANTHROPIC_USER_AGENT")
+                        .ok()
+                        .filter(|u| !u.trim().is_empty())
+                        .unwrap_or_else(|| format!("neuromesh/{}", env!("CARGO_PKG_VERSION"))),
+                )
                 .json(&body)
                 .send()
                 .await
