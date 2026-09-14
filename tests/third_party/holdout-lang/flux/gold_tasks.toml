@@ -1,0 +1,36 @@
+# Flux.jl gold — written from the source before any engine run. G1 checked.
+
+[[task]]
+id = "flux_train_loop"
+prompt = "How does train! resolve the AD backend with _resolve_backend, iterate the data with @withprogress, and call _trainstep! for each batch?"
+gold_files = ["src/train.jl"]
+forbidden_files = ["src/outputsize.jl"]
+expect_seeds_missed = false
+
+[[task]]
+id = "flux_trainstep"
+prompt = "How do trainstep! and _trainstep! run a single optimisation step, dispatching to _reactant_trainstep! on Reactant and _eager_step! otherwise?"
+gold_files = ["src/train.jl"]
+forbidden_files = ["src/layers/upsample.jl"]
+expect_seeds_missed = false
+
+[[task]]
+id = "flux_chain_apply"
+prompt = "How does calling a Chain apply its layers in order through _applychain, and how does activations collect the intermediate outputs with _extraChain?"
+gold_files = ["src/layers/basic.jl"]
+forbidden_files = ["src/losses/functions.jl"]
+expect_seeds_missed = false
+
+[[task]]
+id = "flux_dense_forward"
+prompt = "How does the Dense constructor build a layer from an in => out pair, and how does calling a Dense on an AbstractVecOrMat compute σ.(W*x .+ b)?"
+gold_files = ["src/layers/basic.jl"]
+forbidden_files = ["src/optimise/train.jl"]
+expect_seeds_missed = false
+
+[[task]]
+id = "flux_crossentropy_losses"
+prompt = "How do crossentropy and logitcrossentropy compute the loss with the agg reducer, and how does label_smoothing adjust the targets?"
+gold_files = ["src/losses/functions.jl"]
+forbidden_files = ["src/layers/recurrent.jl"]
+expect_seeds_missed = false

@@ -1,0 +1,22 @@
+# Phase D-2 domain holdout for the Scala / R / Julia grammars (2026-09-14).
+# Never used to tune the engine. Gold written from reading the source before
+# any engine run; G1 checked by grep on every forbidden file.
+#
+#   oslib — com-lihaoyi/os-lib: Scala, objects + case classes, implicits
+#   cli   — r-lib/cli: R package, `name <- function` everywhere, S3 dispatch
+#   flux  — FluxML/Flux.jl: Julia, multiple dispatch, macros, short-form defs
+
+[[repo]]
+name = "oslib"
+url = "https://github.com/com-lihaoyi/os-lib"
+rev = "86e5ddb65fe62305afb5885fcc0f8da50aba4b48"
+
+[[repo]]
+name = "cli"
+url = "https://github.com/r-lib/cli"
+rev = "e42bb792a94364e498c6d0aba0232cae57002206"
+
+[[repo]]
+name = "flux"
+url = "https://github.com/FluxML/Flux.jl"
+rev = "404ff37d68d256a9ca0bb176ed119b631bc9cad8"

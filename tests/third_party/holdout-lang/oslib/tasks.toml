@@ -1,0 +1,34 @@
+[[task]]
+id = "oslib_write_outputstream"
+repo = "oslib"
+prompt = "How does os.write.outputStream create parent folders and apply permissions before opening the file, and how does write.write perform the actual write?"
+needs = ["os/src/ReadWriteOps.scala::outputStream", "os/src/ReadWriteOps.scala::write"]
+forbidden = ["os/src/ZipOps.scala"]
+
+[[task]]
+id = "oslib_walk_stream"
+repo = "oslib"
+prompt = "How does os.walk.apply delegate to walk.stream with skip, preOrder, followLinks and maxDepth?"
+needs = ["os/src/ListOps.scala::apply", "os/src/ListOps.scala::stream"]
+forbidden = ["os/src/PermsOps.scala"]
+
+[[task]]
+id = "oslib_proc_call"
+repo = "oslib"
+prompt = "How does proc.call start the subprocess and collect stdout and stderr into a CommandResult, and how does call.apply wrap it?"
+needs = ["os/src/ProcessOps.scala::call"]
+forbidden = ["os/src/GlobInterpolator.scala"]
+
+[[task]]
+id = "oslib_temp_dir"
+repo = "oslib"
+prompt = "How do os.temp.apply and os.temp.dir create temporary files and directories with optional prefix, suffix and deleteOnExit?"
+needs = ["os/src/TempOps.scala::apply", "os/src/TempOps.scala::dir"]
+forbidden = ["os/src/StatOps.scala"]
+
+[[task]]
+id = "oslib_pathchunk_segments"
+repo = "oslib"
+prompt = "How does PathChunk.segmentsFromString split a string into path segments, and how does StringPathChunk wrap a string?"
+needs = ["os/src/Path.scala::segmentsFromString"]
+forbidden = ["os/src/SubProcess.scala"]

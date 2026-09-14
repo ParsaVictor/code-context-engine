@@ -1,0 +1,36 @@
+# os-lib gold — written from the source before any engine run. G1 checked.
+
+[[task]]
+id = "oslib_write_outputstream"
+prompt = "How does os.write.outputStream create parent folders and apply permissions before opening the file, and how does write.write perform the actual write?"
+gold_files = ["os/src/ReadWriteOps.scala"]
+forbidden_files = ["os/src/ZipOps.scala"]
+expect_seeds_missed = false
+
+[[task]]
+id = "oslib_walk_stream"
+prompt = "How does os.walk.apply delegate to walk.stream with skip, preOrder, followLinks and maxDepth?"
+gold_files = ["os/src/ListOps.scala"]
+forbidden_files = ["os/src/PermsOps.scala"]
+expect_seeds_missed = false
+
+[[task]]
+id = "oslib_proc_call"
+prompt = "How does proc.call start the subprocess and collect stdout and stderr into a CommandResult, and how does call.apply wrap it?"
+gold_files = ["os/src/ProcessOps.scala"]
+forbidden_files = ["os/src/GlobInterpolator.scala"]
+expect_seeds_missed = false
+
+[[task]]
+id = "oslib_temp_dir"
+prompt = "How do os.temp.apply and os.temp.dir create temporary files and directories with optional prefix, suffix and deleteOnExit?"
+gold_files = ["os/src/TempOps.scala"]
+forbidden_files = ["os/src/StatOps.scala"]
+expect_seeds_missed = false
+
+[[task]]
+id = "oslib_pathchunk_segments"
+prompt = "How does PathChunk.segmentsFromString split a string into path segments, and how does StringPathChunk wrap a string?"
+gold_files = ["os/src/Path.scala"]
+forbidden_files = ["os/src/SubProcess.scala"]
+expect_seeds_missed = false
