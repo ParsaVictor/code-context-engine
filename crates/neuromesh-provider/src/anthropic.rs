@@ -55,6 +55,12 @@ impl Provider for AnthropicProvider {
                 "max_tokens": request.max_tokens.unwrap_or(4096),
             });
 
+            // A short verdict ("PASS"/"FAIL", max_tokens ≤ 512) must not be
+            // spent on an adaptive-thinking block; disable thinking for it.
+            if request.max_tokens.is_some_and(|m| m <= 512) {
+                body["thinking"] = serde_json::json!({"type": "disabled"});
+            }
+
             if let Some(sys) = system_prompt {
                 body["system"] = serde_json::json!(sys);
             }

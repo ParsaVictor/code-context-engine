@@ -612,7 +612,7 @@ async fn run_qa_judge_case(
             },
         ],
         temperature: None,
-        max_tokens: Some(200),
+        max_tokens: Some(400),
         stream: false,
         api_key: None,
     };
