@@ -528,3 +528,26 @@ Fastify+Drizzle (ESM، ماژول‌های ۴لایه) + فرانت Next.js، ~�
 |---|---|---|
 | F53 | walker پوشه‌های ابزار agent (`.claude/skills/**`، `.cursor/**` — اسکریپت‌های js/mjs/py مربوط به ابزار، نه پروژه) را ایندکس می‌کند و در ۳ تسک از ۱۲، فایل‌های آن‌ها وارد packet شدند (precision آن سه تسک 0.14–0.40). هم‌جنس درس D-۳ (`examples/`)، در جهت عکس: دایرکتوری ابزار = vendor | فایل‌های `.claude/skills/*/scripts/*.mjs` در packet سؤال cache/otp |
 | F54 | «the maintenance plugin» + دو ثابت `MAINTENANCE_*` → packet: صفحه‌ی فرانت `maintenance/page.tsx` و دو فایل بی‌ربط؛ فایل واقعی `plugins/maintenance.plugin.ts` و `config/maintenance-sections.ts` (تعریف ثابت‌ها) نیامدند. recall 0 | probe لازم: آیا ثابت‌های SCREAMING_SNAKE به‌عنوان identifier حل می‌شوند؟ آیا «plugin» به الگوی نام `*.plugin.ts` وصل می‌شود؟ |
+
+### F53 — اندازه‌گیری شد، مرج نشد (برنچ `f53-agent-tool-dirs`)
+
+walker: `.claude/`، `.cursor/`، `.codex/`، `.windsurf/`، `.aider/` مثل `.gemini/` نادیده. شش مجموعه‌ی عمومی دقیقاً
+بی‌تغییر (هیچ‌کدام این پوشه‌ها را ندارند)؛ **private 0.559→0.536**: جای سه فایل `.claude/skills/*` را فایل‌های بی‌ربط
+دیگر (`.vue` کیت UI، `globals.css`، یک اسکریپت `scripts/`) گرفتند — همان الگوی F36′/F51b: slot آزادشده را حلقه‌ی ۳۶
+پر می‌کند. فیکس از نظر محصول درست است (اسکریپت ابزار agent هرگز پاسخ سؤال کاربر نیست) ولی طبق قانون ratchet
+مرج نمی‌شود تا منبع نویز (F36) حل شود. سومین شاهد مستقل که «حذف یک منبع نویز» بدون F36 عدد نمی‌دهد.
+
+### F54 — فیکس شد (private recall 0.917→1.000، precision 0.559→0.601؛ شش مجموعه‌ی عمومی بی‌تغییر)
+
+دو شکاف عمومی، هر دو با probe همان تسک:
+1. `IDENT_RE` در `identifiers.rs` فقط `snake_case`/`camelCase`/`PascalCase` را anchor می‌کرد؛ ثابت `SCREAMING_SNAKE`
+   (`MAX_ATTEMPTS`، `MAINTENANCE_SECTION_RULES`) اصلاً seed نمی‌شد — فقط کلمه‌ی کوچک‌شده‌ی «maintenance» به یک
+   صفحه‌ی فرانت هم‌نام می‌رفت. یک alternative جدید (≥۲ بخش بزرگ‌حرف).
+2. گرامر TS/Python برای `export const X = …` / `X = …` سطح ماژول هیچ نودی نمی‌ساخت (فقط arrow function). capture
+   جدید `@symbol` فقط با spelling `SCREAMING_SNAKE` و فقط exported/module-level — تا `const x` محلی نود نشود (ریسک
+   F36). تست واحد برای هر دو زبان.
+
+سرعت (G4/G5، ultralytics، release بدون embeddings، Bash، n=10، interleaved؛ ماشین امروز پرنویز — p95 تا ۱۴s):
+index 2186→2610ms (۱.۱۹×)، query p50 960→1068ms (۱.۱۱×) — گیت ≤۱.۵× pass. `eval --release-gates`: precision
+0.383 یکسان؛ `l1_p95` base **55ms**، F54 **53ms** — هر دو بالای سقف ۵۰ تحت بار امروز (۴۷ در آخرین اندازه‌گیری آرام)؛
+به F54 نسبت داده نمی‌شود، ولی G5 می‌گوید در اولین فرصت آرام دوباره بسنج.

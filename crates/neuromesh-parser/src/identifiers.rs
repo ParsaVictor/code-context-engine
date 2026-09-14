@@ -255,9 +255,12 @@ pub fn extract_prompt_anchors(prompt: &str) -> PromptAnchors {
     // multi-word PascalCase while dropping that false-positive path; a
     // single-hump class name used as an actual subject (`Signal.connect`,
     // "How does Signal register...") still seeds through the other two.
+    // The fourth branch is a SCREAMING_SNAKE constant (`MAX_ATTEMPTS`,
+    // `MAINTENANCE_SECTION_RULES`): two or more upper-case segments, so an
+    // acronym in prose (`HTTP`) is left to the other paths. F54.
     let ident_re = IDENT_RE.get_or_init(|| {
         Regex::new(
-            r"\b(?:[a-z][a-z0-9]*(_[a-z0-9]+)+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]*[A-Z][A-Za-z0-9]*)\b",
+            r"\b(?:[a-z][a-z0-9]*(_[a-z0-9]+)+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b",
         )
         .unwrap()
     });
@@ -1190,6 +1193,25 @@ mod tests {
         assert!(!is_route_query("crates/neuromesh-mcp/src/tools.rs"));
         assert_eq!(api_path_alias("POST /sms").as_deref(), Some("/sms"));
         assert_eq!(api_path_alias("store"), None);
+    }
+
+    /// F54: a SCREAMING_SNAKE constant is a code identifier.
+    #[test]
+    fn screaming_snake_constants_are_identifiers() {
+        let a = extract_prompt_anchors(
+            "How does the maintenance plugin block requests for a section in MAINTENANCE_SECTION_RULES while letting MAINTENANCE_EXEMPT_PREFIXES through?",
+        );
+        assert!(
+            a.identifiers
+                .iter()
+                .any(|id| id == "MAINTENANCE_SECTION_RULES"),
+            "{:?}",
+            a.identifiers
+        );
+        assert!(a
+            .identifiers
+            .iter()
+            .any(|id| id == "MAINTENANCE_EXEMPT_PREFIXES"));
     }
 
     /// F33: a capitalised `Owner.member` must yield the qualified pair, not
