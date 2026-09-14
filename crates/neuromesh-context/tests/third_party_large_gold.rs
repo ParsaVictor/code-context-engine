@@ -50,8 +50,10 @@ fn large_repositories_gold_and_task_oracle() {
         "mean precision {:.3} < {MIN_MEAN_PRECISION}",
         s.mean_precision
     );
+    #[allow(clippy::absurd_extreme_comparisons)]
+    let within_budget = s.forbidden_hits <= MAX_FORBIDDEN_HITS;
     assert!(
-        s.forbidden_hits <= MAX_FORBIDDEN_HITS,
+        within_budget,
         "{} forbidden files shipped (max {MAX_FORBIDDEN_HITS})",
         s.forbidden_hits
     );
