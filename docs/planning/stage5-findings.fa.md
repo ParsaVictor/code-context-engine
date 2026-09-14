@@ -246,6 +246,48 @@ stem/alias ایندکس شده (`hello.twig` برای کلید `hello`) case-mis
 (متد hom-onym) — ابهام واقعی نام، با case حل نمی‌شود. large هنوز 0.269: احتمالاً سهم بزرگ‌تری از مسیرهای دیگر
 (file_expand، focus_term F36) دارد — probe بعدی روی `ultra_predict_stream`/`django_csrf`.
 
+## F41/F42 — «سؤال symbol خودش را نام برده؛ حدس‌زدن را متوقف کن» (سه لایه، یک PR، هر سه مجموعه بالا)
+
+probe روی `ultra_augment_mosaic`/`ultra_predict_stream` (large) و `vision_roi_heads_training` (holdout) بعد از F40 یک
+الگوی مشترک نشان داد: seedهای دقیق (`Mosaic` @1.00، `RoIHeads.select_training_samples` @1.00) درست حل می‌شوند و
+بعد **سه مسیر حدسی مستقل** با کلمات انگلیسی همان prompt به فایل‌های بی‌ربط seed می‌زنند:
+
+**F41 — `retrieval/artifact_seeds.rs`:** «training sample»/«inference»/«__call__» → *هر* TrainLoop/EvalLoop ریپو
+seed اجباری @0.86 (`trainer.py:_do_train`، `optim/muon.py`، `torch_utils.py`، `exporter.py`، `validator.py`) —
+منشأ hub بودن `engine/trainer.py` در ۹/۱۰ تسک ultralytics. خودِ ماژول برای سؤال‌هایی است که «هیچ symbolی را نام
+نمی‌برند». فیکس: اگر identifier کدشکل (حرف بزرگ/`_`/`.`/`::` — نه کلمه‌ی «training») حل شده (`code_anchor`)،
+کاندید kind-only که نه در prompt نام برده شده و نه عضو owner یک seed است، وارد نمی‌شود. «نام برده شده» برای
+nodeهای بدون owner = در `identifiers` **یا** whole-word با case دقیق در متن prompt (فیکسچر `ml_train_loss`:
+«the Detector model» — extractor «Detector» را identifier نمی‌شمرد ولی prompt واضحاً نامش را برده). سناریوی
+nanoGPT که ماژول برایش ساخته شده دست‌نخورده می‌ماند.
+
+**F41b — `activator.rs::cluster_terms_covered`:** prompt مرکب («چطور X … و چطور Y») به cluster می‌شکند؛ cluster
+فقط وقتی covered بود که *همه‌ی* کلمات مهمش (شامل اسم‌های انگلیسی «proposals»، «result») seed شده باشند — وگرنه
+هر اسم fuzzy جست‌وجو و با انرژی ۰.۸۵ seed می‌شد (`proposals` → `rpn.py:filter_proposals` @0.55 — forbidden
+holdout؛ `result` → `ssd.py`، `feature_pyramid_network.py`). فیکس: cluster که یک identifier کدشکلِ حل‌شده دارد
+covered است. باگ همراه: `seed_term_resolved` query را با پیشوند `reason:` (`identifier:fastrcnn_loss`) مقایسه
+می‌کرد و هرگز برابر نمی‌شد — فقط از طریق `.member` تصادفاً match می‌کرد؛ پیشوند حالا جدا می‌شود.
+
+**F42 — `seed/owner_cohere.rs` (جدید):** identifier بدون owner (`postprocess`) وقتی seed دیگری از همان سؤال به
+owner‌ای با عضو هم‌نام حل شده (`BasePredictor`) به همان عضو re-point می‌شود (`sam/predict.py:Predictor.postprocess`
+→ `predictor.py:BasePredictor.postprocess`). خانواده‌ی F28/F33، برای حالتی که نقطه در prompt نیست. strict
+`ultra_predict_stream` که F41 تنها آن را می‌انداخت (`postprocess=Folded`) با این برمی‌گردد.
+
+| مجموعه | قبل (main a035b01، بعد از F40) | بعد (F41+F41b+F42) |
+|---|---|---|
+| dev-4 | recall 1.000 prec 0.873 forbidden 0 oracle 21/21 strict 19 | recall 1.000 prec **0.906** forbidden 0 oracle 21/21 strict 19 |
+| large | recall 0.950 prec 0.269 forbidden 1 oracle 18/20 strict 12 | recall 0.950 prec **0.387** forbidden 1 oracle 18/20 strict **13** |
+| holdout-2 | recall 1.000 prec 0.424 forbidden 1 oracle 19/20 strict 15 | recall 1.000 prec **0.470** forbidden **0** oracle **20/20** strict **16** |
+
+نتایج میانی که رد شدند (ثبت برای این‌که دوباره امتحان نشوند): F41 تنها → large 0.325 ولی strict 12→11 و holdout
+0.424→0.409 با forbidden 1→2 (rpn.py) — mixed. **F43** (کف امتیاز ۱۲ برای fill اختیاری، آینه‌ی مسیر overflow) →
+holdout 0.409→0.391، بدتر؛ برگردانده شد. فرضیه‌ی «slot آزادشده را fill پر می‌کند» درست بود ولی مکانیزم fill نبود،
+cluster fuzzy بود (F41b). درس: probe کن، فرض نکن.
+
+**هنوز باز:** large 0.387 و holdout 0.470 هر دو زیر هدف ۰.۶۰. باقی‌مانده‌ی probe‌ها: `gin_recovery` (idiom seedهای F35:
+`concept:next`، `alias_code:app.use`، `client_expansion:route` → فایل تست)، `django_csrf`، `ultra_validator_call`
+(forbidden `trainer.py` — از مسیر دیگری غیر از artifact seed). `django_template_render` همچنان recall 0 (باگ فولد جدا).
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.

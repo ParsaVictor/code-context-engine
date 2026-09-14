@@ -170,6 +170,22 @@ pub fn resolve_artifact_seeds(
         .filter_map(|id| graph.get_node(id))
         .map(|n| n.name.to_lowercase())
         .collect();
+    // The prompt spelled out a code identifier (`Mosaic`, `BasePredictor.stream_inference`)
+    // and it resolved: the question is about that symbol, so a kind the prompt
+    // merely implies ("training sample", "inference") seeds only nodes it names.
+    let code_anchor = already_seeded
+        .iter()
+        .filter_map(|id| graph.get_node(id))
+        .any(|n| {
+            signature.identifiers.iter().any(|id| {
+                looks_like_code(id)
+                    && (id == &n.name
+                        || id
+                            .rsplit(['.', ':'])
+                            .next()
+                            .is_some_and(|last| last == n.name))
+            })
+        });
 
     let mut out: Vec<(NodeId, f32, String)> = Vec::new();
     for kind in &wanted {
@@ -187,6 +203,9 @@ pub fn resolve_artifact_seeds(
                     .parent
                     .as_deref()
                     .is_some_and(|p| seeded_names.contains(&p.to_lowercase()));
+                if code_anchor && !named && !owned_by_seed {
+                    return None;
+                }
                 Some((
                     id.clone(),
                     kind_score(&node.name, signature),
@@ -243,6 +262,12 @@ fn wanted_kinds(prompt: &str) -> Vec<NodeType> {
     kinds
 }
 
+/// `Mosaic`, `stream_inference`, `Owner.member` — not the English word "training".
+fn looks_like_code(id: &str) -> bool {
+    id.chars()
+        .any(|c| c.is_ascii_uppercase() || c == '_' || c == '.' || c == ':')
+}
+
 /// Whole-word match, so `map` does not fire on `mapper` and `lr` does not fire
 /// inside `clr`. Multi-word terms are matched as a phrase.
 fn contains_word(haystack: &str, needle: &str) -> bool {
@@ -281,10 +306,13 @@ fn prompt_names_node(name: &str, parent: Option<&str>, signature: &TaskSignature
                 .any(|id| id.to_lowercase() == qualified)
                 || signature.raw_prompt.to_lowercase().contains(&qualified)
         }
-        None => signature
-            .identifiers
-            .iter()
-            .any(|id| id.eq_ignore_ascii_case(name)),
+        None => {
+            signature
+                .identifiers
+                .iter()
+                .any(|id| id.eq_ignore_ascii_case(name))
+                || (looks_like_code(name) && contains_word(&signature.raw_prompt, name))
+        }
     }
 }
 

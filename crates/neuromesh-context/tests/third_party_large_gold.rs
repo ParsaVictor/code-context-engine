@@ -29,7 +29,7 @@
 mod gold_set;
 
 const MIN_MEAN_RECALL: f32 = 0.94; // measured 0.950
-const MIN_MEAN_PRECISION: f32 = 0.26; // measured 0.269 (F33+F34)
+const MIN_MEAN_PRECISION: f32 = 0.38; // measured 0.387 (F40-F42)
 const MAX_FORBIDDEN_HITS: usize = 1; // measured 1 (ultra_validator_call trainer.py remains)
 const MIN_TASK_REACHABLE: f32 = 0.89; // measured 18/20
 
