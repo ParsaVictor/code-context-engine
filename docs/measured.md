@@ -20,6 +20,7 @@ not the project's number.** Only the holdout rows are.
 | **holdout-c** | libuv (C), fmt (C++) | never tuned on | **1.000** | **0.656** | **0** | 16/16 · 10 |
 | **holdout-lang** | os-lib (Scala), r-lib/cli (R), Flux.jl (Julia) | never tuned on | **1.000** | **0.502** | **1** | 14/15 · 9 |
 | **holdout-ml** | keras-io examples (Keras), setfit (Hugging Face) | never tuned on | **1.000** | **0.360** | **0** | 10/10 · 8 |
+| **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **0.917** | **0.559** | **0** | — |
 
 - **recall / precision** are file-level against a hand-written gold (`gold_files`) per question.
   A forbidden file in the packet zeroes that question's precision.

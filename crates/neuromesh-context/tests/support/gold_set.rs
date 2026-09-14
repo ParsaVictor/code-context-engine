@@ -51,14 +51,24 @@ pub fn workspace_root() -> PathBuf {
 }
 
 fn checkout_dir(root: &Path, set: &str) -> PathBuf {
-    let var = format!("NM_{}_DIR", set.to_uppercase());
+    let var = format!("NM_{}_DIR", set.to_uppercase().replace('-', "_"));
     std::env::var(var)
         .map(PathBuf::from)
         .unwrap_or_else(|_| root.join("target").join("third_party").join(set))
 }
 
+/// Where the set's `repos.toml` and per-repo gold live. Defaults to
+/// `tests/third_party/<set>`; `NM_<SET>_SET_DIR` points it outside the
+/// repository for a private holdout whose gold must never be committed here.
+fn set_dir(root: &Path, set: &str) -> PathBuf {
+    let var = format!("NM_{}_SET_DIR", set.to_uppercase().replace('-', "_"));
+    std::env::var(var)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| root.join("tests/third_party").join(set))
+}
+
 fn repo_names(root: &Path, set: &str) -> Vec<String> {
-    let manifest = root.join("tests/third_party").join(set).join("repos.toml");
+    let manifest = set_dir(root, set).join("repos.toml");
     let raw = std::fs::read_to_string(&manifest)
         .unwrap_or_else(|e| panic!("{}: {e}", manifest.display()));
     raw.lines()
@@ -78,7 +88,8 @@ pub fn run_gold_set(set: &str) -> GoldSetSummary {
     let names = repo_names(&root, set);
     assert!(
         !names.is_empty(),
-        "no repositories in tests/third_party/{set}/repos.toml"
+        "no repositories in {}/repos.toml",
+        set_dir(&root, set).display()
     );
 
     let mut recalls = Vec::new();
@@ -105,7 +116,7 @@ pub fn run_gold_set(set: &str) -> GoldSetSummary {
         graph.ingest_workspace(&scanned);
         lines.push(format!("== {name}: {} files", scanned.len()));
 
-        let set_dir = root.join("tests/third_party").join(set).join(name);
+        let set_dir = set_dir(&root, set).join(name);
         let gold_path = set_dir.join("gold_tasks.toml");
         let gold: Vec<GoldTask> = if gold_path.exists() {
             load_gold_tasks(&gold_path)
