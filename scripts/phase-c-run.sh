@@ -17,11 +17,11 @@ clean() { [ -s "$1" ] && grep -q "^Task success" "$1" && ! grep -q "provider err
 run() { # set workdir tasksfile
   local set="$1" dir="$2" tasks="$3"
   for ctx in packet whole-gold-files grep; do
-    local f="$out/$set-$ctx.json"
+    local f="$out/$set-$ctx-$model.json"
     if clean "$f"; then echo "keep  $set/$ctx"; continue; fi
     echo "run   $set/$ctx"
     (cd "$dir" && "$bin" eval --tasks --executor model --context "$ctx" \
-        --model "$model" --judge-model "$judge" ${tasks:+--tasks-file "$tasks"} --json) > "$f" 2>"$out/$set-$ctx.log"
+        --model "$model" --judge-model "$judge" ${tasks:+--tasks-file "$tasks"} --json) > "$f" 2>"$out/$set-$ctx-$model.log"
     grep -E "^Task success" "$f" | cut -c1-160
   done
 }
