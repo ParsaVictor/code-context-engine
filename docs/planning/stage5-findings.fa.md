@@ -335,6 +335,7 @@ optional با امتیاز ۹–۲۴ از سیگنال‌های ضعیفِ *در
 | F36′ | focus_term انگلیسی وقتی identifier حل شده، امتیاز ۳۶ نگیرد (فقط حلقه‌ی ۳۶، با `strong_focus`) | holdout بدون تغییر، large forbidden جدید (`context.py` در template_render) | آن ۲۴ها از مسیر ۳۶ نبودند (جمع import+callee)؛ slot آزادشده forbidden آورد |
 | F46 | callee با >۵ caller در fill امتیاز ۶ (نه ۱۵)؛ import با max نه جمع | large 0.504→**0.424** | golds چندفایلی django به همان سیگنال‌های ضعیف تکیه دارند |
 | F47 | prompt کاملاً anchored (هر identifier کدشکل حل شده) → optional فقط با gain ≥۲۰ یا learned | فیکسچر `sms_stored` recall 0.5 (gold caller `SmsReceiver.kt` را می‌خواهد)، تست synaptic | golds dev/fixture *همسایه* می‌خواهند |
+| F52 | «شرط شواهد» روی optional fill: فایل optional فقط اگر callee متمرکز seed (≤۵ caller یا نام‌برده)، synaptic/learned، یا یک توکن prompt در نام symbol/مسیرش (prefix ≥۴ حرف) | dev-4 0.906 (بدون تغییر)، holdout-2 0.496→0.500، **large 0.507→0.482**، hc/hl/hml بدون تغییر | mixed (session 10): golds چندفایلی django باز هم به importهای بی‌واژه تکیه دارند؛ چهارمین و آخرین تلاش fill — این خط بسته است |
 
 **نتیجه‌گیری:** اختلاف باقی‌مانده تا هدف ۰.۶۰ روی large/holdout عمدتاً اختلاف *سبک gold* است، نه باگ موتور:
 golds dev-4/fixture (نوشته‌شده با دید packet) همسایه‌های سؤال را جزو پاسخ می‌شمارند؛ golds large/holdout
