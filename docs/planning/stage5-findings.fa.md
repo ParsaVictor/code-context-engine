@@ -479,6 +479,25 @@ per revision، پنج گرامر جدید (اثر فقط روی فایل‌ها�
 fallback). واریانس این ماشین بین دو اجرا ~۵–۱۰٪ است؛ اگر `l1_p95` در PR بعدی به ۵۰ رسید، طبق G5 پروفایل، نه بالا
 بردن گیت. `eval --release-gates` precision داخلی بدون تغییر (0.383).
 
+## F51 — anchorهای C++ در prompt: `std::` و پسوندهای فایل زبان‌های جدید (فیکس شد)؛ resolver `Owner::member` (رد شد)
+
+probe `fmt_vformat_to_string` (تنها recall 0 در holdout-c) سه چیز نشان داد:
+- `identifier:std::string` → `base.h:string_value` و `identifier:string` → `test/format-test.cc:string`: extractor
+  (`identifiers.rs`، `qual_re`) هر `a::b` را با هر دو شکل push می‌کرد. `std::` کتابخانه‌ی استاندارد است — نه مسیر، نه
+  عضو خالی‌اش anchor نیست. **فیکس.**
+- «format-inl.h» در prompt file hint نمی‌شد: regex فایل‌های bare پسوندهای C/C++/Scala/Julia/R/ipynb را نداشت (زبان‌های
+  D-۱/D-۲ به این لیست اضافه نشده بودند). **فیکس.**
+- `identifier:detail::vformat_to` → `format.h:to_utf8` @1.00: مسیر `::` در activator از `resolve_best` (جست‌وجوی fuzzy)
+  اولین hit را با confidence ۱.۰ می‌گیرد، حتی با نام دیگر. فیکس اصولی (مثل `Owner.member`: `resolve_dotted_member`
+  + پذیرش فقط با نام برابر) امتحان شد: vformat درست شد ولی `fmt_print_to_file` forbidden گرفت — seed غلط قبلی
+  (`detail::print` → یک symbol بی‌ربط) یک slot required را اشغال می‌کرد و `ostream.h`/`compile.h` (focus_term ۳۶، F36)
+  بیرون می‌ماندند. **رد شد**؛ باگ resolver `::` باز است (F51b) و تا F36 حل نشود دست‌زدنی نیست.
+
+| مجموعه | قبل (main 02c0023) | بعد (F51، فقط extractor) |
+|---|---|---|
+| holdout-c | 0.938 / 0.625 / 0 / 15/16 strict 10 | **1.000** / **0.656** / 0 / **16/16** strict 10 |
+| بقیه | — | (regression در PR) |
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.

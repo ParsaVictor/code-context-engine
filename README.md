@@ -17,7 +17,7 @@
 > Local-first MCP context engine that cuts AI coding-agent token cost by ~90% —
 > a per-project code graph + folding for **Cursor**, **Claude Code**, **Codex**,
 > and every MCP client. Built for **web *and* ML** codebases.
-> **Status:** measured on repositories it was never tuned on — recall 0.94–1.00, precision 0.50–0.63, no forbidden file shipped in Go/Python and C/C++ holdouts; model-executed task success not yet measured. Numbers, caveats and the one-command benchmark: [docs/measured.md](docs/measured.md). Roadmap: [ROADMAP.md](ROADMAP.md).
+> **Status:** measured on repositories it was never tuned on — recall 1.00, precision 0.36–0.66, no forbidden file shipped in Go/Python and C/C++ holdouts; model-executed task success not yet measured. Numbers, caveats and the one-command benchmark: [docs/measured.md](docs/measured.md). Roadmap: [ROADMAP.md](ROADMAP.md).
 
 <sub>Derivative of **[NeuroMesh](https://github.com/pinoox/neuromesh)** by yoosef alipour (MIT). See [NOTICE](NOTICE) · [ATTRIBUTION.md](ATTRIBUTION.md) · [ROADMAP.md](ROADMAP.md).</sub>
 
@@ -253,7 +253,7 @@ On repositories the engine was **never tuned on** (gold written from the source 
 | holdout | recall | precision | forbidden files | needed symbols reachable |
 | :--- | ---: | ---: | ---: | ---: |
 | gin + torchvision (Go, Python) | 1.000 | 0.496 | 0 | 20/20 |
-| libuv + fmt (C, C++) | 0.938 | 0.625 | 0 | 15/16 |
+| libuv + fmt (C, C++) | 1.000 | 0.656 | 0 | 16/16 |
 | os-lib + cli + Flux.jl (Scala, R, Julia) | 1.000 | 0.502 | 1 | 14/15 |
 | keras-io + setfit (Keras, Hugging Face) | 1.000 | 0.360 | 0 | 10/10 |
 

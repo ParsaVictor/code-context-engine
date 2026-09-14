@@ -236,7 +236,7 @@ pub fn extract_prompt_anchors(prompt: &str) -> PromptAnchors {
     });
     let bare_file_re = BARE_FILE_RE.get_or_init(|| {
         Regex::new(
-            r"\b[A-Za-z0-9_.-]+\.(?:rs|ts|tsx|js|jsx|mjs|cjs|py|vue|go|java|cs|kt|kts|dart|rb|php|astro|svelte|twig|cshtml|razor|swift|css|scss|sass|less|html|htm|svg|sql|json|jsonc)\b",
+            r"\b[A-Za-z0-9_.-]+\.(?:rs|ts|tsx|js|jsx|mjs|cjs|py|vue|go|java|cs|kt|kts|dart|rb|php|astro|svelte|twig|cshtml|razor|swift|css|scss|sass|less|html|htm|svg|sql|json|jsonc|c|h|cc|cpp|cxx|hpp|scala|sc|jl|ipynb|r|R)\b",
         )
         .unwrap()
     });
@@ -297,6 +297,11 @@ pub fn extract_prompt_anchors(prompt: &str) -> PromptAnchors {
 
     for cap in qual_re.captures_iter(prompt) {
         let path = cap.get(0).unwrap().as_str();
+        // `std::string` names the C++ standard library, not a symbol here;
+        // neither the path nor its bare `string` is an anchor.
+        if path.starts_with("std::") {
+            continue;
+        }
         push_unique(&mut identifiers, path.to_string());
         if let Some(last) = path.split("::").last() {
             push_unique(&mut identifiers, last.to_string());
