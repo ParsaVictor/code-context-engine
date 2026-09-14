@@ -1,0 +1,34 @@
+[[task]]
+id = "cli_create_ansi_style"
+repo = "cli"
+prompt = "How does create_ansi_style look up the builtin open and close codes, build a style tag with create_ansi_style_tag, and wrap it with create_ansi_style_fun?"
+needs = ["R/ansi.R::create_ansi_style", "R/ansi.R::create_ansi_style_tag", "R/ansi.R::create_ansi_style_fun"]
+forbidden = ["R/spinner.R"]
+
+[[task]]
+id = "cli_make_ansi_style"
+repo = "cli"
+prompt = "How does make_ansi_style accept a style name, an RGB matrix or a crayon style, and validate it with stop_if_not before producing an ANSI style?"
+needs = ["R/ansi.R::make_ansi_style"]
+forbidden = ["R/tree.R"]
+
+[[task]]
+id = "cli_rule"
+repo = "cli"
+prompt = "How does rule validate its left, center and right labels and the line style, and how do rule_left, rule_center and rule_line lay the rule out?"
+needs = ["R/rules.R::rule", "R/rules.R::rule_left", "R/rules.R::rule_center"]
+forbidden = ["R/boxes.R"]
+
+[[task]]
+id = "cli_progress_update"
+repo = "cli"
+prompt = "How does cli_progress_update find the current progress bar in clienv, apply inc, set, total and status, and decide whether to redraw?"
+needs = ["R/progress-client.R::cli_progress_update"]
+forbidden = ["R/hash.R"]
+
+[[task]]
+id = "cli_progress_bar_create"
+repo = "cli"
+prompt = "How does cli_progress_bar register a new progress bar in clienv with its format, total and type, and how does pb__default_format pick a format?"
+needs = ["R/progress-client.R::cli_progress_bar", "R/progress-client.R::pb__default_format"]
+forbidden = ["R/time-ago.R"]

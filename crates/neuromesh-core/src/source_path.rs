@@ -98,10 +98,8 @@ pub fn is_legacy_path(path: &Path) -> bool {
             .file_stem()
             .and_then(|s| s.to_str())
             .is_some_and(|stem| {
-                matches!(
-                    stem.to_lowercase().as_str(),
-                    "compat" | "legacy" | "deprecated"
-                )
+                let stem = stem.to_lowercase();
+                stem.starts_with("deprecat") || matches!(stem.as_str(), "compat" | "legacy")
             })
 }
 

@@ -1,0 +1,36 @@
+# r-lib/cli gold — written from the source before any engine run. G1 checked.
+
+[[task]]
+id = "cli_create_ansi_style"
+prompt = "How does create_ansi_style look up the builtin open and close codes, build a style tag with create_ansi_style_tag, and wrap it with create_ansi_style_fun?"
+gold_files = ["R/ansi.R"]
+forbidden_files = ["R/spinner.R"]
+expect_seeds_missed = false
+
+[[task]]
+id = "cli_make_ansi_style"
+prompt = "How does make_ansi_style accept a style name, an RGB matrix or a crayon style, and validate it with stop_if_not before producing an ANSI style?"
+gold_files = ["R/ansi.R"]
+forbidden_files = ["R/tree.R"]
+expect_seeds_missed = false
+
+[[task]]
+id = "cli_rule"
+prompt = "How does rule validate its left, center and right labels and the line style, and how do rule_left, rule_center and rule_line lay the rule out?"
+gold_files = ["R/rules.R"]
+forbidden_files = ["R/boxes.R"]
+expect_seeds_missed = false
+
+[[task]]
+id = "cli_progress_update"
+prompt = "How does cli_progress_update find the current progress bar in clienv, apply inc, set, total and status, and decide whether to redraw?"
+gold_files = ["R/progress-client.R"]
+forbidden_files = ["R/hash.R"]
+expect_seeds_missed = false
+
+[[task]]
+id = "cli_progress_bar_create"
+prompt = "How does cli_progress_bar register a new progress bar in clienv with its format, total and type, and how does pb__default_format pick a format?"
+gold_files = ["R/progress-client.R"]
+forbidden_files = ["R/time-ago.R"]
+expect_seeds_missed = false

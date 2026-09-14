@@ -1,0 +1,34 @@
+[[task]]
+id = "flux_train_loop"
+repo = "flux"
+prompt = "How does train! resolve the AD backend with _resolve_backend, iterate the data with @withprogress, and call _trainstep! for each batch?"
+needs = ["src/train.jl::train!", "src/train.jl::_resolve_backend"]
+forbidden = ["src/outputsize.jl"]
+
+[[task]]
+id = "flux_trainstep"
+repo = "flux"
+prompt = "How do trainstep! and _trainstep! run a single optimisation step, dispatching to _reactant_trainstep! on Reactant and _eager_step! otherwise?"
+needs = ["src/train.jl::trainstep!", "src/train.jl::_trainstep!", "src/train.jl::_eager_step!"]
+forbidden = ["src/layers/upsample.jl"]
+
+[[task]]
+id = "flux_chain_apply"
+repo = "flux"
+prompt = "How does calling a Chain apply its layers in order through _applychain, and how does activations collect the intermediate outputs with _extraChain?"
+needs = ["src/layers/basic.jl::_applychain", "src/layers/basic.jl::activations", "src/layers/basic.jl::_extraChain"]
+forbidden = ["src/losses/functions.jl"]
+
+[[task]]
+id = "flux_dense_forward"
+repo = "flux"
+prompt = "How does the Dense constructor build a layer from an in => out pair, and how does calling a Dense on an AbstractVecOrMat compute σ.(W*x .+ b)?"
+needs = ["src/layers/basic.jl::Dense"]
+forbidden = ["src/optimise/train.jl"]
+
+[[task]]
+id = "flux_crossentropy_losses"
+repo = "flux"
+prompt = "How do crossentropy and logitcrossentropy compute the loss with the agg reducer, and how does label_smoothing adjust the targets?"
+needs = ["src/losses/functions.jl::crossentropy", "src/losses/functions.jl::logitcrossentropy", "src/losses/functions.jl::label_smoothing"]
+forbidden = ["src/layers/recurrent.jl"]

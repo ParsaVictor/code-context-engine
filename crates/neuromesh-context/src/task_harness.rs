@@ -224,10 +224,23 @@ fn code_defines_symbol(code: &str, symbol: &str) -> bool {
                 continue;
             }
             let before = trimmed[..at].trim_end();
-            if before.ends_with('.') || before.ends_with("->") || before.ends_with("::") {
+            let after = trimmed[end..].trim_start();
+            if let Some(scoped) = before.strip_suffix("::") {
+                // `void Formatter::format(int x) {` is a definition when a
+                // return type precedes the owner; `ns::call(x);` is not.
+                let owner_start = scoped
+                    .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .map(|i| i + 1)
+                    .unwrap_or(0);
+                let ret = &scoped[..owner_start];
+                if after.starts_with('(') && c_style_type_prefix(ret) {
+                    return true;
+                }
                 continue;
             }
-            let after = trimmed[end..].trim_start();
+            if before.ends_with('.') || before.ends_with("->") {
+                continue;
+            }
             let opens = after.starts_with('(')
                 || after.starts_with('<')
                 || after.starts_with(':')
@@ -249,6 +262,22 @@ fn code_defines_symbol(code: &str, symbol: &str) -> bool {
             // type-shaped tokens before the name and a parameter list after it.
             if after.starts_with('(') && c_style_type_prefix(before) {
                 return true;
+            }
+            // R `name <- function(` / `name = function(`; Julia short form
+            // `name(args) = body` with the name opening the line.
+            if before.is_empty() {
+                let rest = after.trim_start_matches(['<', '-', '=']).trim_start();
+                if rest.starts_with("function") {
+                    return true;
+                }
+                if after.starts_with('(') {
+                    if let Some(close) = after.find(')') {
+                        let tail = after[close + 1..].trim_start();
+                        if tail.starts_with('=') && !tail.starts_with("==") {
+                            return true;
+                        }
+                    }
+                }
             }
         }
     }
@@ -651,6 +680,52 @@ needs = ["lib/a.js"]
         assert!(code_defines_symbol(
             "    fun onReceive(body: String) {",
             "onReceive"
+        ));
+    }
+}
+
+#[cfg(test)]
+mod definition_shapes {
+    use super::code_defines_symbol;
+
+    #[test]
+    fn c_r_and_julia_definition_shapes_count() {
+        assert!(code_defines_symbol(
+            "int uv_timer_start(uv_timer_t* handle,\n",
+            "uv_timer_start"
+        ));
+        assert!(code_defines_symbol(
+            "void Formatter::format(int x) {\n",
+            "Formatter.format"
+        ));
+        assert!(code_defines_symbol(
+            "rule <- function(\n  left = \"\",\n",
+            "rule"
+        ));
+        assert!(code_defines_symbol(
+            "create_store = function() list()\n",
+            "create_store"
+        ));
+        assert!(code_defines_symbol(
+            "function train!(loss, adtype, model)\n",
+            "train!"
+        ));
+        assert!(code_defines_symbol(
+            "activations(c::Chain, input) = _extraChain(x)\n",
+            "activations"
+        ));
+        // call sites are not definitions
+        assert!(!code_defines_symbol(
+            "  err = uv_timer_start(h, cb, 1, 0);\n",
+            "uv_timer_start"
+        ));
+        assert!(!code_defines_symbol(
+            "  return rule(left, center)\n",
+            "rule"
+        ));
+        assert!(!code_defines_symbol(
+            "  if activations(c, x) == y\n",
+            "activations"
         ));
     }
 }

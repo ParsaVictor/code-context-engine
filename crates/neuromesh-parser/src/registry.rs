@@ -4,8 +4,8 @@ use crate::json::JsonParser;
 use crate::python_lang::PythonParser;
 use crate::query_extract::{
     self, Grammar, QueryOptions, CPP_QUERIES, CSHARP_QUERIES, C_QUERIES, DART_QUERIES, GO_QUERIES,
-    JAVA_QUERIES, KOTLIN_QUERIES, PHP_QUERIES, PYTHON_QUERIES, RUBY_QUERIES, RUST_QUERIES,
-    SWIFT_QUERIES, TYPESCRIPT_QUERIES,
+    JAVA_QUERIES, JULIA_QUERIES, KOTLIN_QUERIES, PHP_QUERIES, PYTHON_QUERIES, RUBY_QUERIES,
+    RUST_QUERIES, R_QUERIES, SCALA_QUERIES, SWIFT_QUERIES, TYPESCRIPT_QUERIES,
 };
 use crate::rust_lang::RustParser;
 use crate::scss::ScssParser;
@@ -177,6 +177,27 @@ impl LanguageSpec {
                 options: QueryOptions::c(),
                 fallback: Fallback::Generic,
             },
+            SourceLanguage::Scala => Self {
+                language,
+                grammar: Some(Grammar::Scala),
+                queries: Some(SCALA_QUERIES),
+                options: QueryOptions::scala(),
+                fallback: Fallback::Generic,
+            },
+            SourceLanguage::R => Self {
+                language,
+                grammar: Some(Grammar::R),
+                queries: Some(R_QUERIES),
+                options: QueryOptions::r_lang(),
+                fallback: Fallback::Generic,
+            },
+            SourceLanguage::Julia => Self {
+                language,
+                grammar: Some(Grammar::Julia),
+                queries: Some(JULIA_QUERIES),
+                options: QueryOptions::julia(),
+                fallback: Fallback::Generic,
+            },
             SourceLanguage::JSON => Self {
                 language,
                 grammar: None,
@@ -251,6 +272,9 @@ mod tests {
             SourceLanguage::Ruby,
             SourceLanguage::C,
             SourceLanguage::Cpp,
+            SourceLanguage::Scala,
+            SourceLanguage::R,
+            SourceLanguage::Julia,
         ] {
             let spec = LanguageSpec::get(language);
             assert!(
