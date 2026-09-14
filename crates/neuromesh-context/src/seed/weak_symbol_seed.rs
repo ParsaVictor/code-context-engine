@@ -57,6 +57,13 @@ pub(crate) fn prune_weak_substring_symbol_seeds(
         return;
     }
     let words = prompt_words(prompt);
+    let strong_files: HashSet<std::path::PathBuf> = seeds
+        .iter()
+        .filter(|s| is_strong(s))
+        .filter_map(|s| s.resolved_id.as_ref())
+        .filter_map(|id| graph.get_node(id))
+        .map(|n| n.file_path.clone())
+        .collect();
     let mut dropped: Vec<NodeId> = Vec::new();
     seeds.retain(|seed| {
         if !WEAK.contains(&prefix(&seed.query)) {
@@ -72,7 +79,18 @@ pub(crate) fn prune_weak_substring_symbol_seeds(
             return true;
         }
         if node.name.eq_ignore_ascii_case(&asked_name(&seed.query)) {
-            return true;
+            // `concept:validate` → `BaseTrainer.validate`: the English word
+            // matched a member of an owner the question never mentioned, in a
+            // file none of its real anchors live in. That is a homonym, not a hit.
+            let owner_named = match node.parent.as_deref() {
+                Some(owner) => symbol_named_in_prompt(owner, &words),
+                None => true,
+            };
+            if owner_named || strong_files.contains(&node.file_path) {
+                return true;
+            }
+            dropped.push(id.clone());
+            return false;
         }
         if symbol_named_in_prompt(&node.name, &words) {
             return true;
@@ -179,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_name_hit_and_prompt_named_symbol_are_kept() {
+    fn exact_name_hit_on_a_named_owner_and_prompt_named_symbol_are_kept() {
         let g = graph();
         let mut seeds = vec![
             seed(&g, "file:configurator.py", "configurator.py", None),
@@ -190,10 +208,23 @@ mod tests {
             run(
                 &g,
                 &mut seeds,
-                "How does configurator.py set config and configure optimizers?"
+                "How does configurator.py set GPT config and configure optimizers?"
             )
             .len(),
             3
+        );
+    }
+
+    #[test]
+    fn exact_name_homonym_on_an_unnamed_owner_in_another_file_is_dropped() {
+        let g = graph();
+        let mut seeds = vec![
+            seed(&g, "file:configurator.py", "configurator.py", None),
+            seed(&g, "concept:config", "config", None),
+        ];
+        assert_eq!(
+            run(&g, &mut seeds, "How does configurator.py read its config?"),
+            vec!["file:configurator.py"]
         );
     }
 
