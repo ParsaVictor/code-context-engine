@@ -573,7 +573,7 @@ index 2186→2610ms (۱.۱۹×)، query p50 960→1068ms (۱.۱۱×) — گیت 
 | holdout-ml | 0.360 | 0.360 |
 | large | 0.507 | 0.502 (−۰.۰۰۵، علت بالا) |
 | private | 0.601 | 0.587 (−۰.۰۱۴: یک فایل در `b2b_totp_verify` — `auth.controller.ts`؛ زیر آستانه‌ی ۰.۰۲) |
-| dev / holdout-2 / c / lang | — | (در PR) |
+| dev / holdout-2 / c / lang | 0.906 / 0.496 / 0.656 / 0.502 | بی‌تغییر |
 
 recall holdout-cfg 0.879: دو تسک hydra که کلید فقط از طریق `self.hparams.x` خوانده می‌شود و `hparams` با
 `save_hyperparameters()` پر می‌شود — یالی به YAML نیست چون نام فایل config در آن ماژول نیامده (Hydra `_target_`
