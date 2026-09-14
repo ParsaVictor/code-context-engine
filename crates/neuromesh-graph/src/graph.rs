@@ -708,7 +708,10 @@ impl NeuralProjectGraph {
                             &imported_files,
                             rel.receiver_hint.as_deref(),
                         )
-                        .filter(|(target, _)| self.same_language_family(target, &rel.source_file))
+                        .filter(|(target, _)| {
+                            self.same_language_family(target, &rel.source_file)
+                                && !self.is_config_node(target)
+                        })
                     {
                         if target != source {
                             self.add_edge_with_confidence(
@@ -725,7 +728,10 @@ impl NeuralProjectGraph {
                             Some(&rel.source_file.to_string_lossy()),
                             Some(&imported_files),
                         )
-                        .filter(|(target, _)| self.same_language_family(target, &rel.source_file))
+                        .filter(|(target, _)| {
+                            self.same_language_family(target, &rel.source_file)
+                                && !self.is_config_node(target)
+                        })
                     {
                         if target != source {
                             self.add_edge_with_confidence(
@@ -1241,6 +1247,7 @@ impl NeuralProjectGraph {
     pub fn resolve_unique(&self, name: &str, file_hint: Option<&str>) -> Option<NodeId> {
         let data = self.inner.read();
         let (ids, exact) = case_narrowed(&data, name);
+        let ids = without_prose_config_keys(&data, ids, name);
         if ids.is_empty() || !exact {
             return None;
         }
@@ -1346,6 +1353,12 @@ impl NeuralProjectGraph {
                 .and_then(|e| e.to_str())
                 .is_some_and(|e| e.eq_ignore_ascii_case(&ext_l))
         })
+    }
+
+    /// A YAML/JSON key or an argparse flag: data, never a call target.
+    pub fn is_config_node(&self, id: &NodeId) -> bool {
+        self.get_node(id)
+            .is_some_and(|n| matches!(n.node_type, NodeType::Config | NodeType::Hyperparameter))
     }
 
     /// A configuration key by name, among `Config`/`Hyperparameter` nodes
@@ -1500,6 +1513,9 @@ impl NeuralProjectGraph {
     ) -> Option<NodeId> {
         let data = self.inner.read();
         let (ids, exact) = case_narrowed(&data, name);
+        // A YAML key or an argparse flag is data, never a callee: `Profile(...)`
+        // must not bind to `profile: False` in default.yaml.
+        let ids = without_config_nodes(&data, ids);
         if ids.is_empty() || !exact {
             return None;
         }
@@ -1583,6 +1599,12 @@ impl NeuralProjectGraph {
         }
         let data = self.inner.read();
         let (ids, exact) = case_narrowed(&data, name);
+        // A configuration key answers only to a code-shaped name. `lr0`,
+        // `batch_size`, `numWorkers` name a key; `metric`, `model`, `seed`
+        // are English words that happen to be keys in some YAML or argparse
+        // file, and a prose word must not pull that file into every packet
+        // that uses the word (the F36 path).
+        let ids = without_prose_config_keys(&data, ids, name);
         if ids.is_empty() {
             return None;
         }
@@ -1797,6 +1819,18 @@ impl NeuralProjectGraph {
     }
 
     fn resolve_call_ranked(
+        &self,
+        name: &str,
+        source_file: &Path,
+        imported_files: &HashSet<PathBuf>,
+        receiver_hint: Option<&str>,
+    ) -> Option<(NodeId, EdgeConfidence)> {
+        // Whatever path found it: a config key is never what a call names.
+        self.resolve_call_ranked_inner(name, source_file, imported_files, receiver_hint)
+            .filter(|(id, _)| !self.is_config_node(id))
+    }
+
+    fn resolve_call_ranked_inner(
         &self,
         name: &str,
         source_file: &Path,
@@ -2418,6 +2452,13 @@ impl NeuralProjectGraph {
                     continue;
                 }
                 for (neighbor_id, edge) in data.mesh.neighbors(node_id) {
+                    // A config key is read from dozens of places; walked
+                    // backwards it is a hub that joins every reader of
+                    // `conf` to every other. Energy follows the edge only
+                    // the way it points: key -> reader.
+                    if edge.edge_type == EdgeType::Parameterizes && edge.source != *node_id {
+                        continue;
+                    }
                     let spread =
                         energy * decay * edge.pheromone_weight * edge.edge_type.attenuation();
                     if spread >= min_cutoff {
@@ -3251,6 +3292,46 @@ fn normalize_path_hint(value: &str) -> String {
 /// The index is case-folded, but every supported language is case-sensitive:
 /// a Go parameter `handle` must not resolve to an exported `Handle` elsewhere.
 /// Returns `(ids, exact)`; `exact == false` means only case-mismatched hits exist.
+/// `lr0`, `batch_size`, `numWorkers`, `lr_backbone`: a name with an
+/// underscore, a digit, or an inner capital is written the way code names a
+/// key. A single lower-case word is prose until proven otherwise.
+fn config_key_shaped(name: &str) -> bool {
+    name.contains('_')
+        || name.chars().any(|c| c.is_ascii_digit())
+        || name.chars().skip(1).any(|c| c.is_ascii_uppercase())
+}
+
+/// Drop every Config/Hyperparameter candidate: for call resolution.
+fn without_config_nodes(data: &GraphData, ids: Vec<NodeId>) -> Vec<NodeId> {
+    ids.into_iter()
+        .filter(|id| {
+            data.mesh.node(id).is_some_and(|n| {
+                !matches!(n.node_type, NodeType::Config | NodeType::Hyperparameter)
+            })
+        })
+        .collect()
+}
+
+/// Drop YAML-key and argparse candidates when `name` is not code-shaped.
+/// JSON keys (`json.rs`) keep their old reach: the dev golds were written
+/// against it and a `package.json` script named `build` is a real handle.
+fn without_prose_config_keys(data: &GraphData, ids: Vec<NodeId>, name: &str) -> Vec<NodeId> {
+    if config_key_shaped(name) {
+        return ids;
+    }
+    ids.into_iter()
+        .filter(|id| {
+            data.mesh.node(id).is_some_and(|n| {
+                let yaml_key = n.node_type == NodeType::Config
+                    && n.file_path
+                        .extension()
+                        .is_some_and(|e| e == "yaml" || e == "yml");
+                !(yaml_key || n.node_type == NodeType::Hyperparameter)
+            })
+        })
+        .collect()
+}
+
 fn case_narrowed(data: &GraphData, name: &str) -> (Vec<NodeId>, bool) {
     let ids = data
         .name_to_nodes
