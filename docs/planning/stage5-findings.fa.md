@@ -323,6 +323,28 @@ probe چهار تسک gin با precision 0.25: `githubapi_test.go` (از `client
 per-task holdout: gin_recovery 0.20→0.50، gin_context_next 0.25→0.50، ولی gin_static 1.00→0.67 (یک فایل
 جایگزین وارد شد — بررسی نشده؛ سطح مجموعه بالا رفت، ratchet سطح مجموعه است). ratchet large precision 0.47→0.50.
 
+## F36′/F46/F47 — سه تلاش fill-tuning، هر سه رد شد؛ نتیجه‌گیری ساختاری
+
+بعد از F40–F45 (پنج فیکس متوالی، همه «حذف seed/edge غلط»، هر سه مجموعه بالا)، probe‌های باقی‌مانده
+(`vision_batched_nms` 0.20، `gin_logger` 0.25، …) همه یک شکل دارند: gold درست و تنها required است؛ ۳–۵ فایل
+optional با امتیاز ۹–۲۴ از سیگنال‌های ضعیفِ *درست* (import، callee با caller زیاد، consumer، synaptic) کنارش
+می‌نشینند. سه تلاش برای سخت‌گیرتر کردن optional:
+
+| تلاش | قاعده | نتیجه | چرا رد شد |
+|---|---|---|---|
+| F36′ | focus_term انگلیسی وقتی identifier حل شده، امتیاز ۳۶ نگیرد (فقط حلقه‌ی ۳۶، با `strong_focus`) | holdout بدون تغییر، large forbidden جدید (`context.py` در template_render) | آن ۲۴ها از مسیر ۳۶ نبودند (جمع import+callee)؛ slot آزادشده forbidden آورد |
+| F46 | callee با >۵ caller در fill امتیاز ۶ (نه ۱۵)؛ import با max نه جمع | large 0.504→**0.424** | golds چندفایلی django به همان سیگنال‌های ضعیف تکیه دارند |
+| F47 | prompt کاملاً anchored (هر identifier کدشکل حل شده) → optional فقط با gain ≥۲۰ یا learned | فیکسچر `sms_stored` recall 0.5 (gold caller `SmsReceiver.kt` را می‌خواهد)، تست synaptic | golds dev/fixture *همسایه* می‌خواهند |
+
+**نتیجه‌گیری:** اختلاف باقی‌مانده تا هدف ۰.۶۰ روی large/holdout عمدتاً اختلاف *سبک gold* است، نه باگ موتور:
+golds dev-4/fixture (نوشته‌شده با دید packet) همسایه‌های سؤال را جزو پاسخ می‌شمارند؛ golds large/holdout
+(نوشته‌شده از خواندن کد، بدون دیدن packet) فقط فایل حاوی symbol را. یک موتور نمی‌تواند هم‌زمان هر دو را
+راضی کند مگر با یک سیگنال جدید (intent «توضیح» vs «تغییر» — ولی سؤال‌های dev-4 هم «How does…» هستند با gold
+چندفایلی، پس intent متن‌محور جدا نمی‌کند). باگ‌های واقعی که probe پیدا کرد (F40–F45) همه فیکس شدند.
+**عدد صادقانه‌ی الان:** روی ریپوی ندیده با gold تک‌فایلی precision ≈۰.۴۹، recall 1.00، forbidden 0.
+تصمیم: fill-tuning متوقف؛ اعداد به‌عنوان baseline فاز C ثبت می‌شوند. ابزار `NM_PROBE_RANK=1` (breakdown
+امتیاز هر کاندید) به probe اضافه شد.
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.
