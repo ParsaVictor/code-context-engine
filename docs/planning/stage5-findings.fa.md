@@ -288,6 +288,23 @@ cluster fuzzy بود (F41b). درس: probe کن، فرض نکن.
 `concept:next`، `alias_code:app.use`، `client_expansion:route` → فایل تست)، `django_csrf`، `ultra_validator_call`
 (forbidden `trainer.py` — از مسیر دیگری غیر از artifact seed). `django_template_render` همچنان recall 0 (باگ فولد جدا).
 
+## F44 — هم‌نامِ عضو در فایل بی‌anchor (فیکس شد، large forbidden → 0)
+
+probe `ultra_validator_call` بعد از F41/F42: `concept:validate` (از کلمه‌ی «validation» در prompt) به
+`trainer.py:BaseTrainer.validate` @1.00 حل می‌شد — همان forbidden ماندگارِ large از فاز A. `weak_symbol_seed.rs`
+(که seedهای WEAK را کنار anchor قوی هرس می‌کند) این را نگه می‌داشت چون قاعده‌ی «match دقیقِ نام همیشه می‌ماند»
+داشت. اصلاح: match دقیق روی یک *عضو* (node با parent) وقتی owner در prompt نام برده نشده و فایل هیچ seed قوی‌ای
+ندارد، هم‌نام است نه پاسخ — حذف می‌شود. (`configurator.py` + `concept:config` → `GPT.config` در تست واحد قدیمی
+همین الگو بود؛ تست به قاعده‌ی جدید به‌روز شد.)
+
+| مجموعه | قبل (main 4092755) | بعد (F44) |
+|---|---|---|
+| dev-4 | 1.000 / 0.906 / 0 / 21 strict 19 | بدون تغییر |
+| large | 0.950 / 0.387 / 1 / 18 strict 13 | 0.950 / **0.473** / **0** / **19** strict **14** |
+| holdout-2 | 1.000 / 0.470 / 0 / 20 strict 16 | 1.000 / **0.477** / 0 / 20 strict 16 |
+
+ratchet large: precision 0.38→0.47، forbidden ≤1→**0**، reachable 0.89→0.94.
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.
