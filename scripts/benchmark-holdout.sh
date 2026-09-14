@@ -3,7 +3,11 @@
 # set, dev and holdout, in one run. Prints one summary line per set.
 #
 #   bash scripts/benchmark-holdout.sh            # all sets
-#   bash scripts/benchmark-holdout.sh holdout    # one set: dev|large|holdout|holdout-c|holdout-lang|holdout-ml
+#   bash scripts/benchmark-holdout.sh holdout    # one set: dev|large|holdout|holdout-c|holdout-lang|holdout-ml|private
+#
+# "private" is the phase-5b holdout on a repository that is not in this tree:
+# set NM_PRIVATE_SET_DIR (manifest + gold) and NM_PRIVATE_DIR (checkouts); it is
+# skipped silently when they are unset and is never part of the default run.
 #
 # Sets that need a checkout are fetched first (pinned revisions, idempotent).
 # Windows note: this machine needs CARGO_BUILD_JOBS=2 to avoid an rustc ICE.
@@ -28,11 +32,15 @@ declare -A TEST=(
   [holdout-c]="third_party_c_holdout_gold"
   [holdout-lang]="third_party_lang_holdout_gold"
   [holdout-ml]="third_party_ml_holdout_gold"
+  [private]="third_party_private_gold"
 )
 sets=("$@")
 if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml); fi
-
 for set in "${sets[@]}"; do
+  if [ "$set" = private ]; then
+    [ -n "${NM_PRIVATE_SET_DIR:-}" ] || { echo "private: NM_PRIVATE_SET_DIR unset; skipping" >&2; }
+    continue
+  fi
   if [ "$set" = dev ]; then
     bash scripts/fetch-third-party.sh >/dev/null
   else
