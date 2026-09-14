@@ -12,6 +12,7 @@ Start with the [README](../README.md) for install and the agent loop.
 | [Architecture](architecture.md) | Pipeline, tiered retrieval, crate map |
 | [Isolation](isolation.md) | Project identity, the single-project invariant, what will not be indexed |
 | [Quality](quality.md) | Gold harness, `neuromesh eval`, release gates, measured numbers |
+| [Measured](measured.md) | Holdout numbers on repos never tuned on, caveats, what is unmeasured |
 | [Graph proxy](graph-proxy.md) | Optional CBM backend via MCP stdio |
 | [HTTP monitor](api.md) | Local UI, SSE, management endpoints |
 | [Living systems](nature.md) | Physarum, STDP, exons — mapped to crates |

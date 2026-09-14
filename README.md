@@ -17,7 +17,7 @@
 > Local-first MCP context engine that cuts AI coding-agent token cost by ~90% —
 > a per-project code graph + folding for **Cursor**, **Claude Code**, **Codex**,
 > and every MCP client. Built for **web *and* ML** codebases.
-> **Status:** early — building [P0: project isolation](ROADMAP.md) on top of the NeuroMesh v0.9.0 baseline.
+> **Status:** measured on repositories it was never tuned on — recall 0.94–1.00, precision 0.50–0.63, no forbidden file shipped in Go/Python and C/C++ holdouts; model-executed task success not yet measured. Numbers, caveats and the one-command benchmark: [docs/measured.md](docs/measured.md). Roadmap: [ROADMAP.md](ROADMAP.md).
 
 <sub>Derivative of **[NeuroMesh](https://github.com/pinoox/neuromesh)** by yoosef alipour (MIT). See [NOTICE](NOTICE) · [ATTRIBUTION.md](ATTRIBUTION.md) · [ROADMAP.md](ROADMAP.md).</sub>
 
@@ -242,11 +242,21 @@ Command reference: [docs/cli.md](docs/cli.md).
 
 ## Languages
 
-Rust, TypeScript, Python, Go, Java, Kotlin, PHP, C#, Dart, Swift, Ruby, and more via **tree-sitter**. Jupyter notebooks (`.ipynb`) are read as code: cells in order, outputs dropped, so a notebook is searchable like any other source file. Framework overlays for Laravel, Django, Next, Vue, Axum, Rails, Flutter, PyTorch, and others. Details: [docs/architecture.md](docs/architecture.md).
+Rust, TypeScript, Python, Go, Java, Kotlin, PHP, C#, Dart, Swift, Ruby, C, C++, Scala, R, Julia via **tree-sitter**. Jupyter notebooks (`.ipynb`) are read as code: cells in order, outputs dropped, so a notebook is searchable like any other source file. Framework overlays for Laravel, Django, Next, Vue, Axum, Rails, Flutter, PyTorch, and others. Details: [docs/architecture.md](docs/architecture.md).
 
 ---
 
 ## What we actually measured
+
+On repositories the engine was **never tuned on** (gold written from the source before any run; one command: `bash scripts/benchmark-holdout.sh`):
+
+| holdout | recall | precision | forbidden files | needed symbols reachable |
+| :--- | ---: | ---: | ---: | ---: |
+| gin + torchvision (Go, Python) | 1.000 | 0.496 | 0 | 20/20 |
+| libuv + fmt (C, C++) | 0.938 | 0.625 | 0 | 15/16 |
+| os-lib + cli + Flux.jl (Scala, R, Julia) | 1.000 | 0.502 | 1 | 14/15 |
+
+The right file is almost always in the packet; the packet usually also carries 1–4 neighbours that a single-file gold does not want. Model-executed task success is **not measured yet**. Full table, caveats and what is still unmeasured: [docs/measured.md](docs/measured.md).
 
 Savings are **per task**, after folding — not a marketing average. Run `neuromesh eval` on your own repo to see your numbers.
 
@@ -273,6 +283,7 @@ Index on that project: **340 files · 552 ms**. Methodology and multilingual hol
 | [Engines](docs/engines.md)             | `fast` vs `hybrid` vs `deep` in one page         |
 | [Docs index](docs/README.md)           | Full map                                         |
 | [Changelog](docs/CHANGELOG.md)         | What changed in v0.9.0                           |
+| [Measured](docs/measured.md)           | Holdout numbers, caveats, what is unmeasured     |
 
 
 MIT · [LICENSE](LICENSE)
