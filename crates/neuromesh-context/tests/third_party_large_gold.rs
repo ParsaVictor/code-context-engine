@@ -29,7 +29,7 @@
 mod gold_set;
 
 const MIN_MEAN_RECALL: f32 = 0.94; // measured 0.950
-const MIN_MEAN_PRECISION: f32 = 0.47; // measured 0.473 (F44)
+const MIN_MEAN_PRECISION: f32 = 0.50; // measured 0.504 (F45)
 const MAX_FORBIDDEN_HITS: usize = 0; // measured 0 (F44: trainer.py homonym seed gone)
 const MIN_TASK_REACHABLE: f32 = 0.94; // measured 19/20 (F44)
 

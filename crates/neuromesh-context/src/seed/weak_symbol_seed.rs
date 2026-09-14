@@ -75,6 +75,15 @@ pub(crate) fn prune_weak_substring_symbol_seeds(
         let Some(node) = graph.get_node(id) else {
             return true;
         };
+        // `client_expansion:route` → a helper in `githubapi_test.go`: a guessed
+        // word landing in a test or doc file is not an anchor for a question
+        // that already has a real one.
+        if crate::selector::is_noise_path(&node.file_path)
+            && !strong_files.contains(&node.file_path)
+        {
+            dropped.push(id.clone());
+            return false;
+        }
         if node.node_type == NodeType::File {
             return true;
         }
