@@ -15,6 +15,7 @@ pub mod fallback;
 pub(crate) mod lang_cohere;
 pub mod manifest;
 pub mod micro_header;
+pub(crate) mod owner_cohere;
 pub(crate) mod path_steer;
 pub mod ranker;
 pub mod sink;

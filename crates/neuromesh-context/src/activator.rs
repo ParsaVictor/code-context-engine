@@ -365,6 +365,12 @@ impl ContextActivator {
             &mut seed_energies,
             &mut seed_reasons,
         );
+        crate::seed::owner_cohere::repoint_bare_members_to_seeded_owners(
+            graph,
+            &mut seed_resolutions,
+            &mut seed_energies,
+            &mut seed_reasons,
+        );
         mark_equivalent_file_hits(graph, &mut seed_resolutions, &mut seed_energies);
         cohere_ambiguous_seeds_to_app(graph, &mut seed_resolutions, &mut seed_energies, prompt);
         crate::seed::twin_cohere::cohere_twin_definitions(
@@ -1241,6 +1247,16 @@ fn cluster_terms_covered(
         return true;
     }
     let anchors = extract_prompt_anchors(cluster);
+    // A clause that spelled out a code identifier and resolved it
+    // (`RoIHeads.select_training_samples`) is about that symbol; its English
+    // nouns ("proposals") are not missing seeds to go fuzzy-searching for.
+    if anchors
+        .identifiers
+        .iter()
+        .any(|id| looks_like_code_identifier(id) && seed_term_resolved(id, seed_resolutions))
+    {
+        return true;
+    }
     let nouns = extract_cluster_nouns(cluster);
     let mut terms = anchors.identifiers;
     terms.extend(nouns);
@@ -1262,13 +1278,30 @@ fn cluster_terms_covered(
         .all(|term| seed_term_resolved(term, seed_resolutions))
 }
 
+/// `RoIHeads`, `select_training_samples`, `Owner.member` — not the word "proposals".
+fn looks_like_code_identifier(id: &str) -> bool {
+    id.chars()
+        .any(|c| c.is_ascii_uppercase() || c == '_' || c == '.' || c == ':')
+}
+
 fn seed_term_resolved(term: &str, seeds: &[SeedResolution]) -> bool {
     let tl = term.to_lowercase();
     seeds.iter().any(|s| {
         if s.resolved_id.is_none() {
             return false;
         }
-        let sq = s.query.to_lowercase();
+        // A resolved seed stores `reason:query`; compare the query part.
+        let sq = s
+            .query
+            .split_once(':')
+            .filter(|(reason, rest)| {
+                !reason.is_empty()
+                    && !rest.starts_with(':')
+                    && reason.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+            })
+            .map(|(_, rest)| rest)
+            .unwrap_or(&s.query)
+            .to_lowercase();
         sq == tl
             || sq.ends_with(&format!(".{tl}"))
             || sq.rsplit('.').next().is_some_and(|member| member == tl)
@@ -3622,7 +3655,7 @@ export default {
             coverage
                 .seeds_hit
                 .iter()
-                .any(|s| s == "getInfo" || s == "user"),
+                .any(|s| s.trim_start_matches("identifier:") == "getInfo" || s == "user"),
             "login half must still hit, coverage={coverage:?}"
         );
         assert!(

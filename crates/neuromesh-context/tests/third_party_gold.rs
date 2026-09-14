@@ -35,7 +35,7 @@ use std::sync::Arc;
 /// (recall 0.90, precision 0.146, forbidden 12, oracle 14/21); each constant
 /// moves up with the engine, never down.
 const MIN_MEAN_RECALL: f32 = 0.99; // measured 1.00 (path steer, twin coherence)
-const MIN_MEAN_PRECISION: f32 = 0.86; // measured 0.873 (F33+F34, phase B of the plan revision)
+const MIN_MEAN_PRECISION: f32 = 0.90; // measured 0.906 (F40-F42)
 const MAX_FORBIDDEN_HITS: usize = 0; // measured 0 (weak substring symbol seeds pruned, F27)
 const MIN_TASK_REACHABLE: f32 = 1.0; // measured 21/21 (F26)
 
