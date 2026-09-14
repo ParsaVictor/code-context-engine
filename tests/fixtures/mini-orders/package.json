@@ -1,0 +1,6 @@
+{
+  "name": "mini-orders",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/orders.js"
+}
