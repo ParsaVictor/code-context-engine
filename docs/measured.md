@@ -10,7 +10,7 @@ bash scripts/benchmark-holdout.sh holdout  # one set
 The rule behind the table: **a number from a repository the engine was tuned on is
 not the project's number.** Only the holdout rows are.
 
-## Gold sets (2026-09-14, main after PR #67)
+## Gold sets (2026-09-14, main after PR #68)
 
 | set | repos | role | recall | precision | forbidden | oracle reachable / strict |
 |---|---|---|---|---|---|---|
@@ -19,7 +19,7 @@ not the project's number.** Only the holdout rows are.
 | **holdout-2** | gin (Go), torchvision (Python) | never tuned on | **1.000** | **0.496** | **0** | 20/20 · 16 |
 | **holdout-c** | libuv (C), fmt (C++) | never tuned on | **0.938** | **0.625** | **0** | 15/16 · 10 |
 | **holdout-lang** | os-lib (Scala), r-lib/cli (R), Flux.jl (Julia) | never tuned on | **1.000** | **0.502** | **1** | 14/15 · 9 |
-| **holdout-ml** | keras-io examples (Keras), setfit (Hugging Face) | never tuned on | **0.900** | **0.340** | **0** | 9/10 · 7 |
+| **holdout-ml** | keras-io examples (Keras), setfit (Hugging Face) | never tuned on | **1.000** | **0.360** | **0** | 10/10 · 8 |
 
 - **recall / precision** are file-level against a hand-written gold (`gold_files`) per question.
   A forbidden file in the packet zeroes that question's precision.
@@ -53,8 +53,6 @@ time). Internal `l1_p95` gate on this repository: 42 ms (ceiling 50 ms). The 202
   finishes N% of tasks".
 - **Private/enterprise repositories.** No number. The holdout protocol for one is written
   (`docs/planning/05-phases-holdout-to-release.fa.md`, phase 5b) and waits on a team-authored gold.
-- **Scripts named by a plain English word** (`autoencoder.py`): the prompt word never becomes a
-  file query, so the script is missed even when the question names it (F50).
 - **C++ under heavy macros / templates.** fmt parses and yields symbols, but coverage of
   `FMT_FUNC`-style definitions was not counted.
 - **Languages without a holdout**: Java, Kotlin, PHP, C#, Dart, Swift, Ruby, TypeScript have

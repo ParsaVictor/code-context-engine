@@ -320,6 +320,21 @@ pub fn extract_prompt_anchors(prompt: &str) -> PromptAnchors {
             push_unique(&mut identifiers, ident.to_string());
         }
     }
+    // "in the autoencoder example", "the captcha OCR script": the word before
+    // `example`/`script`/`notebook` names a file, plain English or not.
+    static NAMED_SCRIPT_RE: OnceLock<Regex> = OnceLock::new();
+    let named_script_re = NAMED_SCRIPT_RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(?:in|from|of)\s+(?:the\s+)?([a-z][a-z0-9_-]{3,})\s+(?:example|script|notebook)\b",
+        )
+        .unwrap()
+    });
+    for cap in named_script_re.captures_iter(prompt) {
+        let ident = cap.get(1).unwrap().as_str();
+        if is_how_does_ident(ident) {
+            push_unique(&mut identifiers, ident.to_string());
+        }
+    }
 
     // `Owner.member` with a capitalised owner (`WSGIHandler.__call__`,
     // `Signal.connect`). The qualified pair goes first, for the same reason

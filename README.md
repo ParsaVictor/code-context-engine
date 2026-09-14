@@ -255,7 +255,7 @@ On repositories the engine was **never tuned on** (gold written from the source 
 | gin + torchvision (Go, Python) | 1.000 | 0.496 | 0 | 20/20 |
 | libuv + fmt (C, C++) | 0.938 | 0.625 | 0 | 15/16 |
 | os-lib + cli + Flux.jl (Scala, R, Julia) | 1.000 | 0.502 | 1 | 14/15 |
-| keras-io + setfit (Keras, Hugging Face) | 0.900 | 0.340 | 0 | 9/10 |
+| keras-io + setfit (Keras, Hugging Face) | 1.000 | 0.360 | 0 | 10/10 |
 
 The right file is almost always in the packet; the packet usually also carries 1–4 neighbours that a single-file gold does not want. Model-executed task success is **not measured yet**. Full table, caveats and what is still unmeasured: [docs/measured.md](docs/measured.md).
 
