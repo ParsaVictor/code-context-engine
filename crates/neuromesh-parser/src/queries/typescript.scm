@@ -44,3 +44,13 @@
     property: (property_identifier) @function.name)
   right: [(function_expression) (arrow_function)]
   (#eq? @_proto "prototype")) @function
+
+; `export const MAX_ATTEMPTS = 5`, `export const MAINTENANCE_SECTION_RULES = {...}`:
+; a module-level SCREAMING_SNAKE constant is a symbol a question points at by
+; name (F54). Only exported and only that spelling — a local `const x` is not,
+; and an arrow function keeps its @function capture above.
+(export_statement
+  (lexical_declaration
+    (variable_declarator
+      name: (identifier) @symbol.name
+      (#match? @symbol.name "^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$")))) @symbol

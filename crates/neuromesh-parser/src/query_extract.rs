@@ -1905,6 +1905,55 @@ class RedirectableUrlMatcher {
         );
     }
 
+    /// F54: an exported SCREAMING_SNAKE constant is a symbol; a local
+    /// `const` or a non-exported camelCase one is not.
+    #[test]
+    fn typescript_exported_screaming_constant_is_a_symbol() {
+        let ast = parse_lang(
+            Grammar::TypeScript,
+            TYPESCRIPT_QUERIES,
+            QueryOptions::typescript(),
+            "maintenance-sections.ts",
+            "export const MAINTENANCE_SECTION_RULES = { a: 1 };
+export const helper = 3;
+function f() { const LOCAL_MAX = 2; return LOCAL_MAX; }
+",
+        );
+        let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"MAINTENANCE_SECTION_RULES"), "{names:?}");
+        assert!(!names.contains(&"helper"), "{names:?}");
+        assert!(!names.contains(&"LOCAL_MAX"), "{names:?}");
+        let c = ast
+            .symbols
+            .iter()
+            .find(|s| s.name == "MAINTENANCE_SECTION_RULES")
+            .unwrap();
+        assert_eq!(c.symbol_type, NodeType::Symbol);
+        assert!(c.exported);
+    }
+
+    /// F54: a module-level SCREAMING_SNAKE assignment in Python is a symbol;
+    /// one inside a function is not.
+    #[test]
+    fn python_module_screaming_constant_is_a_symbol() {
+        let ast = parse_lang(
+            Grammar::Python,
+            PYTHON_QUERIES,
+            QueryOptions::python(),
+            "settings.py",
+            "MAX_ATTEMPTS = 5
+lr = 0.1
+def f():
+    INNER_LIMIT = 2
+    return INNER_LIMIT
+",
+        );
+        let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"MAX_ATTEMPTS"), "{names:?}");
+        assert!(!names.contains(&"lr"), "{names:?}");
+        assert!(!names.contains(&"INNER_LIMIT"), "{names:?}");
+    }
+
     #[test]
     fn typescript_arrow_const_is_a_function() {
         let ast = parse_lang(
