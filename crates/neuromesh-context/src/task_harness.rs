@@ -225,14 +225,14 @@ fn code_defines_symbol(code: &str, symbol: &str) -> bool {
             }
             let before = trimmed[..at].trim_end();
             let after = trimmed[end..].trim_start();
-            if before.ends_with("::") {
+            if let Some(scoped) = before.strip_suffix("::") {
                 // `void Formatter::format(int x) {` is a definition when a
                 // return type precedes the owner; `ns::call(x);` is not.
-                let owner_start = before[..before.len() - 2]
+                let owner_start = scoped
                     .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
                     .map(|i| i + 1)
                     .unwrap_or(0);
-                let ret = &before[..owner_start];
+                let ret = &scoped[..owner_start];
                 if after.starts_with('(') && c_style_type_prefix(ret) {
                     return true;
                 }
@@ -266,9 +266,7 @@ fn code_defines_symbol(code: &str, symbol: &str) -> bool {
             // R `name <- function(` / `name = function(`; Julia short form
             // `name(args) = body` with the name opening the line.
             if before.is_empty() {
-                let rest = after
-                    .trim_start_matches(|c| c == '<' || c == '-' || c == '=')
-                    .trim_start();
+                let rest = after.trim_start_matches(['<', '-', '=']).trim_start();
                 if rest.starts_with("function") {
                     return true;
                 }
