@@ -1,0 +1,55 @@
+[[task]]
+id = "fmt_vformat_to_string"
+repo = "fmt"
+prompt = "How does vformat in format-inl.h build a memory_buffer, run detail::vformat_to over the format string, and turn the buffer into a std::string?"
+needs = ["include/fmt/format-inl.h::vformat", "include/fmt/format-inl.h::vformat_to"]
+forbidden = ["include/fmt/chrono.h"]
+
+[[task]]
+id = "fmt_format_system_error"
+repo = "fmt"
+prompt = "How does format_system_error fall back to format_error_code when std::system_error throws, and how does report_system_error print through do_report_error?"
+needs = ["include/fmt/format-inl.h::format_system_error", "include/fmt/format-inl.h::format_error_code", "include/fmt/format-inl.h::do_report_error"]
+forbidden = ["include/fmt/color.h"]
+
+[[task]]
+id = "fmt_print_to_file"
+repo = "fmt"
+prompt = "How does detail::print write text to a FILE, using write_console on a Windows console and fwrite_all otherwise, and how does vprint_buffered call it?"
+needs = ["include/fmt/format-inl.h::print", "include/fmt/format-inl.h::vprint_buffered"]
+forbidden = ["include/fmt/ostream.h"]
+
+[[task]]
+id = "fmt_file_open_close"
+repo = "fmt"
+prompt = "How does the file constructor in os.cc open a path with FMT_POSIX_CALL and FMT_RETRY, and how does file::close report a failure?"
+needs = ["src/os.cc::file", "src/os.cc::close"]
+forbidden = ["include/fmt/printf.h"]
+
+[[task]]
+id = "fmt_pipe_ctor"
+repo = "fmt"
+prompt = "How does the pipe constructor in os.cc create both ends with FMT_POSIX_CALL and wrap the descriptors as read_end and write_end?"
+needs = ["src/os.cc::pipe"]
+forbidden = ["include/fmt/ranges.h"]
+
+[[task]]
+id = "fmt_parse_format_string"
+repo = "fmt"
+prompt = "How does parse_format_string in base.h walk a format string, dispatching literal text and replacement fields, and where does parse_arg_id read the argument id?"
+needs = ["include/fmt/base.h::parse_format_string", "include/fmt/base.h::parse_arg_id"]
+forbidden = ["include/fmt/xchar.h"]
+
+[[task]]
+id = "fmt_memory_buffer_grow"
+repo = "fmt"
+prompt = "How does basic_memory_buffer in format.h grow its storage when capacity runs out, and how does it move the inline store to the heap?"
+needs = ["include/fmt/format.h::basic_memory_buffer", "include/fmt/format.h::grow"]
+forbidden = ["include/fmt/std.h"]
+
+[[task]]
+id = "fmt_cached_power"
+repo = "fmt"
+prompt = "How does get_cached_power in format-inl.h delegate to cache_accessor for double, and what does remove_trailing_zeros do with the modular inverse of 5?"
+needs = ["include/fmt/format-inl.h::get_cached_power", "include/fmt/format-inl.h::remove_trailing_zeros"]
+forbidden = ["include/fmt/compile.h"]

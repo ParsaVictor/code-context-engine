@@ -1,0 +1,61 @@
+# fmt gold — written from reading the source at 11.1.4 before any engine run.
+# fmt is macro-heavy (FMT_FUNC, FMT_CONSTEXPR, FMT_API) and template-heavy;
+# if tree-sitter-cpp cannot name these definitions, that is the finding.
+# G1: every forbidden file checked by grep — not included by and no function
+# of it called from the gold files.
+
+[[task]]
+id = "fmt_vformat_to_string"
+prompt = "How does vformat in format-inl.h build a memory_buffer, run detail::vformat_to over the format string, and turn the buffer into a std::string?"
+gold_files = ["include/fmt/format-inl.h"]
+forbidden_files = ["include/fmt/chrono.h"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fmt_format_system_error"
+prompt = "How does format_system_error fall back to format_error_code when std::system_error throws, and how does report_system_error print through do_report_error?"
+gold_files = ["include/fmt/format-inl.h"]
+forbidden_files = ["include/fmt/color.h"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fmt_print_to_file"
+prompt = "How does detail::print write text to a FILE, using write_console on a Windows console and fwrite_all otherwise, and how does vprint_buffered call it?"
+gold_files = ["include/fmt/format-inl.h"]
+forbidden_files = ["include/fmt/ostream.h"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fmt_file_open_close"
+prompt = "How does the file constructor in os.cc open a path with FMT_POSIX_CALL and FMT_RETRY, and how does file::close report a failure?"
+gold_files = ["src/os.cc"]
+forbidden_files = ["include/fmt/printf.h"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fmt_pipe_ctor"
+prompt = "How does the pipe constructor in os.cc create both ends with FMT_POSIX_CALL and wrap the descriptors as read_end and write_end?"
+gold_files = ["src/os.cc"]
+forbidden_files = ["include/fmt/ranges.h"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fmt_parse_format_string"
+prompt = "How does parse_format_string in base.h walk a format string, dispatching literal text and replacement fields, and where does parse_arg_id read the argument id?"
+gold_files = ["include/fmt/base.h"]
+forbidden_files = ["include/fmt/xchar.h"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fmt_memory_buffer_grow"
+prompt = "How does basic_memory_buffer in format.h grow its storage when capacity runs out, and how does it move the inline store to the heap?"
+gold_files = ["include/fmt/format.h"]
+forbidden_files = ["include/fmt/std.h"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fmt_cached_power"
+prompt = "How does get_cached_power in format-inl.h delegate to cache_accessor for double, and what does remove_trailing_zeros do with the modular inverse of 5?"
+gold_files = ["include/fmt/format-inl.h"]
+forbidden_files = ["include/fmt/compile.h"]
+expect_seeds_missed = false

@@ -1,0 +1,21 @@
+# Phase D domain holdout for the C/C++ grammars (added 2026-09-14).
+# Never used to tune the engine. Gold written from reading the source
+# before any engine run, with the G1 check: every forbidden_file was
+# verified not to be included/called by the gold files.
+#
+#   libuv — C event loop: platform-split sources, many static helpers,
+#           `uv__`-prefixed internals, macro-heavy headers
+#   fmt   — C++ formatting library: header-only core with namespaces,
+#           out-of-class method definitions, templates
+
+[[repo]]
+name = "libuv"
+url = "https://github.com/libuv/libuv"
+# v1.49.2
+rev = "e1095c7a4373ce00cd8874d8e820de5afb25776e"
+
+[[repo]]
+name = "fmt"
+url = "https://github.com/fmtlib/fmt"
+# 11.1.4
+rev = "123913715afeb8a437e6388b4473fcc4753e1c9a"
