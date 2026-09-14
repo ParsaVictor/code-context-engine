@@ -182,14 +182,18 @@ fn module_gaps(lines: &[&str], covered: &[bool], preamble: usize) -> Vec<(usize,
         }
         let mut start = run_start;
         let mut end = i - 1;
-        let noise = |l: &str| l.trim().is_empty() || is_block_closer(l);
-        while start <= end && noise(lines[start]) {
+        // Lone block closers at the edges belong to the group that emits its
+        // own closer. Blank lines stay: a model diffs against the text it was
+        // shown and `git apply` matches context exactly — dropping the blank
+        // between `require` and `function` failed every packet-mode patch on
+        // that file (phase C) while whole-file mode passed.
+        while start <= end && is_block_closer(lines[start]) {
             start += 1;
         }
-        while end > start && noise(lines[end]) {
+        while end > start && is_block_closer(lines[end]) {
             end -= 1;
         }
-        if start <= end && !noise(lines[start]) {
+        if start <= end && !is_block_closer(lines[start]) {
             gaps.push((start, end));
         }
     }
@@ -206,6 +210,13 @@ fn preamble_len(lines: &[&str]) -> usize {
             continue;
         }
         break;
+    }
+    // Keep the blank lines after the imports: a model writes its diff against
+    // the text it was shown, and `git apply` matches context lines exactly. A
+    // preamble ending one line early made every packet-mode patch on this
+    // file fail (phase C, cjs_save_returns_body) while whole-file mode passed.
+    while last < lines.len() && lines[last].trim().is_empty() {
+        last += 1;
     }
     last
 }

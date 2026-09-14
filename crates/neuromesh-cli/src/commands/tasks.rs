@@ -612,7 +612,7 @@ async fn run_qa_judge_case(
             },
         ],
         temperature: None,
-        max_tokens: Some(200),
+        max_tokens: Some(4_000),
         stream: false,
         api_key: None,
     };
@@ -708,6 +708,15 @@ async fn run_model_case(
         outcome.note = Some(format!("model declined: {}", rest.trim()));
         return outcome;
     }
+    // `NM_TASK_REPLY_DIR`: keep every raw reply — the only way to see why a
+    // patch did not apply.
+    if let Ok(dir) = std::env::var("NM_TASK_REPLY_DIR") {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(
+            Path::new(&dir).join(format!("{}.reply.txt", case.id)),
+            &reply,
+        );
+    }
     let patch = strip_fences(&reply);
 
     let scratch = std::env::temp_dir().join(format!(
@@ -729,15 +738,40 @@ async fn run_model_case(
         outcome.strict_success = false;
         return outcome;
     }
-    // `git apply` refuses absolute paths and `..` components on its own; the
-    // scratch directory is the only thing it can touch.
-    let apply = tokio::process::Command::new("git")
-        .arg("apply")
-        .arg("--whitespace=nowarn")
-        .arg(".nm-task.patch")
-        .current_dir(&scratch)
-        .output()
-        .await;
+    let mut apply = git_apply(&scratch).await;
+    // The packet the model read is a skeleton: blank lines between blocks are
+    // not rendered, so a correct diff can still miss its context by a blank
+    // line. Second try on a scratch copy with the blank lines of the touched
+    // files removed — the same program to every interpreter here, and the
+    // scratch is thrown away after `verify`.
+    if matches!(&apply, Ok(out) if !out.status.success()) {
+        let touched = patched_paths(&patch);
+        let mut normalized = 0;
+        for rel in &touched {
+            let path = scratch.join(rel);
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                let kept: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+                if std::fs::write(
+                    &path,
+                    kept.join(
+                        "
+",
+                    ) + "
+",
+                )
+                .is_ok()
+                {
+                    normalized += 1;
+                }
+            }
+        }
+        if normalized > 0 {
+            apply = git_apply(&scratch).await;
+            if matches!(&apply, Ok(out) if out.status.success()) {
+                outcome.note = Some("applied after blank-line normalization".into());
+            }
+        }
+    }
     match apply {
         Ok(out) if out.status.success() => {}
         Ok(out) => {
@@ -811,8 +845,46 @@ async fn run_model_case(
 /// Unwrap a fenced reply without disturbing the patch itself: a unified
 /// diff's context lines can be a single space, so nothing here trims
 /// whitespace off the ends of lines — only fence lines and blank tails go.
+async fn git_apply(scratch: &Path) -> std::io::Result<std::process::Output> {
+    // `git apply` refuses absolute paths and `..` components on its own; the
+    // scratch directory is the only thing it can touch. `--ignore-whitespace`:
+    // a CRLF checkout and a model that writes LF is still the same diff.
+    tokio::process::Command::new("git")
+        .arg("apply")
+        .arg("--whitespace=nowarn")
+        .arg("--ignore-whitespace")
+        // Models miscount hunk lengths; `--recount` trusts the lines, not the header.
+        .arg("--recount")
+        .arg(".nm-task.patch")
+        .current_dir(scratch)
+        .output()
+        .await
+}
+
+/// `+++ b/src/x.js` lines of a unified diff → `src/x.js`.
+fn patched_paths(patch: &str) -> Vec<String> {
+    patch
+        .lines()
+        .filter_map(|l| l.strip_prefix("+++ "))
+        .map(|p| p.trim().trim_start_matches("b/").to_string())
+        .filter(|p| !p.is_empty() && p != "/dev/null" && !p.contains(".."))
+        .collect()
+}
+
 fn strip_fences(reply: &str) -> String {
-    let mut lines: Vec<&str> = reply.lines().collect();
+    // A model that talks before the diff ("Here is the patch:") still sent a
+    // diff: start at the first line that is one. Text after the closing fence
+    // is dropped with it.
+    let start = reply
+        .lines()
+        .position(|l| {
+            l.starts_with("diff --git ") || l.starts_with("--- a/") || l.starts_with("--- ")
+        })
+        .unwrap_or(0);
+    let mut lines: Vec<&str> = reply.lines().skip(start).collect();
+    if let Some(end) = lines.iter().position(|l| l.trim() == "```") {
+        lines.truncate(end);
+    }
     while lines.first().is_some_and(|l| l.trim().is_empty()) {
         lines.remove(0);
     }

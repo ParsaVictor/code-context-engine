@@ -59,4 +59,5 @@ desktop.ini
 # MiniLM ONNX (on-demand via `neuromesh install embed minilm`; dev fetch: scripts/fetch-minilm-model.*)
 crates/neuromesh-embed/models/minilm-multilingual-q/*.onnx
 crates/neuromesh-embed/models/minilm-multilingual-q/*.json
-!crates/neuromesh-embed/models/minilm-multilingual-q/README.md
+!crates/neuromesh-embed/models/minilm-multilingual-q/README.mdreports/phase-c/*.log
+reports/phase-c/
