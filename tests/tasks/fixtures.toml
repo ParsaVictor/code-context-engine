@@ -108,3 +108,50 @@ repo = "tests/fixtures/mini-cjs"
 prompt = "Fix saveSms so it stores the body in the store under 'body' and returns it"
 needs = ["src/saveSms.cjs::saveSms", "src/store.js::createStore"]
 verify = "node -e \"const {saveSms}=require('./src/saveSms.cjs'); if (saveSms('hi')!=='hi') process.exit(1)\""
+
+# ---------------------------------------------------------------------------
+# mini-orders: six change tasks with a real `verify` command each (node).
+# The model executor applies the patch to a scratch copy and runs `verify`;
+# exit 0 is the only thing that counts. The oracle still scores the packet.
+# ---------------------------------------------------------------------------
+[[task]]
+id = "orders_apply_discount"
+repo = "tests/fixtures/mini-orders"
+prompt = "Fix applyDiscount so a 20 percent discount on 100 returns 80"
+needs = ["src/pricing.js::applyDiscount"]
+verify = "node -e \"const {applyDiscount}=require('./src/pricing.js'); if (applyDiscount(100,20)!==80 || applyDiscount(50,0)!==50) process.exit(1)\""
+
+[[task]]
+id = "orders_total_with_tax"
+repo = "tests/fixtures/mini-orders"
+prompt = "Make totalFor apply the tax rate: totalFor(100, 0.1) must return 110"
+needs = ["src/pricing.js::totalFor"]
+verify = "node -e \"const {totalFor}=require('./src/pricing.js'); if (Math.abs(totalFor(100,0.1)-110)>1e-9 || totalFor(80,0)!==80) process.exit(1)\""
+
+[[task]]
+id = "orders_stock_of_unknown"
+repo = "tests/fixtures/mini-orders"
+prompt = "Fix createInventory's stockOf so an unknown sku reports 0 instead of undefined"
+needs = ["src/inventory.js::stockOf", "src/store.js::createStore"]
+verify = "node -e \"const {createInventory}=require('./src/inventory.js'); const i=createInventory(); i.addItem('a',2); if (i.stockOf('zz')!==0 || i.stockOf('a')!==2) process.exit(1)\""
+
+[[task]]
+id = "orders_remove_item_underflow"
+repo = "tests/fixtures/mini-orders"
+prompt = "Make removeItem in createInventory throw an Error when quantity exceeds the current stock, and leave the stock unchanged in that case"
+needs = ["src/inventory.js::removeItem", "src/inventory.js::addItem"]
+verify = "node -e \"const {createInventory}=require('./src/inventory.js'); const i=createInventory(); i.addItem('a',2); let threw=false; try { i.removeItem('a',5) } catch(e) { threw=true } if (!threw || i.stockOf('a')!==2 || i.removeItem('a',1)!==1) process.exit(1)\""
+
+[[task]]
+id = "orders_format_money_rounding"
+repo = "tests/fixtures/mini-orders"
+prompt = "Fix formatMoney so amounts round to the nearest cent: 12.345 formats as 12.35 and 0.005 as 0.01"
+needs = ["src/format.js::formatMoney"]
+verify = "node -e \"const {formatMoney}=require('./src/format.js'); if (formatMoney(12.345)!=='12.35' || formatMoney(0.005)!=='0.01' || formatMoney(3)!=='3.00') process.exit(1)\""
+
+[[task]]
+id = "orders_place_order_decrements"
+repo = "tests/fixtures/mini-orders"
+prompt = "Make placeOrder in createOrderService decrement the inventory by each line's quantity using removeItem"
+needs = ["src/orders.js::placeOrder", "src/inventory.js::removeItem"]
+verify = "node -e \"const {createOrderService}=require('./src/orders.js'); const s=createOrderService({a:10}); s.inventory.addItem('a',3); s.placeOrder([{sku:'a',quantity:2}]); if (s.inventory.stockOf('a')!==1) process.exit(1)\""

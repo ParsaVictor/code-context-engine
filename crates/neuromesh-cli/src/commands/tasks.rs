@@ -46,6 +46,11 @@ use std::time::{Duration, Instant};
 
 const DEFAULT_ANTHROPIC_MODEL: &str = "claude-opus-5";
 const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1";
+/// The grader must not be the answerer: a model grading its own prose is the
+/// one judge that never notices its own mistakes. Default judge models differ
+/// from the default answer models within each provider.
+const DEFAULT_ANTHROPIC_JUDGE_MODEL: &str = "claude-sonnet-5";
+const DEFAULT_OPENAI_JUDGE_MODEL: &str = "gpt-4.1-mini";
 /// Ceiling on what a model may send back; a patch is small, a runaway is not.
 const MAX_PATCH_BYTES: usize = 200_000;
 const VERIFY_TIMEOUT: Duration = Duration::from_secs(180);
@@ -319,13 +324,72 @@ pub async fn execute(args: &[String]) -> Result<()> {
         }
     };
 
+    // `--judge-provider`/`--judge-model` pick the grader for QA-judge cases.
+    // Default: the answerer's provider with a different model; a judge equal
+    // to the answerer is refused unless `--allow-self-judge` is passed.
+    let judge: Option<(Arc<dyn Provider>, String)> = match (&executor, &provider) {
+        (Executor::Model { provider: p, model }, Some(answerer)) if *p != ProviderType::Mock => {
+            let judge_provider = match flag_value(args, "--judge-provider") {
+                None => *p,
+                Some("anthropic") => ProviderType::Anthropic,
+                Some("openai") => ProviderType::OpenAI,
+                Some("openrouter") => ProviderType::OpenRouter,
+                Some("google") => ProviderType::Google,
+                Some(other) => {
+                    return Err(NeuroMeshError::Config(format!(
+                    "unknown --judge-provider {other}; use anthropic, openai, openrouter or google"
+                )))
+                }
+            };
+            let judge_model = flag_value(args, "--judge-model")
+                .map(str::to_string)
+                .unwrap_or_else(|| match judge_provider {
+                    ProviderType::Anthropic => DEFAULT_ANTHROPIC_JUDGE_MODEL.into(),
+                    _ => DEFAULT_OPENAI_JUDGE_MODEL.into(),
+                });
+            if judge_provider == *p
+                && judge_model == *model
+                && !args.iter().any(|a| a == "--allow-self-judge")
+            {
+                return Err(NeuroMeshError::Config(format!(
+                    "judge {judge_model} is the answerer; pick --judge-model/--judge-provider or pass --allow-self-judge"
+                )));
+            }
+            let judge_arc: Arc<dyn Provider> = if judge_provider == *p {
+                Arc::clone(answerer)
+            } else {
+                let Some(api_key) = api_key_for(judge_provider) else {
+                    return Err(NeuroMeshError::Config(format!(
+                        "--judge-provider {judge_provider:?} needs its API key in the environment"
+                    )));
+                };
+                ProviderFactory::create(&ProviderConfig {
+                    provider_type: judge_provider,
+                    api_key: Some(api_key),
+                    base_url: None,
+                    default_model: judge_model.clone(),
+                    timeout_seconds: 600,
+                })
+            };
+            Some((judge_arc, judge_model))
+        }
+        (Executor::Model { model, .. }, Some(answerer)) => {
+            Some((Arc::clone(answerer), model.clone()))
+        }
+        _ => None,
+    };
+
     println!(
-        "\nNeuroMesh task harness — executor={} context={}",
+        "\nNeuroMesh task harness — executor={} context={}{}",
         match &executor {
             Executor::Oracle => "oracle".to_string(),
             Executor::Model { provider, model } => format!("model ({provider:?} {model})"),
         },
-        context_mode.label()
+        context_mode.label(),
+        judge
+            .as_ref()
+            .map(|(p, m)| format!(" judge={}:{m}", p.name()))
+            .unwrap_or_default()
     );
     println!(
         "{:<28} {:<32} {:>7} {:>7} {:>8} {:>8} {:>6}  Needs",
@@ -376,7 +440,18 @@ pub async fn execute(args: &[String]) -> Result<()> {
             outcome = if case.verify.is_some() {
                 run_model_case(case, &repo, context_text, provider.as_ref(), model, outcome).await
             } else {
-                run_qa_judge_case(case, context_text, provider.as_ref(), model, outcome).await
+                let (judge_provider, judge_model) =
+                    judge.as_ref().expect("judge set with model executor");
+                run_qa_judge_case(
+                    case,
+                    context_text,
+                    provider.as_ref(),
+                    model,
+                    judge_provider.as_ref(),
+                    judge_model,
+                    outcome,
+                )
+                .await
             };
         }
 
@@ -472,9 +547,15 @@ async fn run_qa_judge_case(
     context_text: String,
     provider: &dyn Provider,
     model: &str,
+    judge_provider: &dyn Provider,
+    judge_model: &str,
     mut outcome: TaskOutcome,
 ) -> TaskOutcome {
-    outcome.executor = format!("{}:{model} (qa-judge)", provider.name());
+    outcome.executor = format!(
+        "{}:{model} (qa-judge {}:{judge_model})",
+        provider.name(),
+        judge_provider.name()
+    );
     let context_tokens = TokenCounter::count_tokens(&context_text);
     let answer_request = ProviderRequest {
         model: model.to_string(),
@@ -517,7 +598,7 @@ async fn run_qa_judge_case(
         case.prompt
     );
     let judge_request = ProviderRequest {
-        model: model.to_string(),
+        model: judge_model.to_string(),
         messages: vec![
             ChatMessage {
                 role: "system".into(),
@@ -535,7 +616,7 @@ async fn run_qa_judge_case(
         stream: false,
         api_key: None,
     };
-    let judge_response = match provider.send(&judge_request).await {
+    let judge_response = match judge_provider.send(&judge_request).await {
         Ok(r) => r,
         Err(e) => {
             outcome.success = false;
