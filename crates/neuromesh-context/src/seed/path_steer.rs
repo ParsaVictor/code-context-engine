@@ -180,11 +180,30 @@ pub(crate) fn steer_same_name_symbol(
     let mut best: Option<(usize, &NodeId)> = None;
     let mut tied = false;
     for (id, r) in &twins {
+        // Directory segments and the file stem's own words both count; the
+        // stem is the file's name, so its words weigh double: "captcha OCR"
+        // names `captcha_ocr.py`, not any `*_model.py` under `vision/`.
         let segs = dir_segments(r);
+        let stem_words: Vec<String> = file_stem_norm(r)
+            .map(|s| {
+                s.split('_')
+                    .filter(|w| w.len() >= 3)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
         let score = tokens
             .iter()
-            .filter(|t| segs.iter().any(|s| s == *t))
-            .count();
+            .map(|t| {
+                if stem_words.iter().any(|s| s == t) {
+                    2
+                } else if segs.iter().any(|s| s == t) {
+                    1
+                } else {
+                    0
+                }
+            })
+            .sum::<usize>();
         match best {
             Some((b, _)) if score < b => {}
             Some((b, _)) if score == b => tied = true,

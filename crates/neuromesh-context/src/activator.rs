@@ -1741,8 +1741,25 @@ fn resolve_seed_query_once(
         }
         let n = hit.name.to_lowercase();
         hit.match_reason != "token" && hit.score >= 86.0 && (n.starts_with(&q) || q.starts_with(&n))
-    })?;
-    Some((hit.id, (hit.score / 100.0).clamp(0.2, 0.75)))
+    });
+    if let Some(hit) = hit {
+        return Some((hit.id, (hit.score / 100.0).clamp(0.2, 0.75)));
+    }
+    // Nothing by name: a bare word that is exactly a source file's stem
+    // (`image_classification_from_scratch`) names that file, whatever symbols
+    // share its tokens. Code beats a notebook or markdown mirror of the script.
+    // Only a long snake/kebab name qualifies: "transform" in prose is not a
+    // request for `transform.py`, and a two-word `roi_heads` is as often an
+    // attribute as a file. Three words or more is a script's name.
+    let words = query.split(['_', '-']).filter(|w| !w.is_empty()).count();
+    if words >= 3 && !query.contains(['/', '\\', '.', ':']) {
+        if let Some(id) = graph.file_by_stem(query) {
+            if seed_path_allowed(graph, &id, prompt) {
+                return Some((id, 0.9));
+            }
+        }
+    }
+    None
 }
 
 fn seed_path_allowed(graph: &NeuralProjectGraph, id: &NodeId, prompt: &str) -> bool {

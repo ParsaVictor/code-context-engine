@@ -203,6 +203,12 @@ pub fn resolve_artifact_seeds(
                     .parent
                     .as_deref()
                     .is_some_and(|p| seeded_names.contains(&p.to_lowercase()));
+                // The question's `CTCLayer` already resolved to one file; the
+                // same-named class in a sibling example is a homonym, not a second seed.
+                if !already_seeded.contains(id) && seeded_names.contains(&node.name.to_lowercase())
+                {
+                    return None;
+                }
                 if code_anchor && !named && !owned_by_seed {
                     return None;
                 }

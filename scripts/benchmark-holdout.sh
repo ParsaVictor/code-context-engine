@@ -3,7 +3,7 @@
 # set, dev and holdout, in one run. Prints one summary line per set.
 #
 #   bash scripts/benchmark-holdout.sh            # all sets
-#   bash scripts/benchmark-holdout.sh holdout    # one set: dev|large|holdout|holdout-c|holdout-lang
+#   bash scripts/benchmark-holdout.sh holdout    # one set: dev|large|holdout|holdout-c|holdout-lang|holdout-ml
 #
 # Sets that need a checkout are fetched first (pinned revisions, idempotent).
 # Windows note: this machine needs CARGO_BUILD_JOBS=2 to avoid an rustc ICE.
@@ -19,6 +19,7 @@ declare -A MANIFEST=(
   [holdout]="tests/third_party/holdout/repos.toml"
   [holdout-c]="tests/third_party/holdout-c/repos.toml"
   [holdout-lang]="tests/third_party/holdout-lang/repos.toml"
+  [holdout-ml]="tests/third_party/holdout-ml/repos.toml"
 )
 declare -A TEST=(
   [dev]="third_party_gold"
@@ -26,9 +27,10 @@ declare -A TEST=(
   [holdout]="third_party_holdout_gold"
   [holdout-c]="third_party_c_holdout_gold"
   [holdout-lang]="third_party_lang_holdout_gold"
+  [holdout-ml]="third_party_ml_holdout_gold"
 )
 sets=("$@")
-if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang); fi
+if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml); fi
 
 for set in "${sets[@]}"; do
   if [ "$set" = dev ]; then

@@ -30,6 +30,13 @@ const MODEL_BASES: &[&str] = &[
     "PreTrainedModel",
     "Sequential",
     "ModuleList",
+    // Keras / TensorFlow
+    "Model",
+    "Layer",
+    // Hugging Face
+    "TFPreTrainedModel",
+    "FlaxPreTrainedModel",
+    "PeftModel",
 ];
 
 /// Base classes that make a class a dataset.
@@ -99,6 +106,12 @@ pub fn pytorch_overlay(path: &Path, content: &str, ast: &mut AstAnalysisResult) 
 
 fn has_torch_evidence(content: &str) -> bool {
     content.contains("import torch")
+        || content.contains("import tensorflow")
+        || content.contains("from tensorflow")
+        || content.contains("import keras")
+        || content.contains("from keras")
+        || content.contains("from transformers")
+        || content.contains("import transformers")
         || content.contains("from torch")
         || content.contains("nn.Module")
         || content.contains("torch.nn")
@@ -457,6 +470,11 @@ fn retype_def(
 fn is_train_loop(body: &str) -> bool {
     (body.contains(".backward()") || body.contains(".backward("))
         || (body.contains(".step()") && body.contains("zero_grad"))
+        // Keras: `model.fit(...)`; Hugging Face: `trainer.train()`;
+        // TensorFlow eager: a `GradientTape` whose gradients get applied.
+        || body.contains(".fit(")
+        || body.contains("trainer.train(")
+        || (body.contains("GradientTape") && body.contains("apply_gradients"))
 }
 
 /// Gradients being off is not enough on its own. `GPT.from_pretrained` copies
@@ -466,7 +484,9 @@ fn is_train_loop(body: &str) -> bool {
 fn is_eval_loop(body: &str) -> bool {
     let grads_off =
         body.contains("no_grad") || body.contains("inference_mode") || body.contains(".eval()");
-    grads_off && (iterates_data(body) || reports_quality(body))
+    (grads_off && (iterates_data(body) || reports_quality(body)))
+        || body.contains(".evaluate(")
+        || body.contains("trainer.predict(")
 }
 
 fn iterates_data(body: &str) -> bool {
@@ -636,9 +656,19 @@ fn push_checkpoints(
     static LOAD_RE: OnceLock<Regex> = OnceLock::new();
     // `torch.save(model.state_dict(), "runs/last.pt")` nests one call inside the
     // argument list, so a flat `[^)]*` would stop before reaching the path.
-    let save_re = SAVE_RE
-        .get_or_init(|| Regex::new(r"torch\.save[ \t]*\(((?:[^()]|\([^()]*\))*)\)").unwrap());
-    let load_re = LOAD_RE.get_or_init(|| Regex::new(r"torch\.load[ \t]*\(([^),]*)").unwrap());
+    // `torch.save(...)`, Keras `model.save(...)` / `save_weights(...)`, Hugging
+    // Face `save_pretrained(...)`; the load side is `torch.load`, `load_weights`,
+    // `from_pretrained`, `load_model`.
+    let save_re = SAVE_RE.get_or_init(|| {
+        Regex::new(
+            r"(?:torch\.save|\.save_weights|\.save_pretrained|\.save|\.push_to_hub)[ \t]*\(((?:[^()]|\([^()]*\))*)\)",
+        )
+        .unwrap()
+    });
+    let load_re = LOAD_RE.get_or_init(|| {
+        Regex::new(r"(?:torch\.load|\.load_weights|\.from_pretrained|\bload_model)[ \t]*\(([^),]*)")
+            .unwrap()
+    });
 
     for (re, produces) in [(save_re, true), (load_re, false)] {
         for cap in re.captures_iter(content) {
@@ -727,10 +757,17 @@ fn used_as_module(content: &str, ident: &str) -> bool {
 fn checkpoint_name(args: &str) -> String {
     static PATH_RE: OnceLock<Regex> = OnceLock::new();
     let re = PATH_RE.get_or_init(|| {
-        Regex::new(r#"["']([^"']*\.(?:pt|pth|ckpt|bin|safetensors))["']"#).unwrap()
+        Regex::new(r#"["']([^"']*\.(?:pt|pth|ckpt|bin|safetensors|keras|h5|tf|onnx))["']"#).unwrap()
     });
     if let Some(path) = re.captures(args).and_then(|c| c.get(1)) {
         return path.as_str().to_string();
+    }
+    // A hub id or directory (`"bert-base-uncased"`, `"out/final"`) is the name
+    // Keras and Hugging Face give a checkpoint; no extension is involved.
+    static LITERAL_RE: OnceLock<Regex> = OnceLock::new();
+    let lit_re = LITERAL_RE.get_or_init(|| Regex::new(r#"["']([^"']{2,})["']"#).unwrap());
+    if let Some(lit) = lit_re.captures(args).and_then(|c| c.get(1)) {
+        return lit.as_str().to_string();
     }
     // No literal: `torch.load(ckpt_path, map_location=device)`. The variable
     // holding the path is still a better name than "checkpoint" — it is what
@@ -964,6 +1001,79 @@ def evaluate(model, loader):
         }
         pytorch_overlay(Path::new(file), source, &mut ast);
         ast
+    }
+
+    #[test]
+    fn keras_fit_and_evaluate_are_loops_and_save_is_a_checkpoint() {
+        const SRC: &str = r#"
+import tensorflow as tf
+from tensorflow import keras
+
+
+class TinyNet(keras.Model):
+    def call(self, x):
+        return x
+
+
+def train(model, ds):
+    model.compile(optimizer="adam", loss="mse")
+    model.fit(ds, epochs=3)
+    model.save("runs/tiny.keras")
+
+
+def evaluate(model, ds):
+    return model.evaluate(ds)
+"#;
+        let ast = run(
+            SRC,
+            &[
+                ("TinyNet", NodeType::Class),
+                ("train", NodeType::Function),
+                ("evaluate", NodeType::Function),
+            ],
+        );
+        let ty = |name: &str| {
+            ast.symbols
+                .iter()
+                .find(|s| s.name == name)
+                .map(|s| s.symbol_type)
+        };
+        assert_eq!(ty("TinyNet"), Some(NodeType::Model));
+        assert_eq!(ty("train"), Some(NodeType::TrainLoop));
+        assert_eq!(ty("evaluate"), Some(NodeType::EvalLoop));
+        assert!(
+            ast.symbols
+                .iter()
+                .any(|s| s.symbol_type == NodeType::Checkpoint),
+            "model.save should yield a Checkpoint"
+        );
+    }
+
+    #[test]
+    fn huggingface_trainer_is_a_train_loop_and_from_pretrained_a_checkpoint() {
+        const SRC: &str = r#"
+from transformers import AutoModelForSequenceClassification, Trainer, TrainingArguments
+
+
+def main():
+    model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased")
+    args = TrainingArguments(output_dir="out")
+    trainer = Trainer(model=model, args=args)
+    trainer.train()
+    model.save_pretrained("out/final")
+"#;
+        let ast = run(SRC, &[("main", NodeType::Function)]);
+        let main = ast.symbols.iter().find(|s| s.name == "main").expect("main");
+        assert_eq!(main.symbol_type, NodeType::TrainLoop);
+        let checkpoints = ast
+            .symbols
+            .iter()
+            .filter(|s| s.symbol_type == NodeType::Checkpoint)
+            .count();
+        assert!(
+            checkpoints >= 2,
+            "from_pretrained + save_pretrained, got {checkpoints}"
+        );
     }
 
     fn type_of_method(ast: &AstAnalysisResult, owner: &str, name: &str) -> Option<NodeType> {
