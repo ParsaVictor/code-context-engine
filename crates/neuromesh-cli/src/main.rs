@@ -134,8 +134,9 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
             commands::monitor::execute(port, cap).await?;
         }
         "optimize" => {
-            let prompt = args.get(2).cloned();
-            commands::optimize::execute(prompt)?;
+            let full = args.iter().any(|a| a == "--full");
+            let prompt = args.iter().skip(2).find(|a| !a.starts_with("--")).cloned();
+            commands::optimize::execute(prompt, full)?;
         }
         "eval" | "evaluate" => {
             if commands::tasks::wants_tasks(args) {
