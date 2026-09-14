@@ -41,8 +41,8 @@ narrowest where a question names one object (Scala: 0.80).
 
 ## Speed (same machine, same hour, release binary without embeddings)
 
-ultralytics, 931 files: index ≈3.4 s; one question end-to-end p50 ≈0.66 s (n=10, cold process each
-time). Internal `l1_p95` gate on this repository: 42 ms (ceiling 50 ms). The 2026-09-13 numbers
+ultralytics, 931 files: index ≈3.6 s; one question end-to-end p50 ≈0.70 s (n=10, cold process each
+time). Internal `l1_p95` gate on this repository: 47 ms (ceiling 50 ms). The 2026-09-13 numbers
 (index 2.1 s, p50 0.28 s) were taken under different load; compare like with like.
 
 ## Not measured
