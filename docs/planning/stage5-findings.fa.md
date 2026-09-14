@@ -360,6 +360,37 @@ golds dev-4/fixture (نوشته‌شده با دید packet) همسایه‌ها
 --release-gates` داخلی: هر دو باینری `passed=false` (از قبل؛ informational؛ `failure_classes` یکسان)، precision
 یکسان 0.383، `l1_p95` **49→42ms** (G5: فاصله تا سقف ۵۰ از ۱ به ۸ms).
 
+## فاز D-۱ — گرامر C/C++ + holdout دامنه‌ی خودش (libuv + fmt)
+
+قبل: `.c/.h/.cpp` به fallback regex می‌افتادند (`registry.rs`: `grammar: None`). حالا `tree-sitter-c`/`tree-sitter-cpp`
+(هر دو `=0.23.4`، ABI 14، سازگار با tree-sitter 0.24) با پروفایل query خودشان (`queries/c.scm`، `queries/cpp.scm`):
+تابع (شامل pointer/reference declarator و `Owner::method` با `namespace_identifier` به‌عنوان parent)، struct/union/
+class، enum، typedef/using، `#include "…"` به‌عنوان import (فقط quoted؛ `<stdio.h>` یال نیست)، call. `.h` با گرامر
+C++ پارس می‌شود (superset؛ `vformat` با trailing return با گرامر C گم می‌شد).
+
+**Holdout دامنه:** `tests/third_party/holdout-c/` — libuv v1.49.2 (C، ۳۷۷ فایل، unix/win دوگانه) + fmt 11.1.4 (C++،
+۹۸ فایل، macro/template-heavy)، ۸+۸ تسک، گلد از خواندن کد قبل از هر اجرا، G1 با grep (udp.c به‌خاطر call
+`uv_udp_open` از `uv_accept` رد شد → poll.c). تست: `third_party_c_holdout_gold.rs` (target-only، نه CI).
+
+| اجرا | recall | precision | forbidden | oracle reachable / strict |
+|---|---|---|---|---|
+| اول (گرامر جدید، بدون هیچ تغییر دیگر) | 0.844 | 0.411 | 1 | 2/16 / 1 |
+| + فیکس oracle (تعریف C-style) + `.h`→C++ | 0.781 | 0.521 | 1 | 12/16 / 8 |
+| + `steer_same_name_symbol` | **0.938** | **0.625** | **0** | **15/16** / 10 |
+
+سه یافته:
+- **oracle باگ داشت** (`task_harness.rs::code_defines_symbol`): تعریف را فقط با کلمه‌ی کلیدی قبل از نام (`fn`/`def`/`func`/
+  `static`…) می‌شناخت؛ `int uv_timer_start(` → `SymbolMissing` با وجود بدنه‌ی unfolded در packet. حالا «توکن‌های نوع +
+  نام + `(`» هم تعریف است (C/C++/Java/C#). اعداد dev/فیکسچر تغییر نکردند (strict 0.909 / 19).
+- **symbol هم‌نام در دو دایرکتوری پلتفرم**: `uv_run` در `src/unix/core.c` و `src/win/core.c`؛ resolver بدون سیگنال
+  `win/` را می‌گرفت (۳ از ۴ شکست). `path_steer.rs` قبلاً همین را برای *فایل* هم‌نام داشت (`steer_same_name_file`،
+  nanoGPT `prepare.py`)؛ نسخه‌ی symbol-سطح اضافه شد: کلمه‌ی prompt که با segment دایرکتوری یکی از twinها برابر است
+  («unix») seed را به آن می‌برد، فقط وقتی دقیقاً یکی برنده است.
+- باقی‌مانده: `fmt_vformat_to_string` recall 0 — `vformat`/`vformat_to` overloadهای زیاد در base.h/format.h؛ probe نشده.
+
+**اندازه‌گیری‌نشده:** اثر گرامر C++ روی macroهای غیراستاندارد (FMT_FUNC) — tree-sitter با ERROR node ادامه می‌دهد؛
+۴۳ symbol از format-inl.h استخراج شد ولی پوشش کامل شمارش نشد.
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.
