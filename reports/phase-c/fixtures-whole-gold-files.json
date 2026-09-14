@@ -1,0 +1,656 @@
+
+NeuroMesh task harness — executor=model (Anthropic claude-opus-5) context=whole-gold-files judge=anthropic:claude-opus-4-8
+Task                         Repo                              Result  Strict   Packet  Effect.     ms  Needs
+------------------------------------------------------------------------------------------------------------------------
+py_sms_receive               tests/fixtures/mini-python          FAIL       -       59       59      9  src/receiver.py::on_receive=Unfolded, src/sms_store.py::SmsStore.save=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005021585367982c47dcZQNLgzxn)","type":"bad_response_status_code"},"type":"error"}
+py_persist_chain             tests/fixtures/mini-python          FAIL       -       59       59      8  src/sms_store.py::SmsStore.persist=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050219066006066c6hjCVrEHUmE)","type":"bad_response_status_code"},"type":"error"}
+kt_sms_receive               tests/fixtures/mini-kotlin          FAIL       -       96       96      9  src/SmsReceiver.kt::onReceive=Unfolded, src/SmsStore.kt::save=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005022324694409cc6xb2FTpJPxq)","type":"bad_response_status_code"},"type":"error"}
+rs_process_job               tests/fixtures/mini-queue           FAIL       -      152      152      8  src/worker.rs::process_job=Unfolded, src/queue.rs::enqueue=Unfolded, src/queue.rs::dequeue=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005022657788326p2mlv3RKmFb5o)","type":"bad_response_status_code"},"type":"error"}
+rs_session_token             tests/fixtures/mini-service         FAIL       -      138      138      8  src/session.rs::start_session=Unfolded, src/auth.rs::issue_token=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005023348916153g8k9cGkkwxYqx)","type":"bad_response_status_code"},"type":"error"}
+rs_router_handle             tests/fixtures/mini-router          FAIL       -      160      160     10  src/handler.rs::handle_request=Unfolded, src/extract.rs::extract_route=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005023649631237g8k9cHgwPhf38)","type":"bad_response_status_code"},"type":"error"}
+ts_cart_add                  tests/fixtures/mini-store           FAIL       -      220      220     10  src/cart.ts::addToCart=Unfolded, src/store.ts::createStore=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050245484778vldcbaBWxAxDt)","type":"bad_response_status_code"},"type":"error"}
+ts_sms_api                   tests/fixtures/mini-express         FAIL       -      100      100     10  src/app.ts::store=Unfolded, src/sms_store.ts::saveSms=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005024940726628wmrhfdeb1xHI3)","type":"bad_response_status_code"},"type":"error"}
+ts_safeparse                 tests/fixtures/mini-schema          FAIL       -      159      159     10  packages/schema/src/core/parse.ts::safeParse=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005025258104055z54jvu7T4nnku)","type":"bad_response_status_code"},"type":"error"}
+vue_qty_stepper              tests/fixtures/mini-shop            FAIL       -      608      608     18  src/stores/cart.js::setQty=Unfolded, src/views/CheckoutView.vue=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005026219577635nsq88ITeBmUUk)","type":"bad_response_status_code"},"type":"error"}
+vue_dead_gocart              tests/fixtures/mini-shop            FAIL       -     2171     2171     13  src/stores/ui.js::goCart=Unfolded, src/App.vue=Unfolded, src/components/CartDrawer.vue=Unfolded, src/components/Header.vue=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005026562800357c42r6mTLlFQSj)","type":"bad_response_status_code"},"type":"error"}
+react_stat_card              tests/fixtures/mini-pinoox          FAIL       -       57       57     10  theme/spark/src/StatCard.tsx::StatCard=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005026918063574wv94rEtIbFjzt)","type":"bad_response_status_code"},"type":"error"}
+ml_train_loss                tests/fixtures/ml-pytorch-detec…    FAIL       -      600      600     14  engine/train.py::train_one_epoch=Unfolded, models/detector.py::detection_loss=Unfolded, models/detector.py::Detector.forward=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005027256769042mz7nhjoCOVDFR)","type":"bad_response_status_code"},"type":"error"}
+ml_dataset_transforms        tests/fixtures/ml-pytorch-detec…    FAIL       -      721      721      9  data/dataset.py::CocoDetection.__getitem__=Unfolded, data/dataset.py::build_transforms=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005027569864892g8k9cplxPzbwe)","type":"bad_response_status_code"},"type":"error"}
+ml_loss_sees_model_folded    tests/fixtures/ml-pytorch-detec…    FAIL       -      153      180      9  models/detector.py::detection_loss=Unfolded, models/detector.py::Detector.forward=Folded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050278708363518mz7rFMYY5eh7)","type":"bad_response_status_code"},"type":"error"}
+cjs_save_returns_body        tests/fixtures/mini-cjs             FAIL       -      166      166      9  src/saveSms.cjs::saveSms=Unfolded, src/store.js::createStore=Unfolded
+                             note: provider error: Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005028168270634gpx7nfR4vFYX6)","type":"bad_response_status_code"},"type":"error"}
+orders_apply_discount        tests/fixtures/mini-orders          FAIL       -       82       82      9  src/pricing.js::applyDiscount=Unfolded
+                             note: provider error: Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050284677156404ngrrwDGAVTGN)","type":"bad_response_status_code"},"type":"error"}
+orders_total_with_tax        tests/fixtures/mini-orders          FAIL       -       82       82      8  src/pricing.js::totalFor=Unfolded
+                             note: provider error: Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005028771395047s4cmnIKz6JktP)","type":"bad_response_status_code"},"type":"error"}
+orders_stock_of_unknown      tests/fixtures/mini-orders          FAIL       -      481      481     12  src/inventory.js::stockOf=Unfolded, src/store.js::createStore=Unfolded
+                             note: provider error: Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 2026091500502974754667wv94r5cVYmc0v)","type":"bad_response_status_code"},"type":"error"}
+orders_remove_item_underflow tests/fixtures/mini-orders          FAIL       -      501      541     13  src/inventory.js::removeItem=Unfolded, src/inventory.js::addItem=Folded
+                             note: provider error: Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050294063700524ngrrbcSV0VdA)","type":"bad_response_status_code"},"type":"error"}
+orders_format_money_rounding tests/fixtures/mini-orders          FAIL       -      108      108      7  src/format.js::formatMoney=Unfolded
+                             note: provider error: Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005029709376565nsq88ZgPtCauI)","type":"bad_response_status_code"},"type":"error"}
+orders_place_order_decrements tests/fixtures/mini-orders          FAIL       -      879      879     13  src/orders.js::placeOrder=Unfolded, src/inventory.js::removeItem=Unfolded
+                             note: provider error: Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 2026091500503048673258bvdpbUvjhhlpd)","type":"bad_response_status_code"},"type":"error"}
+nm_handle_tool_call          .                                   FAIL       -    27007    27007    402  crates/neuromesh-mcp/src/tools.rs::handle_tool_call=Unfolded, crates/neuromesh-context/src/activator.rs::activate=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050382359030797j950iAZsWyU)","type":"bad_response_status_code"},"type":"error"}
+nm_physarum_sidecar          .                                   FAIL       -    23178    23178    464  crates/neuromesh-context/src/activator.rs::activate=Unfolded, crates/neuromesh-graph/src/graph.rs::solve_physarum_tube=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005046690423189g8k9cbq2Anv6Q)","type":"bad_response_status_code"},"type":"error"}
+nm_fold_expand               .                                   FAIL       -     1159     1417     98  crates/neuromesh-context/src/expansion.rs::expand_fold=Unfolded, crates/neuromesh-context/src/registry.rs::get_fold=Folded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005047443036577cc6xbIKTEExli)","type":"bad_response_status_code"},"type":"error"}
+nm_notebook_read             .                                   FAIL       -    22262    22262    231  crates/neuromesh-index/src/notebook.rs::read_source_text=Unfolded
+                             note: provider error (answer): Provider error (anthropic): HTTP error: {"error":{"message":"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 2026091500504868693057997j956aVBm9zO)","type":"bad_response_status_code"},"type":"error"}
+
+Task success (anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)): 0/26 = 0.000 (strict 0.000) · mean effective tokens 3142 · success per 1k tokens 0.000 · forbidden hits 0
+{
+  "outcomes": [
+    {
+      "effective_tokens": 59,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "py_sms_receive",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/receiver.py::on_receive",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/sms_store.py::SmsStore.save",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005021585367982c47dcZQNLgzxn)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 59,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 59,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "py_persist_chain",
+      "latency_ms": 8,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/sms_store.py::SmsStore.persist",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050219066006066c6hjCVrEHUmE)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 59,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 96,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "kt_sms_receive",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/SmsReceiver.kt::onReceive",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/SmsStore.kt::save",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005022324694409cc6xb2FTpJPxq)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 96,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 152,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "rs_process_job",
+      "latency_ms": 8,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/worker.rs::process_job",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/queue.rs::enqueue",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/queue.rs::dequeue",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005022657788326p2mlv3RKmFb5o)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 152,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 138,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "rs_session_token",
+      "latency_ms": 8,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/session.rs::start_session",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/auth.rs::issue_token",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005023348916153g8k9cGkkwxYqx)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 138,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 160,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "rs_router_handle",
+      "latency_ms": 10,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/handler.rs::handle_request",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/extract.rs::extract_route",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005023649631237g8k9cHgwPhf38)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 160,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 220,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "ts_cart_add",
+      "latency_ms": 10,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/cart.ts::addToCart",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/store.ts::createStore",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050245484778vldcbaBWxAxDt)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 220,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 100,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "ts_sms_api",
+      "latency_ms": 10,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/app.ts::store",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/sms_store.ts::saveSms",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005024940726628wmrhfdeb1xHI3)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 100,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 159,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "ts_safeparse",
+      "latency_ms": 10,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "packages/schema/src/core/parse.ts::safeParse",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005025258104055z54jvu7T4nnku)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 159,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 608,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "vue_qty_stepper",
+      "latency_ms": 18,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/stores/cart.js::setQty",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/views/CheckoutView.vue",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005026219577635nsq88ITeBmUUk)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 608,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 2171,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "vue_dead_gocart",
+      "latency_ms": 13,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/stores/ui.js::goCart",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/App.vue",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/components/CartDrawer.vue",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/components/Header.vue",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005026562800357c42r6mTLlFQSj)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 2171,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 57,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "react_stat_card",
+      "latency_ms": 10,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "theme/spark/src/StatCard.tsx::StatCard",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005026918063574wv94rEtIbFjzt)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 57,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 600,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "ml_train_loss",
+      "latency_ms": 14,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "engine/train.py::train_one_epoch",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "models/detector.py::detection_loss",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "models/detector.py::Detector.forward",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005027256769042mz7nhjoCOVDFR)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 600,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 721,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "ml_dataset_transforms",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "data/dataset.py::CocoDetection.__getitem__",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "data/dataset.py::build_transforms",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005027569864892g8k9cplxPzbwe)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 721,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 180,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "ml_loss_sees_model_folded",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "models/detector.py::detection_loss",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 27,
+          "need": "models/detector.py::Detector.forward",
+          "presence": "folded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050278708363518mz7rFMYY5eh7)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 153,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 166,
+      "executor": "anthropic:claude-opus-5",
+      "forbidden_hit": [],
+      "id": "cjs_save_returns_body",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/saveSms.cjs::saveSms",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/store.js::createStore",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error: Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005028168270634gpx7nfR4vFYX6)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 166,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 82,
+      "executor": "anthropic:claude-opus-5",
+      "forbidden_hit": [],
+      "id": "orders_apply_discount",
+      "latency_ms": 9,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/pricing.js::applyDiscount",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error: Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050284677156404ngrrwDGAVTGN)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 82,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 82,
+      "executor": "anthropic:claude-opus-5",
+      "forbidden_hit": [],
+      "id": "orders_total_with_tax",
+      "latency_ms": 8,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/pricing.js::totalFor",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error: Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005028771395047s4cmnIKz6JktP)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 82,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 481,
+      "executor": "anthropic:claude-opus-5",
+      "forbidden_hit": [],
+      "id": "orders_stock_of_unknown",
+      "latency_ms": 12,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/inventory.js::stockOf",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/store.js::createStore",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error: Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 2026091500502974754667wv94r5cVYmc0v)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 481,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 541,
+      "executor": "anthropic:claude-opus-5",
+      "forbidden_hit": [],
+      "id": "orders_remove_item_underflow",
+      "latency_ms": 13,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/inventory.js::removeItem",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 40,
+          "need": "src/inventory.js::addItem",
+          "presence": "folded"
+        }
+      ],
+      "note": "provider error: Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050294063700524ngrrbcSV0VdA)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 501,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 108,
+      "executor": "anthropic:claude-opus-5",
+      "forbidden_hit": [],
+      "id": "orders_format_money_rounding",
+      "latency_ms": 7,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/format.js::formatMoney",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error: Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005029709376565nsq88ZgPtCauI)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 108,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 879,
+      "executor": "anthropic:claude-opus-5",
+      "forbidden_hit": [],
+      "id": "orders_place_order_decrements",
+      "latency_ms": 13,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "src/orders.js::placeOrder",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "src/inventory.js::removeItem",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error: Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 2026091500503048673258bvdpbUvjhhlpd)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 879,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 27007,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "nm_handle_tool_call",
+      "latency_ms": 402,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-mcp/src/tools.rs::handle_tool_call",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-context/src/activator.rs::activate",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609150050382359030797j950iAZsWyU)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 27007,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 23178,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "nm_physarum_sidecar",
+      "latency_ms": 464,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-context/src/activator.rs::activate",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-graph/src/graph.rs::solve_physarum_tube",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005046690423189g8k9cbq2Anv6Q)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 23178,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 1417,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "nm_fold_expand",
+      "latency_ms": 98,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-context/src/expansion.rs::expand_fold",
+          "presence": "unfolded"
+        },
+        {
+          "expansion_tokens": 258,
+          "need": "crates/neuromesh-context/src/registry.rs::get_fold",
+          "presence": "folded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 20260915005047443036577cc6xbIKTEExli)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 1159,
+      "strict_success": false,
+      "success": false
+    },
+    {
+      "effective_tokens": 22262,
+      "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+      "forbidden_hit": [],
+      "id": "nm_notebook_read",
+      "latency_ms": 231,
+      "needs": [
+        {
+          "expansion_tokens": 0,
+          "need": "crates/neuromesh-index/src/notebook.rs::read_source_text",
+          "presence": "unfolded"
+        }
+      ],
+      "note": "provider error (answer): Provider error (anthropic): HTTP error: {\"error\":{\"message\":\"Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 2026091500504868693057997j956aVBm9zO)\",\"type\":\"bad_response_status_code\"},\"type\":\"error\"}",
+      "packet_tokens": 22262,
+      "strict_success": false,
+      "success": false
+    }
+  ],
+  "summary": {
+    "cases": 26,
+    "executor": "anthropic:claude-opus-5 (qa-judge anthropic:claude-opus-4-8)",
+    "forbidden_hits": 0,
+    "mean_effective_tokens": 3141.65380859375,
+    "strict_succeeded": 0,
+    "strict_success_rate": 0.0,
+    "succeeded": 0,
+    "success_per_1k_tokens": 0.0,
+    "success_rate": 0.0
+  }
+}

@@ -65,35 +65,63 @@ impl Provider for AnthropicProvider {
                 body["system"] = serde_json::json!(sys);
             }
 
-            let resp = self
-                .client
-                .post(url)
-                .header("x-api-key", &self.api_key)
-                .header("anthropic-version", "2023-06-01")
-                // Some gateways admit only clients they recognise;
-                // `ANTHROPIC_USER_AGENT` sets the header, nothing is spoofed by default.
-                .header(
-                    "user-agent",
-                    std::env::var("ANTHROPIC_USER_AGENT")
-                        .ok()
-                        .filter(|u| !u.trim().is_empty())
-                        .unwrap_or_else(|| format!("neuromesh/{}", env!("CARGO_PKG_VERSION"))),
-                )
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| NeuroMeshError::Provider {
-                    provider: "anthropic".to_string(),
-                    message: e.to_string(),
-                })?;
-
-            if !resp.status().is_success() {
+            // Gateways run out of quota and rate-limit in bursts; a task run
+            // of 250 calls must not die on the 40th. Retry 429/5xx and the
+            // "budget pool" reply with backoff, up to ~15 minutes per call.
+            // `ANTHROPIC_MAX_RETRIES=0` turns it off.
+            let max_retries: u32 = std::env::var("ANTHROPIC_MAX_RETRIES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(8);
+            let mut attempt = 0u32;
+            let resp = loop {
+                let resp = self
+                    .client
+                    .post(&url)
+                    .header("x-api-key", &self.api_key)
+                    .header("anthropic-version", "2023-06-01")
+                    // Some gateways admit only clients they recognise;
+                    // `ANTHROPIC_USER_AGENT` sets the header, nothing is spoofed by default.
+                    .header(
+                        "user-agent",
+                        std::env::var("ANTHROPIC_USER_AGENT")
+                            .ok()
+                            .filter(|u| !u.trim().is_empty())
+                            .unwrap_or_else(|| format!("neuromesh/{}", env!("CARGO_PKG_VERSION"))),
+                    )
+                    .json(&body)
+                    .send()
+                    .await
+                    .map_err(|e| NeuroMeshError::Provider {
+                        provider: "anthropic".to_string(),
+                        message: e.to_string(),
+                    })?;
+                if resp.status().is_success() {
+                    break resp;
+                }
+                let status = resp.status();
                 let err_text = resp.text().await.unwrap_or_default();
+                let transient = status.as_u16() == 429
+                    || status.is_server_error()
+                    || err_text.contains("Budget pool")
+                    || err_text.contains("overloaded");
+                if transient && attempt < max_retries {
+                    let wait = std::time::Duration::from_secs(15u64 << attempt.min(6));
+                    eprintln!(
+                        "anthropic: transient {status} ({}), retry {}/{max_retries} in {}s",
+                        err_text.chars().take(60).collect::<String>(),
+                        attempt + 1,
+                        wait.as_secs()
+                    );
+                    tokio::time::sleep(wait).await;
+                    attempt += 1;
+                    continue;
+                }
                 return Err(NeuroMeshError::Provider {
                     provider: "anthropic".to_string(),
                     message: format!("HTTP error: {}", err_text),
                 });
-            }
+            };
 
             let json: Value = resp.json().await.map_err(|e| NeuroMeshError::Provider {
                 provider: "anthropic".to_string(),
