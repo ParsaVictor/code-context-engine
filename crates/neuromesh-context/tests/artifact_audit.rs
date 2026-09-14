@@ -253,6 +253,20 @@ fn packet_probe() {
             seed.resolution_tier.as_deref().unwrap_or("")
         );
     }
+    if std::env::var("NM_PROBE_RANK").is_ok() {
+        for c in &view.rank_candidates {
+            println!(
+                "    rank {} score={:.2} learn={:.2} sel={} emit={} [{}] {:?}",
+                c.path,
+                c.score,
+                c.learning_bonus,
+                c.selected,
+                c.emitted,
+                c.reason,
+                c.score_breakdown
+            );
+        }
+    }
     if std::env::var("NM_PROBE_EDGES").is_ok() {
         for seed in &view.seeds {
             let Some(id) = &seed.resolved_id else {
