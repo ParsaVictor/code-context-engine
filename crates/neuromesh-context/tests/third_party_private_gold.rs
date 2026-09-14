@@ -22,7 +22,9 @@ const MAX_FORBIDDEN_HITS: usize = 0;
 #[test]
 fn private_repository_gold_and_task_oracle() {
     if std::env::var("NM_THIRD_PARTY").is_err() || std::env::var("NM_PRIVATE_SET_DIR").is_err() {
-        eprintln!("third_party_private_gold: NM_THIRD_PARTY or NM_PRIVATE_SET_DIR not set; skipping");
+        eprintln!(
+            "third_party_private_gold: NM_THIRD_PARTY or NM_PRIVATE_SET_DIR not set; skipping"
+        );
         return;
     }
     let s = gold_set::run_gold_set("private");

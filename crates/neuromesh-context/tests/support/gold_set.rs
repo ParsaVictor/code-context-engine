@@ -88,7 +88,8 @@ pub fn run_gold_set(set: &str) -> GoldSetSummary {
     let names = repo_names(&root, set);
     assert!(
         !names.is_empty(),
-        "no repositories in {}/repos.toml", set_dir(&root, set).display()
+        "no repositories in {}/repos.toml",
+        set_dir(&root, set).display()
     );
 
     let mut recalls = Vec::new();
