@@ -1752,7 +1752,17 @@ fn resolve_seed_query_once(
     // request for `transform.py`, and a two-word `roi_heads` is as often an
     // attribute as a file. Three words or more is a script's name.
     let words = query.split(['_', '-']).filter(|w| !w.is_empty()).count();
-    if words >= 3 && !query.contains(['/', '\\', '.', ':']) {
+    // A shorter word still names a script when the question says so:
+    // "in the autoencoder example", "in mnist_convnet, how ...".
+    let named_as_script = {
+        let p = prompt.to_lowercase();
+        let q = query.to_lowercase();
+        p.contains(&format!("{q} example"))
+            || p.contains(&format!("{q} script"))
+            || p.contains(&format!("in {q},"))
+            || p.contains(&format!("in the {q},"))
+    };
+    if (words >= 3 || named_as_script) && !query.contains(['/', '\\', '.', ':']) {
         if let Some(id) = graph.file_by_stem(query) {
             if seed_path_allowed(graph, &id, prompt) {
                 return Some((id, 0.9));
