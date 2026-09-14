@@ -36,6 +36,11 @@ pub struct EvalSuiteMetrics {
     pub full_workspace_fallback_count: usize,
     #[serde(default)]
     pub no_seed_count: usize,
+    /// Cells that shipped a packet and so have a precision at all. A cell
+    /// that resolved no seed on purpose (`no_seed`) ships nothing; its
+    /// precision is undefined, not zero, and it is left out of the mean (F25).
+    #[serde(default)]
+    pub precision_scored_cells: usize,
     #[serde(default)]
     pub embedding_primary_rate: f32,
     #[serde(default)]

@@ -236,7 +236,20 @@ impl ReleaseGateReport {
 pub fn aggregate_cell_results(cells: &[BenchmarkCellResult]) -> EvalSuiteMetrics {
     let n = cells.len().max(1) as f32;
     let recall = cells.iter().map(|c| c.recall).sum::<f32>() / n;
-    let precision = cells.iter().map(|c| c.precision).sum::<f32>() / n;
+    // F25: an empty packet from an unresolved seed has no precision. Averaging
+    // it as 0 made the gate unreachable by construction (one no_seed cell in
+    // three caps the mean at 0.67). Recall keeps every cell: a seed that should
+    // have resolved is still a miss.
+    let scored: Vec<f32> = cells
+        .iter()
+        .filter(|c| !c.no_seed)
+        .map(|c| c.precision)
+        .collect();
+    let precision = if scored.is_empty() {
+        0.0
+    } else {
+        scored.iter().sum::<f32>() / scored.len() as f32
+    };
     let f1 = if recall + precision > 0.0 {
         2.0 * recall * precision / (recall + precision)
     } else {
@@ -307,6 +320,7 @@ pub fn aggregate_cell_results(cells: &[BenchmarkCellResult]) -> EvalSuiteMetrics
         l3_rate: l3_count as f32 / n,
         full_workspace_fallback_count: 0,
         no_seed_count,
+        precision_scored_cells: scored.len(),
         embedding_primary_rate: embed_primary as f32 / n,
         failure_classes: Vec::new(),
         split: "holdout".into(),
@@ -392,6 +406,42 @@ pub fn pareto_frontier(points: &[ParetoPoint]) -> Vec<ParetoPoint> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// F25: a cell that shipped nothing has no precision; it is excluded from
+    /// the mean and counted, while recall still sees it.
+    #[test]
+    fn no_seed_cell_is_excluded_from_precision_mean() {
+        let cell = |id: &str, recall: f32, precision: f32, no_seed: bool| BenchmarkCellResult {
+            benchmark: "a".into(),
+            cell_id: id.into(),
+            split: "holdout".into(),
+            recall,
+            precision,
+            task_success: None,
+            claimed_sufficient: false,
+            tokens: 10,
+            latency_ms: 1,
+            retrieval_level: "L1".into(),
+            failure_class: String::new(),
+            l1_ms: 1,
+            l2_ms: None,
+            l3_ms: None,
+            no_seed,
+            embedding_primary: false,
+        };
+        let m = aggregate_cell_results(&[
+            cell("x", 1.0, 0.75, false),
+            cell("y", 1.0, 0.40, false),
+            cell("z", 0.0, 0.0, true),
+        ]);
+        assert!((m.precision - 0.575).abs() < 1e-4, "{}", m.precision);
+        assert_eq!(m.precision_scored_cells, 2);
+        assert_eq!(m.no_seed_count, 1);
+        assert!((m.recall - 2.0 / 3.0).abs() < 1e-4);
+        let none = aggregate_cell_results(&[cell("z", 0.0, 0.0, true)]);
+        assert_eq!(none.precision, 0.0);
+        assert_eq!(none.precision_scored_cells, 0);
+    }
 
     #[test]
     fn fastify_holdout_gate_thresholds() {
