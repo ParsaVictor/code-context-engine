@@ -1,4 +1,0 @@
-
-NeuroMesh task harness — executor=model (Anthropic deepseek-v4-flash) context=packet judge=anthropic:glm-5.3
-Task                         Repo                              Result  Strict   Packet  Effect.     ms  Needs
-------------------------------------------------------------------------------------------------------------------------

@@ -1,6 +1,0 @@
-
-NeuroMesh task harness — executor=model (Anthropic deepseek-v4-flash) context=grep judge=anthropic:glm-5.3
-Task                         Repo                              Result  Strict   Packet  Effect.     ms  Needs
-------------------------------------------------------------------------------------------------------------------------
-gin_serve_http               gin                                 FAIL       -     2482     2482     54  gin.go::ServeHTTP=Unfolded, gin.go::handleHTTPRequest=Unfolded
-                             note: provider error (answer): Provider error (anthropic): error sending request for url (https://agentrouter.org/v1/messages)
