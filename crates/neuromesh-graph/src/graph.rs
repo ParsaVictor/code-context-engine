@@ -1571,6 +1571,18 @@ impl NeuralProjectGraph {
                 let mut score = 0.0;
                 if let Some(node) = self.get_node(id) {
                     score += ranking_bonus(&node, query);
+                    // `Dense` names the type; its constructors and same-named
+                    // helpers (`Dense(in, out) = ...`) are secondary definitions.
+                    if node.node_type == NodeType::Class
+                        && query.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                    {
+                        score += 10.0;
+                    }
+                    // A shim in `deprecations.jl` or `compat/` is the old spelling,
+                    // not the definition a name means.
+                    if neuromesh_core::is_low_priority_source_path(&node.file_path) {
+                        score -= 12.0;
+                    }
                     if is_crate_path(&node.file_path) {
                         score += 12.0;
                     }

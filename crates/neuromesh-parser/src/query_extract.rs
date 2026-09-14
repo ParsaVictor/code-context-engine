@@ -16,6 +16,9 @@ pub const PYTHON_QUERIES: &str = include_str!("queries/python.scm");
 pub const GO_QUERIES: &str = include_str!("queries/go.scm");
 pub const C_QUERIES: &str = include_str!("queries/c.scm");
 pub const CPP_QUERIES: &str = include_str!("queries/cpp.scm");
+pub const SCALA_QUERIES: &str = include_str!("queries/scala.scm");
+pub const R_QUERIES: &str = include_str!("queries/r.scm");
+pub const JULIA_QUERIES: &str = include_str!("queries/julia.scm");
 pub const JAVA_QUERIES: &str = include_str!("queries/java.scm");
 pub const KOTLIN_QUERIES: &str = include_str!("queries/kotlin.scm");
 pub const PHP_QUERIES: &str = include_str!("queries/php.scm");
@@ -39,6 +42,9 @@ pub enum Grammar {
     Ruby,
     C,
     Cpp,
+    Scala,
+    R,
+    Julia,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -51,6 +57,7 @@ pub enum ImportStyle {
     Path,
     Ruby,
     CInclude,
+    CallArgOrPath,
 }
 
 #[derive(Clone, Copy)]
@@ -169,6 +176,33 @@ impl QueryOptions {
         }
     }
 
+    pub fn scala() -> Self {
+        Self {
+            import: ImportStyle::Path,
+            export: ExportStyle::NotPrivate,
+            skip_cfg_test: false,
+            scan_type_uses: true,
+        }
+    }
+
+    pub fn r_lang() -> Self {
+        Self {
+            import: ImportStyle::CallArgOrPath,
+            export: ExportStyle::NotUnderscore,
+            skip_cfg_test: false,
+            scan_type_uses: false,
+        }
+    }
+
+    pub fn julia() -> Self {
+        Self {
+            import: ImportStyle::CallArgOrPath,
+            export: ExportStyle::NotUnderscore,
+            skip_cfg_test: false,
+            scan_type_uses: false,
+        }
+    }
+
     pub fn ruby() -> Self {
         Self {
             import: ImportStyle::Ruby,
@@ -222,6 +256,9 @@ impl Grammar {
             Grammar::Ruby => tree_sitter_ruby::LANGUAGE.into(),
             Grammar::C => tree_sitter_c::LANGUAGE.into(),
             Grammar::Cpp => tree_sitter_cpp::LANGUAGE.into(),
+            Grammar::Scala => tree_sitter_scala::LANGUAGE.into(),
+            Grammar::R => tree_sitter_r::LANGUAGE.into(),
+            Grammar::Julia => tree_sitter_julia::LANGUAGE.into(),
         })
     }
 }
@@ -295,6 +332,18 @@ fn compiled_query(
             load(&Q, language, source)
         }
         Grammar::Cpp => {
+            static Q: OnceLock<Option<Query>> = OnceLock::new();
+            load(&Q, language, source)
+        }
+        Grammar::Scala => {
+            static Q: OnceLock<Option<Query>> = OnceLock::new();
+            load(&Q, language, source)
+        }
+        Grammar::R => {
+            static Q: OnceLock<Option<Query>> = OnceLock::new();
+            load(&Q, language, source)
+        }
+        Grammar::Julia => {
             static Q: OnceLock<Option<Query>> = OnceLock::new();
             load(&Q, language, source)
         }
@@ -459,6 +508,9 @@ fn extract(
             ImportStyle::Path => collect_path_import(node, filename, src, &mut result),
             ImportStyle::Ruby => {}
             ImportStyle::CInclude => collect_c_include(node, filename, src, &mut result),
+            ImportStyle::CallArgOrPath => {
+                collect_call_arg_or_path_import(node, filename, src, &mut result)
+            }
         }
     }
     if options.import == ImportStyle::Ruby {
@@ -921,6 +973,41 @@ fn collect_c_include(node: Node, filename: &str, src: &[u8], result: &mut AstAna
         return;
     }
     record_import(result, filename, stem, path, node.start_position().row + 1);
+}
+
+/// R `library(cli)` / `source("utils.R")`, Julia `include("util.jl")`: the
+/// imported name is the call's argument. Julia `using Foo: bar` / `import Foo`
+/// have no parentheses and take the path form.
+fn collect_call_arg_or_path_import(
+    node: Node,
+    filename: &str,
+    src: &[u8],
+    result: &mut AstAnalysisResult,
+) {
+    let raw = text(node, src);
+    let Some(open) = raw.find('(') else {
+        return collect_path_import(node, filename, src, result);
+    };
+    let inner = raw[open + 1..]
+        .trim_end_matches(')')
+        .split(',')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .replace('\\', "/");
+    if inner.is_empty() {
+        return;
+    }
+    let stem = Path::new(&inner)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+    if stem.is_empty() || stem == filename {
+        return;
+    }
+    record_import(result, filename, stem, inner, node.start_position().row + 1);
 }
 
 fn collect_path_import(node: Node, filename: &str, src: &[u8], result: &mut AstAnalysisResult) {
@@ -1484,6 +1571,117 @@ using Buffer = std::vector<char>;
             .relationships
             .iter()
             .any(|r| r.source_symbol == "format" && r.target_symbol == "emit_padding"));
+    }
+
+    #[test]
+    fn scala_defs_carry_their_object_as_parent() {
+        let code = r#"
+package a.b
+import c.d.{E, F}
+object Store {
+  def save(x: Int): Int = persist(x)
+  private def persist(x: Int): Int = x
+}
+class Receiver(s: Store) extends Base {
+  def onReceive(i: Int): Unit = { s.save(i) }
+}
+trait Base
+"#;
+        let ast = parse_lang(
+            Grammar::Scala,
+            SCALA_QUERIES,
+            QueryOptions::scala(),
+            "Store.scala",
+            code,
+        );
+        let save = ast.symbols.iter().find(|s| s.name == "save").expect("save");
+        assert_eq!(save.parent.as_deref(), Some("Store"));
+        let on = ast
+            .symbols
+            .iter()
+            .find(|s| s.name == "onReceive")
+            .expect("onReceive");
+        assert_eq!(on.parent.as_deref(), Some("Receiver"));
+        let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"Base"), "{names:?}");
+        assert!(ast
+            .relationships
+            .iter()
+            .any(|r| r.source_symbol == "save" && r.target_symbol == "persist"));
+        assert!(ast
+            .relationships
+            .iter()
+            .any(|r| r.source_symbol == "onReceive" && r.target_symbol == "save"));
+    }
+
+    #[test]
+    fn r_assigned_functions_and_library_calls() {
+        let code = r#"
+library(cli)
+source("utils.R")
+save_sms <- function(body) {
+  store <- create_store()
+  store$set("body", body)
+}
+create_store = function() list()
+"#;
+        let ast = parse_lang(Grammar::R, R_QUERIES, QueryOptions::r_lang(), "sms.R", code);
+        let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"save_sms"), "{names:?}");
+        assert!(names.contains(&"create_store"), "{names:?}");
+        let imported: Vec<&str> = ast
+            .imports
+            .iter()
+            .flat_map(|i| i.imported_symbols.iter().map(String::as_str))
+            .collect();
+        assert!(imported.contains(&"cli"), "{imported:?}");
+        assert!(imported.contains(&"utils"), "{imported:?}");
+        assert!(ast
+            .relationships
+            .iter()
+            .any(|r| r.source_symbol == "save_sms" && r.target_symbol == "create_store"));
+    }
+
+    #[test]
+    fn julia_functions_structs_and_includes() {
+        let code = r#"
+module Store
+using Base: push!
+import JSON
+include("util.jl")
+struct Msg
+  body::String
+end
+function save(s::Msg)
+  persist(s.body)
+end
+persist(x) = println(x)
+abstract type Kind end
+end
+"#;
+        let ast = parse_lang(
+            Grammar::Julia,
+            JULIA_QUERIES,
+            QueryOptions::julia(),
+            "store.jl",
+            code,
+        );
+        let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"save"), "{names:?}");
+        assert!(names.contains(&"persist"), "{names:?}");
+        assert!(names.contains(&"Msg"), "{names:?}");
+        assert!(names.contains(&"Kind"), "{names:?}");
+        let imported: Vec<&str> = ast
+            .imports
+            .iter()
+            .flat_map(|i| i.imported_symbols.iter().map(String::as_str))
+            .collect();
+        assert!(imported.contains(&"util"), "{imported:?}");
+        assert!(imported.contains(&"JSON"), "{imported:?}");
+        assert!(ast
+            .relationships
+            .iter()
+            .any(|r| r.source_symbol == "save" && r.target_symbol == "persist"));
     }
 
     #[test]

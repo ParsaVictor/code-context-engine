@@ -1250,14 +1250,16 @@ fn cluster_terms_covered(
     // A clause that spelled out a code identifier and resolved it
     // (`RoIHeads.select_training_samples`) is about that symbol; its English
     // nouns ("proposals") are not missing seeds to go fuzzy-searching for.
+    let nouns = extract_cluster_nouns(cluster);
+    // ("a Dense" lands in the nouns, not the identifiers — same test either way.)
     if anchors
         .identifiers
         .iter()
+        .chain(nouns.iter())
         .any(|id| looks_like_code_identifier(id) && seed_term_resolved(id, seed_resolutions))
     {
         return true;
     }
-    let nouns = extract_cluster_nouns(cluster);
     let mut terms = anchors.identifiers;
     terms.extend(nouns);
     terms.sort();
@@ -1641,10 +1643,26 @@ pub(crate) fn resolve_seed_query(
     query: &str,
     prompt: &str,
 ) -> Option<(NodeId, f32)> {
+    // A stem hit (`calling` → `call`) is a guess about a word, not the name
+    // the question wrote; it never carries exact confidence.
+    const STEM_HIT_MAX_CONFIDENCE: f32 = 0.72;
     let hit = resolve_seed_query_once(graph, query, prompt).or_else(|| {
         stem_search_queries(query)
             .iter()
             .find_map(|stem| resolve_seed_query_once(graph, stem, prompt))
+            .map(|(id, conf)| {
+                // A file whose name carries the stem (`create_sms_messages_table`)
+                // is what a keyword names; a same-named *symbol* elsewhere is a guess.
+                let is_file = graph
+                    .get_node(&id)
+                    .is_some_and(|n| n.node_type == NodeType::File);
+                let conf = if is_file {
+                    conf
+                } else {
+                    conf.min(STEM_HIT_MAX_CONFIDENCE)
+                };
+                (id, conf)
+            })
     });
     match hit {
         Some((id, conf)) => {

@@ -391,6 +391,43 @@ C++ پارس می‌شود (superset؛ `vformat` با trailing return با گر�
 **اندازه‌گیری‌نشده:** اثر گرامر C++ روی macroهای غیراستاندارد (FMT_FUNC) — tree-sitter با ERROR node ادامه می‌دهد؛
 ۴۳ symbol از format-inl.h استخراج شد ولی پوشش کامل شمارش نشد.
 
+## فاز D-۲ — گرامر Scala / R / Julia + holdout دامنه (os-lib، r-lib/cli، Flux.jl)
+
+سه گرامر جدید (`tree-sitter-scala =0.24.1`، `tree-sitter-r =1.3.0`، `tree-sitter-julia =0.23.1`، همه با tree-sitter
+0.24) با query خودشان — شکل درخت‌ها اول با dump واقعی گرفته شد، نه از حافظه: Scala (`object`/`class`/`trait` به‌عنوان
+owner متدها)، R (`name <- function` = `binary_operator lhs rhs:function_definition`؛ `library()`/`source()` با
+`#match?` به‌عنوان import)، Julia (`function_definition (signature (call_expression (identifier)))`، فرم کوتاه
+`f(x) = …` به‌عنوان `assignment`، struct پارامتری `(type_head (parametrized_type_expression …))`، `include("…")`).
+`ImportStyle::CallArgOrPath` جدید (آرگومان call یا مسیر).
+
+**Holdout:** `tests/third_party/holdout-lang/` — ۵+۵+۵ تسک، گلد قبل از اجرا، G1 با grep.
+
+| اجرا | recall | precision | forbidden | reachable / strict |
+|---|---|---|---|---|
+| اول (گرامرها) | 0.933 | 0.502 | 1 | 8/15 / 5 |
+| + oracle (تعریف R و Julia کوتاه) | 0.933 | 0.502 | 1 | 14/15 / 10 |
+| + cluster با noun کدشکلِ حل‌شده covered + ترجیح نوع + جریمه‌ی `deprecations.*` | **1.000** | 0.502 | 1 | 14/15 / 9 |
+
+per-language: Scala precision 0.80 (تمیز)، Julia 0.47، R **0.24** — پکیج R یک namespace تخت با call بین فایل‌های
+خواهر است؛ همان اختلاف سبک gold (تک‌فایل vs همسایه) که در F36′/F46/F47 مستند شد، این‌جا شدیدتر.
+
+یافته‌ها:
+- **oracle باز هم**: `rule <- function(` و `activations(c, x) = …` را تعریف نمی‌شناخت (بعد از C-style در D-۱). حالا
+  R assignment-function، Julia short-form، و `Owner::name(` با return type (C++) هم تعریف‌اند؛ تست واحد
+  `definition_shapes` با ۹ شکل. اعداد dev/فیکسچر بدون تغییر.
+- **cluster مرکب**: «how does calling a Dense on an AbstractVecOrMat …» — `Dense` در nouns است نه identifiers؛ cluster
+  uncovered شمرده و `AbstractVecOrMat` (نوع Base، در ریپو نیست) fuzzy → `_grad_or_nothing`. حالا noun کدشکلِ حل‌شده
+  هم cluster را covered می‌کند.
+- **`Dense` → `deprecations.jl`**: shim قدیمی هم‌نام بر تعریف اصلی برنده می‌شد. دو قاعده در `pick_dominant_candidate`:
+  query با حرف بزرگ → نود Class +۱۰؛ فایل low-priority (`deprecat*`، `compat`، `legacy`، test/bench/…) −۱۲.
+- **F48 (باز)**: extractor «calling» را identifier می‌شمارد؛ stem fallback آن را به `optimise/train.jl:call` @1.00 می‌رساند
+  (forbidden در `flux_dense_forward`). قاعده‌ی «stem hit کنار anchor دقیق = ضعیف» امتحان شد: lang forbidden 1→0 ولی
+  holdout-c 0.625→0.594 با forbidden جدید — seedهای stem در fmt slot اشغال می‌کردند و حذفشان مسیر ۳۶ (F36) را باز
+  کرد. رد شد؛ سقف confidence 0.72 برای stem hit در `resolve_seed_query` ماند (بی‌اثر روی اعداد).
+- `seed_names` در حلقه‌ی ۳۶ (کلمه‌ای که خودش seed حل‌شده است دوباره resolve نشود): **رد شد** — large 0.504→0.479؛ golds چندفایلی
+  django از همین مسیر فایل خواهر را می‌گیرند. باز هم F36: هر تغییر آن حلقه روی large می‌شکند.
+- **دیسک پر شد** (۹G آزاد): `target/debug/incremental` ۷.۸G + build مقایسه‌ای `/tmp/nm-base-target` ۱.۵G پاک شدند.
+
 ## جمع‌بندی صادقانه
 
 - recall خوب است (0.95) — موتور تقریباً هیچ‌وقت فایل گلد را کاملاً گم نمی‌کند، حتی روی ریپوی ندیده.
