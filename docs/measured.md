@@ -56,16 +56,20 @@ engine, 10 tasks each: `holdout-gin` (Go) and `holdout-vision`.
 
 | set | packet | whole-gold-files | grep |
 |---|---|---|---|
-| fixtures (dev, 26 tasks) | 0.769 (strict 0.731) | 0.885 (strict 0.769) | 0.577 (strict 0.538) |
-| **holdout-gin** (Go, 10 tasks) | **1.000** (0.800) | 0.900 (0.800) | **0.400** (0.400) |
-| **holdout-vision** (10 tasks) | 0.800 (0.700) | 0.700 (0.600) | 0.500 (0.500) |
+| fixtures (dev, 26 tasks) | 0.769 (strict 0.731) | 0.885 (strict 0.769) | 0.577 (strict 0.500) |
+| **holdout-gin** (Go, 10 tasks) | **1.000** (0.800) | 0.900 (0.800) | 0.900 (0.800) |
+| **holdout-vision** (10 tasks) | 0.800 (0.700) | 0.700 (0.600) | 0.800 (0.600) |
 
 Forbidden hits: 0 in all nine cells. `success per 1k tokens` is higher for `packet` than for
 `whole-gold-files` in all three sets (e.g. fixtures 0.164 vs 0.106) — the packet context is more
-token-efficient at the same or better success rate. The one cell below the 0.5 task-success gate is
-`holdout-gin`/`grep`. Not run: the "before vs after phase B" baseline comparison called for in
-`docs/planning/06-plan-revision-2026-09-14.fa.md` (row C) — this run only covers the current `main`.
-Full trace: `docs/planning/stage5-findings.fa.md` ("فاز C").
+token-efficient at the same or better success rate; `grep` is worse than `packet` on token efficiency
+in every set (e.g. holdout-gin 0.131 vs 0.041), consistently. All nine cells clear the 0.5 task-success
+gate. `grep`'s first run of `holdout-gin` initially scored 0.400 — traced to a real bug in the `grep`
+baseline (a byte cap that could be exhausted by one large, generically-matching file before ever
+reaching the file the task actually needed), fixed and rerun; see F56 in
+`docs/planning/stage5-findings.fa.md`. Not run: the "before vs after phase B" baseline comparison
+called for in `docs/planning/06-plan-revision-2026-09-14.fa.md` (row C) — this run only covers the
+current `main`. Full trace: `docs/planning/stage5-findings.fa.md` ("فاز C").
 
 ## Not measured
 

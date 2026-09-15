@@ -150,15 +150,28 @@ const GREP_SKIP_DIRS: &[&str] = &[".git", "target", "node_modules", ".venv", "di
 /// can otherwise return megabytes; the point is to measure what a *bounded*
 /// naive search costs, not to let it grow without limit.
 const GREP_MAX_BYTES: usize = 60_000;
+/// Cap on one file's contribution: without this, a single large file that
+/// happens to match a common keyword on many lines (e.g. a huge `_test.go`
+/// matching a generic word like "path" on every other line) can consume the
+/// entire `GREP_MAX_BYTES` budget by itself, silently crowding out every
+/// other match — including the one file the task actually needs. Found via
+/// `holdout-gin`/grep scoring 0.400: `context_test.go` (287 matching lines)
+/// filled the whole cap alphabetically ahead of `tree.go`.
+const GREP_MAX_BYTES_PER_FILE: usize = 6_000;
 
 fn grep_context(case: &TaskCase, repo: &Path) -> String {
     let keywords = grep_keywords(&case.prompt);
     if keywords.is_empty() {
         return String::new();
     }
-    let mut out = String::new();
+    // (distinct keywords matched, relative path, snippet) — collected for
+    // every matching file first, then emitted most-relevant-first, so which
+    // file the filesystem happens to list first can't decide what survives
+    // the byte cap. Distinct-keyword count is still pure text matching (no
+    // semantic ranking), just no longer order-dependent.
+    let mut candidates: Vec<(usize, String, String)> = Vec::new();
     let mut stack = vec![repo.to_path_buf()];
-    'walk: while let Some(dir) = stack.pop() {
+    while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };
@@ -176,7 +189,8 @@ fn grep_context(case: &TaskCase, repo: &Path) -> String {
                 continue;
             };
             let lower = body.to_lowercase();
-            if !keywords.iter().any(|k| lower.contains(k.as_str())) {
+            let distinct = keywords.iter().filter(|k| lower.contains(k.as_str())).count();
+            if distinct == 0 {
                 continue;
             }
             let rel = path
@@ -187,6 +201,10 @@ fn grep_context(case: &TaskCase, repo: &Path) -> String {
             let lines: Vec<&str> = body.lines().collect();
             let mut snippet = String::new();
             for (i, line) in lines.iter().enumerate() {
+                if snippet.len() >= GREP_MAX_BYTES_PER_FILE {
+                    snippet.push_str("...(file truncated at per-file cap)\n");
+                    break;
+                }
                 if keywords
                     .iter()
                     .any(|k| line.to_lowercase().contains(k.as_str()))
@@ -203,13 +221,21 @@ fn grep_context(case: &TaskCase, repo: &Path) -> String {
             if snippet.is_empty() {
                 continue;
             }
-            out.push_str(&format!("=== {rel} (grep match) ===\n{snippet}\n"));
-            if out.len() >= GREP_MAX_BYTES {
-                out.truncate(GREP_MAX_BYTES);
-                out.push_str("\n...(grep baseline truncated at cap)\n");
-                break 'walk;
-            }
+            candidates.push((distinct, rel, snippet));
         }
+    }
+    // Most distinct keywords matched first; ties broken by path for
+    // determinism (no dependence on filesystem listing order).
+    candidates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+
+    let mut out = String::new();
+    for (_, rel, snippet) in candidates {
+        let block = format!("=== {rel} (grep match) ===\n{snippet}\n");
+        if out.len() + block.len() > GREP_MAX_BYTES {
+            out.push_str("\n...(grep baseline truncated at cap)\n");
+            break;
+        }
+        out.push_str(&block);
     }
     out
 }
