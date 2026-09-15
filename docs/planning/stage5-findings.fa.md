@@ -579,3 +579,58 @@ recall holdout-cfg 0.879: دو تسک hydra که کلید فقط از طریق `
 `save_hyperparameters()` پر می‌شود — یالی به YAML نیست چون نام فایل config در آن ماژول نیامده (Hydra `_target_`
 آن را instantiate می‌کند). ثبت (F55): «کلید بی‌hint در ریپوی چند-config» — hint از `_target_: module.Class`
 در YAML به کلاس Python قابل استخراج است؛ انجام نشد (precision-tuning بسته).
+
+## فاز C — task success با مدل واقعی (session 11، ۱۵ سپتامبر ۲۰۲۶)
+
+اولین اجرای کامل `neuromesh eval --tasks --executor model` با کلید واقعی روی هر ۳ `--context` (packet،
+whole-gold-files، grep)، روی fixtures (۲۶ تسک dev) + دو holdout تازه (`holdout-gin`، `holdout-vision`، هرکدام
+۱۰ تسک). پاسخ‌دهنده `deepseek-ai/DeepSeek-V4-Flash-0731`، داور جدا `zai-org/GLM-5.3`، هر دو از طریق Baseten
+(`https://inference.baseten.co/v1`, provider=openai). Verify واقعی (اجرای patch + تست) برای تسک‌های patch؛
+QA-judge برای تسک‌های توضیحی.
+
+### مسیر تا رسیدن به این عدد — سه provider رد شد
+
+| تلاش | مشکل | نتیجه |
+|---|---|---|
+| 9router (`cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast` + `cf/@cf/mistralai/mistral-small-3.1-24b-instruct`) | Cloudflare Workers AI مدام HTTP 503 (ظرفیت) برمی‌گرداند | ۱/۹ ست بعد از ~۴۰ دقیقه؛ رها شد |
+| Groq (`qwen/qwen3.6-27b` + `openai/gpt-oss-20b`) | سقف OTPM (توکن خروجی در دقیقه) بسیار تنگ روی این org — برخی مدل‌ها (`qwen3.8-27b`) فقط ۱۰۰۰ توکن/دقیقه | حتی بعد از اضافه‌کردن retry/backoff (که provider OpenAI اصلاً نداشت — باگ واقعی، فیکس شد)، هر context ده‌ها دقیقه طول می‌کشید؛ رها شد به دستور Parsa |
+| Baseten (`deepseek-ai/DeepSeek-V4-Flash-0731` + `zai-org/GLM-5.3`) | — | تمام ۹ context بدون هیچ 429/503 در حدود ۱۵ دقیقه تمام شد |
+
+دو فیکس کد لازم شد تا Baseten/Groq اصلاً قابل‌اتصال شوند (پیش از این `OpenAIProvider` فقط `api.openai.com` را
+می‌شناخت و فقط Anthropic provider retry داشت):
+1. `crates/neuromesh-provider/src/openai.rs`: `OpenAIProvider::new` حالا `OPENAI_BASE_URL` env را می‌خواند
+   (مثل الگوی `ANTHROPIC_BASE_URL` که از قبل بود) — بدون این، هیچ gateway ای غیر از OpenAI رسمی در دسترس نبود.
+2. همان فایل: retry/backoff روی ۴۲۹/۵xx اضافه شد (`OPENAI_MAX_RETRIES`, پیش‌فرض ۸) — قبلاً هر ۴۲۹ بلافاصله
+   کل تسک را fail می‌کرد؛ الگو از `anthropic.rs` کپی شد.
+3. `scripts/phase-c-run.sh`: پشتیبانی از `PROVIDER=openai` (`--provider`/`--judge-provider`)، `--allow-self-judge`
+   وقتی پاسخ‌دهنده و داور یکی هستند، و اصلاح یک باگ نام‌گذاری فایل (slug گرفته می‌شد از پاسخ‌دهنده‌ی *اول* در
+   PAIRS نه از جفت جاری — یعنی اگر جفت اول fail می‌شد و جفت دوم قبول، فایل با نام غلط ذخیره می‌شد؛ الان به
+   `${pair%%:*}` از همان pair اصلاح شده).
+
+### جدول ۳×۳ (success rate / strict / success-per-1k-token)
+
+| مجموعه | packet | whole-gold-files | grep |
+|---|---|---|---|
+| **fixtures** (dev, ۲۶ تسک) | 0.769 / 0.731 / 0.164 | 0.885 / 0.769 / 0.106 | 0.577 / 0.538 / 0.110 |
+| **holdout-gin** (Go, ۱۰ تسک) | **1.000** / 0.800 / 0.131 | 0.900 / 0.800 / 0.080 | **0.400** / 0.400 / 0.018 |
+| **holdout-vision** (۱۰ تسک) | 0.800 / 0.700 / 0.098 | 0.700 / 0.600 / 0.075 | 0.500 / 0.500 / 0.024 |
+
+forbidden hits: **۰ در هر ۹ سلول**.
+
+### سه گیت فاز C (سند ۰۶، ردیف C)
+
+| گیت | نتیجه |
+|---|---|
+| `task_success ≥ 0.5` (هر سلول) | **رد شده در یک سلول**: holdout-gin/grep = 0.400 (strict هم 0.400). بقیه‌ی ۸ سلول ≥ 0.5، اکثراً ≥ 0.7 |
+| `success/1k-token(packet) > success/1k-token(whole-gold-files)` | **قبول در هر سه مجموعه**: fixtures 0.164>0.106، holdout-gin 0.131>0.080، holdout-vision 0.098>0.075 — packet همیشه کارآمدتر است |
+| forbidden hits = 0 | **قبول** در هر ۹ سلول |
+
+**نتیجه‌ی کلی: ۲ از ۳ گیت کامل قبول؛ گیت اول با یک استثنا (grep روی holdout-gin).** الگوی روشن: grep همیشه
+ضعیف‌ترین context است (به‌خصوص روی holdout)، و packet همیشه از whole-gold-files کارآمدتر (توکن کمتر به ازای
+موفقیت) است — دقیقاً همان ادعایی که فاز C قرار بود اثبات کند.
+
+### چیزی که اجرا نشد
+
+بند «دو بار: روی commit قبل از B و بعد از B» ردیف C سند ۰۶ اجرا نشد — فقط روی main فعلی (بعد از B، #20–#79)
+اجرا شد. مقایسه‌ی baseline (قبل از فاز B) به دلیل هزینه‌ی زمان/توکن این جلسه انجام نشد؛ یک آیتم باز برای جلسه‌ی
+بعد. F25 (تعریف گیت ریلیز precision) هنوز به تصمیم صریح Parsa نیاز دارد — بی‌ربط به این اجرا.

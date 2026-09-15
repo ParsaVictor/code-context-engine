@@ -13,6 +13,7 @@ bin="$root/target/release/neuromesh"
 # provider error is abandoned and the next pair reruns that context from the
 # start, so one report never mixes models. PAIRS="a:b c:d" overrides.
 pairs="${PAIRS:-deepseek-v4-flash:glm-5.3 glm-5.3:deepseek-v4-flash claude-opus-5:claude-opus-4-8 gpt-6-astra:gpt-5.6-sol}"
+provider="${PROVIDER:-anthropic}"
 out="$root/reports/phase-c"; mkdir -p "$out"
 export NM_TASK_REPLY_DIR="${NM_TASK_REPLY_DIR:-$root/target/phase-c-replies}"
 bash "$root/scripts/fetch-third-party.sh" tests/third_party/holdout/repos.toml holdout >/dev/null
@@ -22,15 +23,17 @@ run() { # set workdir tasksfile
   for ctx in packet whole-gold-files grep; do
     local kept=""
     for pair in $pairs; do
-      local model="${pair%%:*}"
-      if clean "$out/$set-$ctx-$model.json"; then kept="$model"; break; fi
+      local model="${pair%%:*}" slug="${pair%%:*}"; slug="${slug//\//_}"
+      if clean "$out/$set-$ctx-$slug.json"; then kept="$model"; break; fi
     done
     if [ -n "$kept" ]; then echo "keep  $set/$ctx $kept"; continue; fi
     for pair in $pairs; do
-      local model="${pair%%:*}" judge="${pair##*:}"
-      local f="$out/$set-$ctx-$model.json"
+      local model="${pair%%:*}" judge="${pair##*:}" slug="${pair%%:*}"; slug="${slug//\//_}"
+      local f="$out/$set-$ctx-$slug.json"
       echo "run   $set/$ctx $model (judge $judge)"
-      (cd "$dir" && "$bin" eval --tasks --executor model --context "$ctx"           --model "$model" --judge-model "$judge" ${tasks:+--tasks-file "$tasks"} --json) > "$f" 2>"$out/$set-$ctx-$model.log"
+      local self_judge=""; [ "$model" = "$judge" ] && self_judge="--allow-self-judge"
+      (cd "$dir" && "$bin" eval --tasks --executor model --provider "$provider" --context "$ctx" \
+          --model "$model" --judge-provider "$provider" --judge-model "$judge" $self_judge ${tasks:+--tasks-file "$tasks"} --json) > "$f" 2>"$out/$set-$ctx-$slug.log"
       if clean "$f"; then grep -E "^Task success" "$f" | cut -c1-160; break; fi
       echo "fail  $set/$ctx $model - trying next pair"
     done

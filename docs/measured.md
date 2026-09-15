@@ -47,12 +47,28 @@ ultralytics, 931 files: index ≈3.6 s; one question end-to-end p50 ≈0.70 s (n
 time). Internal `l1_p95` gate on this repository: 47 ms (ceiling 50 ms). The 2026-09-13 numbers
 (index 2.1 s, p50 0.28 s) were taken under different load; compare like with like.
 
+## Task success with a real model (2026-09-15, main after PR #79)
+
+`neuromesh eval --tasks --executor model`, answerer `deepseek-ai/DeepSeek-V4-Flash-0731`, a separate
+judge model `zai-org/GLM-5.3`, real `verify` (patch applied + test run) for patch tasks, QA-judge for
+explanatory ones. 26 dev tasks (`fixtures`) plus two fresh holdout sets never used to tune the
+engine, 10 tasks each: `holdout-gin` (Go) and `holdout-vision`.
+
+| set | packet | whole-gold-files | grep |
+|---|---|---|---|
+| fixtures (dev, 26 tasks) | 0.769 (strict 0.731) | 0.885 (strict 0.769) | 0.577 (strict 0.538) |
+| **holdout-gin** (Go, 10 tasks) | **1.000** (0.800) | 0.900 (0.800) | **0.400** (0.400) |
+| **holdout-vision** (10 tasks) | 0.800 (0.700) | 0.700 (0.600) | 0.500 (0.500) |
+
+Forbidden hits: 0 in all nine cells. `success per 1k tokens` is higher for `packet` than for
+`whole-gold-files` in all three sets (e.g. fixtures 0.164 vs 0.106) — the packet context is more
+token-efficient at the same or better success rate. The one cell below the 0.5 task-success gate is
+`holdout-gin`/`grep`. Not run: the "before vs after phase B" baseline comparison called for in
+`docs/planning/06-plan-revision-2026-09-14.fa.md` (row C) — this run only covers the current `main`.
+Full trace: `docs/planning/stage5-findings.fa.md` ("فاز C").
+
 ## Not measured
 
-- **Task success with a real model.** The harness exists (`neuromesh eval --tasks --executor model`,
-  separate judge, seven tasks with a real `verify` command) and has been exercised end to end with a
-  mock provider. It has not been run with an API key. Nothing here should be read as "an agent
-  finishes N% of tasks".
 - **Private/enterprise repositories.** No number. The holdout protocol for one is written
   (`docs/planning/05-phases-holdout-to-release.fa.md`, phase 5b) and waits on a team-authored gold.
 - **C++ under heavy macros / templates.** fmt parses and yields symbols, but coverage of

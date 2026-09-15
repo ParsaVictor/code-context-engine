@@ -17,7 +17,16 @@ pub struct OpenAIProvider {
 
 impl OpenAIProvider {
     pub fn new(api_key: impl Into<String>, base_url: Option<String>) -> Self {
-        let base = base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+        // `OPENAI_BASE_URL` (same convention as `ANTHROPIC_BASE_URL`) points
+        // this at a gateway (e.g. Groq's OpenAI-compatible endpoint) when the
+        // CLI didn't pass an explicit base_url.
+        let base = base_url
+            .or_else(|| {
+                std::env::var("OPENAI_BASE_URL")
+                    .ok()
+                    .filter(|b| !b.trim().is_empty())
+            })
+            .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
         Self {
             api_key: api_key.into(),
             base_url: base.trim_end_matches('/').to_string(),
@@ -161,26 +170,50 @@ impl Provider for OpenAIProvider {
                 req_body["max_tokens"] = serde_json::json!(m);
             }
 
-            let resp = self
-                .client
-                .post(&url)
-                .header("Authorization", format!("Bearer {}", effective_key))
-                .json(&req_body)
-                .send()
-                .await
-                .map_err(|e| NeuroMeshError::Provider {
-                    provider: self.provider_name.clone(),
-                    message: format!("Error connecting to {}: {}", url, e),
-                })?;
-
-            let status = resp.status();
-            if !status.is_success() {
+            // Free-tier gateways (Groq et al.) rate-limit hard on tokens/min;
+            // a run of 26+ back-to-back calls must not die on the first 429.
+            // Retry 429/5xx with backoff. `OPENAI_MAX_RETRIES=0` turns it off.
+            let max_retries: u32 = std::env::var("OPENAI_MAX_RETRIES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(8);
+            let mut attempt = 0u32;
+            let resp = loop {
+                let resp = self
+                    .client
+                    .post(&url)
+                    .header("Authorization", format!("Bearer {}", effective_key))
+                    .json(&req_body)
+                    .send()
+                    .await
+                    .map_err(|e| NeuroMeshError::Provider {
+                        provider: self.provider_name.clone(),
+                        message: format!("Error connecting to {}: {}", url, e),
+                    })?;
+                if resp.status().is_success() {
+                    break resp;
+                }
+                let status = resp.status();
                 let err_text = resp.text().await.unwrap_or_default();
+                let transient = status.as_u16() == 429 || status.is_server_error();
+                if transient && attempt < max_retries {
+                    let wait = std::time::Duration::from_secs(15u64 << attempt.min(6));
+                    eprintln!(
+                        "{}: transient {status} ({}), retry {}/{max_retries} in {}s",
+                        self.provider_name,
+                        err_text.chars().take(80).collect::<String>(),
+                        attempt + 1,
+                        wait.as_secs()
+                    );
+                    tokio::time::sleep(wait).await;
+                    attempt += 1;
+                    continue;
+                }
                 return Err(NeuroMeshError::Provider {
                     provider: self.provider_name.clone(),
                     message: format!("HTTP error ({}) from {}: {}", status, url, err_text),
                 });
-            }
+            };
 
             let json: Value = resp.json().await.map_err(|e| NeuroMeshError::Provider {
                 provider: self.provider_name.clone(),
