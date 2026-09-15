@@ -13,9 +13,27 @@ expect_seeds_missed = false
 [[task]]
 id = "physarum_usage"
 prompt = "Where is Physarum used?"
+# F25: the original 2-file gold (physarum.rs, activation.rs — just the
+# definition and its one caller) was too tight for a "where is X used"
+# question; Physarum is actually referenced/consumed in 12 files across the
+# repo (definition, wiring, telemetry consumers, CLI/API surfaces, tests).
+# Found by grep -rl "Physarum" crates/, then hand-classified: excludes files
+# where "Physarum" appears only as the literal text of this task's own
+# prompt/gold definition (gold.rs, selector.rs) or an incidental comment
+# mentioning the word without touching the type (seed/lang_cohere.rs).
 gold_files = [
   "crates/neuromesh-graph/src/physarum.rs",
   "crates/neuromesh-graph/src/activation.rs",
+  "crates/neuromesh-graph/src/graph.rs",
+  "crates/neuromesh-graph/src/lib.rs",
+  "crates/neuromesh-context/src/activator.rs",
+  "crates/neuromesh-context/src/lib.rs",
+  "crates/neuromesh-core/src/types.rs",
+  "crates/neuromesh-api/src/state.rs",
+  "crates/neuromesh-api/src/server.rs",
+  "crates/neuromesh-cli/src/commands/graph.rs",
+  "crates/neuromesh-context/tests/packet_determinism.rs",
+  "crates/neuromesh-context/tests/notebook_graph.rs",
 ]
 expect_seeds_missed = false
 
