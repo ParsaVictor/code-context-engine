@@ -189,7 +189,10 @@ fn grep_context(case: &TaskCase, repo: &Path) -> String {
                 continue;
             };
             let lower = body.to_lowercase();
-            let distinct = keywords.iter().filter(|k| lower.contains(k.as_str())).count();
+            let distinct = keywords
+                .iter()
+                .filter(|k| lower.contains(k.as_str()))
+                .count();
             if distinct == 0 {
                 continue;
             }
