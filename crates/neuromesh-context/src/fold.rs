@@ -86,6 +86,100 @@ pub struct FoldPolicy {
 }
 
 pub const SEED_EXON_BUDGET: usize = 4;
+/// F30: score added to a sibling whose signature declares a parameter that a
+/// seeded exon passes by keyword (`callee(img, distill_token = ...)`). Enough
+/// to clear `EXON_SCORE_FLOOR` and to beat a verb-only sibling under a seeded
+/// owner (40 + 8), not enough to displace a seed (100+).
+pub const KWARG_DISPATCH_BONUS: f32 = 60.0;
+
+/// Keyword arguments passed in calls inside `body`: `name = value` that
+/// follows `(` or `,`. Statement-level assignments never follow those, and a
+/// dict/struct literal uses `:`, so this reads only call sites. Short or
+/// generic names (`x`, `dim`, `self`) are skipped — the signal is a parameter
+/// name specific enough to identify its callee.
+pub fn call_keyword_args(body: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let bytes = body.as_bytes();
+    let mut i = 0;
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match c {
+            b'(' => depth += 1,
+            b')' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if c == b'(' || (c == b',' && depth > 0) {
+            let mut j = i + 1;
+            while j < bytes.len()
+                && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n' || bytes[j] == b'\r')
+            {
+                j += 1;
+            }
+            let start = j;
+            while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+                j += 1;
+            }
+            let name = &body[start..j];
+            let mut k = j;
+            while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                k += 1;
+            }
+            if !name.is_empty()
+                && !name.as_bytes()[0].is_ascii_digit()
+                && k < bytes.len()
+                && bytes[k] == b'='
+                && bytes.get(k + 1) != Some(&b'=')
+                && is_specific_param(name)
+            {
+                out.push(name.to_string());
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Parameter names declared by a signature, language-agnostic: the text
+/// between the first `(` and its `)`, one name per comma, default and
+/// annotation stripped, the last identifier of what is left (`int count`,
+/// `distill_token = None`, `*args`).
+pub fn signature_params(signature: &str) -> Vec<String> {
+    let Some(open) = signature.find('(') else {
+        return Vec::new();
+    };
+    let rest = &signature[open + 1..];
+    let mut depth = 0usize;
+    let mut end = rest.len();
+    for (idx, ch) in rest.char_indices() {
+        match ch {
+            '(' | '[' | '{' | '<' => depth += 1,
+            ')' | ']' | '}' | '>' if depth > 0 => depth -= 1,
+            ')' => {
+                end = idx;
+                break;
+            }
+            _ => {}
+        }
+    }
+    rest[..end]
+        .split(',')
+        .filter_map(|piece| {
+            let piece = piece.split('=').next().unwrap_or("");
+            let piece = piece.split(':').next().unwrap_or("");
+            piece
+                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .filter(|t| !t.is_empty())
+                .last()
+                .map(str::to_string)
+        })
+        .filter(|name| is_specific_param(name))
+        .collect()
+}
+
+fn is_specific_param(name: &str) -> bool {
+    name.len() >= 5 && name.chars().any(|c| c == '_' || c.is_ascii_uppercase())
+}
 pub const OPTIONAL_EXON_BUDGET: usize = 1;
 /// Weak lexical hits below this stay folded even when K has room.
 const EXON_SCORE_FLOOR: f32 = 25.0;
@@ -208,6 +302,17 @@ impl FoldPolicy {
             }
         }
         picked
+    }
+
+    /// F30: a method is a keyword-dispatch source when the question ties it
+    /// to the answer structurally — it is a seed, or a method of a seeded /
+    /// compound-named class — not when it merely shares words with the prompt.
+    pub fn is_structural_exon(&self, name: &str, owner: Option<&str>) -> bool {
+        is_seed_exon(name, &self.priority_symbols)
+            || is_seed_exon(name, &self.active_symbols)
+            || owner.is_some_and(|o| {
+                is_seed_exon(o, &self.active_symbols) || self.compound_type_match(o)
+            })
     }
 
     pub fn keep_open(&self, name: &str, owner: Option<&str>, body: &str) -> bool {
@@ -489,6 +594,32 @@ fn path_tag(file_path: &str, start_line: usize) -> String {
 mod tests {
     use super::*;
     use neuromesh_core::{TaskIntent, TaskRisk};
+
+    #[test]
+    fn call_keyword_args_reads_call_sites_only() {
+        let body = "def forward(self, img):\n    x, distill_tokens = x[:, :-1], x[:, -1]\n    out = self.student(img, distill_token = self.distillation_token, **kw)\n    if a == b:\n        pass\n    return nn.Sequential(nn.Linear(d, n), mlp_layernorm = True)";
+        let mut got = call_keyword_args(body);
+        got.sort();
+        // tuple unpacking after `,` at statement level is not a call
+        assert_eq!(got, vec!["distill_token", "mlp_layernorm"]);
+    }
+
+    #[test]
+    fn signature_params_strips_defaults_annotations_and_types() {
+        assert_eq!(
+            signature_params("def forward(self, img, distill_token = None):"),
+            vec!["distill_token"]
+        );
+        assert_eq!(
+            signature_params("fn run(out_path: &str, retry_count: Option<u32>) -> Res"),
+            vec!["out_path", "retry_count"]
+        );
+        assert_eq!(
+            signature_params("static int parse(const char *input_buf, int len)"),
+            vec!["input_buf"]
+        );
+        assert!(signature_params("def f(self, x, dim):").is_empty());
+    }
 
     fn gson_bug_signature() -> TaskSignature {
         TaskSignature {

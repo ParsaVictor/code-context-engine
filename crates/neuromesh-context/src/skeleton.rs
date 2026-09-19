@@ -1,4 +1,6 @@
-use crate::fold::{make_fold_id, FoldPolicy};
+use crate::fold::{
+    call_keyword_args, make_fold_id, signature_params, FoldPolicy, KWARG_DISPATCH_BONUS,
+};
 use crate::genetic_optimizer::ContextChromosome;
 use neuromesh_core::TokenCounter;
 use regex::Regex;
@@ -449,13 +451,51 @@ impl CodeSkeletonizer {
         let mut ordered: Vec<FunctionSpan> = spans.to_vec();
         ordered.sort_by_key(|s| (s.start_line, std::cmp::Reverse(s.end_line)));
 
-        let scores: Vec<f32> = ordered
+        let bodies: Vec<String> = ordered.iter().map(|span| span_body(&lines, span)).collect();
+        let mut scores: Vec<f32> = ordered
             .iter()
-            .map(|span| {
-                let body = span_body(&lines, span);
-                policy.score(&span.name, span.owner.as_deref(), &span.signature, &body)
+            .zip(&bodies)
+            .map(|(span, body)| {
+                policy.score(&span.name, span.owner.as_deref(), &span.signature, body)
             })
             .collect();
+        // F30: a seeded method that calls into a sibling by a keyword
+        // argument (`self.student(img, distill_token = ...)`) names its
+        // callee only through that parameter; the sibling whose signature
+        // declares it (`DistillMixin.forward(self, img, distill_token = None)`)
+        // is the second half of the answer even though neither its owner nor
+        // its name appears in the prompt.
+        // Only the highest-ranked exon of the file is a source (a weak
+        // lexical hit is not "the method the question is about"), and only a
+        // parameter declared by exactly one sibling identifies a callee — a
+        // name shared by many signatures (`batch_size`, `verbose`) is a
+        // convention, not a dispatch.
+        let first_pass = policy.select_exons(&scores);
+        let source = first_pass
+            .iter()
+            .copied()
+            .max_by(|a, b| scores[*a].total_cmp(&scores[*b]));
+        let kwargs: HashSet<String> = source
+            .filter(|i| policy.is_structural_exon(&ordered[*i].name, ordered[*i].owner.as_deref()))
+            .map(|i| call_keyword_args(&bodies[i]).into_iter().collect())
+            .unwrap_or_default();
+        if !kwargs.is_empty() {
+            let declared: Vec<Vec<String>> = ordered
+                .iter()
+                .map(|span| signature_params(&span.signature))
+                .collect();
+            for (i, params) in declared.iter().enumerate() {
+                if first_pass.contains(&i) {
+                    continue;
+                }
+                let unique = params.iter().any(|p| {
+                    kwargs.contains(p) && declared.iter().filter(|d| d.contains(p)).count() == 1
+                });
+                if unique {
+                    scores[i] += KWARG_DISPATCH_BONUS;
+                }
+            }
+        }
         let exon_idx = policy.select_exons(&scores);
         let exon_spans: Vec<FunctionSpan> = ordered
             .iter()

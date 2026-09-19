@@ -14,7 +14,7 @@ not the project's number.** Only the holdout rows are.
 
 | set | repos | role | recall | precision | forbidden | oracle reachable / strict |
 |---|---|---|---|---|---|---|
-| dev-4 | nanoGPT, express, vit-pytorch, full-stack-fastapi | tuning set | 1.000 | 0.906 | 0 | 21/21 · 19 |
+| dev-4 | nanoGPT, express, vit-pytorch, full-stack-fastapi | tuning set | 1.000 | 0.906 | 0 | 21/21 · 20 |
 | large | django (3.5k files), ultralytics | tuning set, large | 0.950 | 0.502 | 0 | 19/20 · 14 |
 | **holdout-2** | gin (Go), torchvision (Python) | never tuned on | **1.000** | **0.496** | **0** | 20/20 · 16 |
 | **holdout-c** | libuv (C), fmt (C++) | never tuned on | **1.000** | **0.656** | **0** | 16/16 · 10 |

@@ -38,6 +38,7 @@ const MIN_MEAN_RECALL: f32 = 0.99; // measured 1.00 (path steer, twin coherence)
 const MIN_MEAN_PRECISION: f32 = 0.90; // measured 0.906 (F40-F42)
 const MAX_FORBIDDEN_HITS: usize = 0; // measured 0 (weak substring symbol seeds pruned, F27)
 const MIN_TASK_REACHABLE: f32 = 1.0; // measured 21/21 (F26)
+const MIN_TASK_STRICT: usize = 20; // measured 20/21 (F30 keyword-argument dispatch)
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -205,5 +206,9 @@ fn real_repositories_gold_and_task_oracle() {
     assert!(
         reachable_rate >= MIN_TASK_REACHABLE,
         "task oracle reachable {reachable_rate:.3} < {MIN_TASK_REACHABLE}"
+    );
+    assert!(
+        task_strict >= MIN_TASK_STRICT,
+        "task strict {task_strict} < {MIN_TASK_STRICT}"
     );
 }
