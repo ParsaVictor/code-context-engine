@@ -91,9 +91,14 @@ pub(crate) fn prune_weak_substring_symbol_seeds(
             // `concept:validate` → `BaseTrainer.validate`: the English word
             // matched a member of an owner the question never mentioned, in a
             // file none of its real anchors live in. That is a homonym, not a hit.
+            // A module-level symbol has no owner to check, so the word
+            // itself must be in the prompt: `concept:engine` → `Engine` and
+            // `concept:auth` → `auth()` came from synonym expansion of a
+            // question that never said either word, each in a file no real
+            // anchor lives in (large: F61).
             let owner_named = match node.parent.as_deref() {
                 Some(owner) => symbol_named_in_prompt(owner, &words),
-                None => true,
+                None => symbol_named_in_prompt(&node.name, &words),
             };
             if owner_named || strong_files.contains(&node.file_path) {
                 return true;

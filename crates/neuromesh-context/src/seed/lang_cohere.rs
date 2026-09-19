@@ -39,6 +39,18 @@ pub(crate) fn family(path: &Path) -> Option<&'static str> {
     neuromesh_core::language_family(path)
 }
 
+/// Style sheets and vector assets: files a weak seed may only reach when the
+/// question is a style question (then there are no code anchors and nothing
+/// is pruned).
+fn is_style_asset(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        matches!(
+            e.to_ascii_lowercase().as_str(),
+            "svg" | "css" | "scss" | "sass" | "less"
+        )
+    })
+}
+
 /// Families of the files the strong seeds resolved to.
 pub(crate) fn strong_families(
     graph: &NeuralProjectGraph,
@@ -93,7 +105,19 @@ pub(crate) fn prune_off_family_weak_seeds(
         let Some(id) = seed.resolved_id.as_ref() else {
             return true;
         };
-        let Some(fam) = file_of(id).and_then(|p| family(&p)) else {
+        let Some(path) = file_of(id) else {
+            return true;
+        };
+        // A style sheet or vector asset is a family no code anchor ever
+        // touches: `concept:next` → `<g id="next">` in an admin icon SVG,
+        // `concept:error` → the `.error` rule in base.css, both for
+        // Python questions with strong Python seeds (large: F61). They
+        // have no language family, so the check below let them through.
+        if is_style_asset(&path) {
+            dropped.push(id.clone());
+            return false;
+        }
+        let Some(fam) = family(&path) else {
             return true;
         };
         if strong_families.contains(fam) {
@@ -212,6 +236,48 @@ mod tests {
         let mut reasons = HashMap::new();
         prune_off_family_weak_seeds(&graph, &mut seeds, &mut energies, &mut reasons);
         assert_eq!(seeds.len(), 1);
+    }
+
+    #[test]
+    fn weak_seed_in_a_style_asset_is_dropped_next_to_a_code_anchor() {
+        let graph = graph_with(&[
+            (
+                "django/middleware/csrf.py",
+                "class CsrfViewMiddleware:\n    pass\n",
+                SourceLanguage::Python,
+            ),
+            (
+                "django/contrib/admin/static/admin/css/base.css",
+                ".error { color: red; }\n",
+                SourceLanguage::CSS,
+            ),
+        ]);
+        let css_id = graph
+            .nodes_in_file(Path::new("django/contrib/admin/static/admin/css/base.css"))
+            .into_iter()
+            .next()
+            .map(|n| n.id)
+            .expect("css node");
+        let mut seeds = vec![
+            seed(
+                &graph,
+                "identifier:CsrfViewMiddleware",
+                "CsrfViewMiddleware",
+            ),
+            SeedResolution {
+                query: "concept:error".into(),
+                resolved_id: Some(css_id.clone()),
+                confidence: 1.0,
+                resolution_tier: None,
+                embedding_score: None,
+            },
+        ];
+        let mut energies: HashMap<NodeId, f32> = HashMap::new();
+        energies.insert(css_id.clone(), 1.0);
+        let mut reasons = HashMap::new();
+        prune_off_family_weak_seeds(&graph, &mut seeds, &mut energies, &mut reasons);
+        assert_eq!(seeds.len(), 1);
+        assert!(!energies.contains_key(&css_id));
     }
 
     #[test]

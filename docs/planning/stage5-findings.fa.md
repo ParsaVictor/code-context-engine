@@ -736,3 +736,28 @@ F58 روی holdout-ml2 گفت «`get_peft_model` با نام دقیق در promp
 
 dev بدون تغییر (0.906 / strict 20). holdout-ml2 **دست نخورد** — اگر عددش بعد از این PR تغییر کند، اثر جانبی یک فیکس
 dev-driven است و همان‌طور ثبت می‌شود، نه هدف.
+
+## F61 — precision روی large: seedهای ضعیف در فایل‌های asset و کلمات هم‌معنی (session 12، PR #89)
+
+probe با dump دلیل هر فایل packet (`expansion_reason`) و seedهای required روی ۶ تسک کم‌precision ی `large`:
+همه‌ی فایل‌های اضافه با reason `utility:8.50` و **sidecar=false** بودند — یعنی نه fill بلکه *seed* بودند. سه منبع:
+
+| مورد | مثال | ریشه | فیکس |
+|---|---|---|---|
+| seed ضعیف در asset | `concept:next` → `<g id="next">` در `calendar-icons.svg`؛ `concept:error` → قاعده‌ی `.error` در `base.css` — هر دو برای سؤال پایتونی با seed قوی پایتونی | `prune_off_family_weak_seeds` (F34 خانواده‌ی زبان) فایل بدون خانواده (svg/css) را رد نمی‌کرد چون `family()` برایش None بود | seed ضعیف در `svg/css/scss/sass/less` وقتی seed قوی کدی هست حذف می‌شود (`is_style_asset`). سؤال style ای seed قوی کدی ندارد → دست‌نخورده |
+| هم‌معنیِ بی‌owner در فایل غریبه | `concept:auth` → `auth()` در `contrib/auth/context_processors.py`؛ `concept:engine` → `Engine` در `template/engine.py` — هیچ‌کدام در prompt نیامده (از بسط مترادف آمده‌اند) | F27 (`weak_symbol_seed`) برای symbol بدون owner `None => true` داشت — یعنی هر تابع سطح ماژول با نام دقیق مفهوم قبول می‌شد | symbol بدون owner فقط اگر خود کلمه در prompt باشد؛ بقیه‌ی F27 دست‌نخورده |
+| acronym کنار identifier بلند | `identifier:CSRF` → `csrf()` در `template/context_processors.py` در حالی که `CsrfViewMiddleware` seed قوی است | extractor «CSRF» را identifier مستقل می‌گیرد؛ هیچ قاعده‌ای آن را به identifier بلندتری که token اش است گره نمی‌زد (F28 فقط `owner.member`) | در `bare_owner`: acronym تمام‌بزرگ (≥۳) که token یک identifier seed *resolve‌شده‌ی* بلندتر است حذف می‌شود |
+
+| set | قبل | بعد |
+|---|---|---|
+| large | 0.502 | **0.541** |
+| holdout-2 | 0.496 | **0.538** |
+| holdout-lang | 0.502 | **0.536** |
+| holdout-ml | 0.360 | 0.365 |
+| dev، holdout-c، holdout-ml2، holdout-cfg | — | بدون تغییر |
+
+recall/forbidden/strict روی هر ۸ مجموعه بدون تغییر. ratchet large به 0.52 بالا رفت. **باقی‌مانده‌ی probe (ثبت، نه فیکس):**
+`django_template_render` recall 0 — `Template.render` به کلاس `Template` در `backends/django.py` می‌رود نه `template/base.py`
+(twin کلاس هم‌نام؛ گلد base.py را می‌خواهد؛ tie-break باید از «compile a parsed node list» بیاید: `nodelist` فقط در base.py).
+`ultra_predict_stream` — `postprocess` هم‌نام در `detect/val.py`، `obb/val.py`، `classify/val.py` (twin در فایل خواهر، همان
+خانواده‌ی F58 برای peft). `ultra_detection_loss` — `data/utils.py` با `file_seed:unexpanded` و `models/nas/model.py`.
