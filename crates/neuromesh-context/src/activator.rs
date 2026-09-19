@@ -771,16 +771,48 @@ impl ContextActivator {
         let mut all_folds: Vec<FoldedIntron> = Vec::new();
         let registry = self.registry.clone();
 
-        // On a handful of files there is no independent disambiguation
-        // signal beyond "some symbol in this file matches the question", so
-        // a stem-match fill file is often the only way to reach a legitimate
-        // second gold file (e.g. a duplicate-named handler in a sibling
-        // file). At real-codebase scale that same rule is what drags in
-        // sidecar noise (duplicate helpers copy-pasted across many modules).
-        // Gate fill files only once the project is big enough that "shares a
-        // stem with a required file" stops being a useful signal on its own.
-        const FILL_GATE_MIN_FILES: usize = 20;
-        let large_project = graph.file_node_paths().len() > FILL_GATE_MIN_FILES;
+        // A plain stem-match fill file is gated at every project size. The
+        // gate used to switch on only above 20 files (`FILL_GATE_MIN_FILES`)
+        // because two fixtures needed a fill file to reach a legitimate gold
+        // file; both now have a structural reason to be there (F21: owner
+        // twin coherence; F31: the Api -> handler edge below), so the size
+        // switch is gone and the rule is one rule.
+        // F31: a route file that *registers* a seed as its handler is wiring
+        // the question asked about, not a coincidental consumer. The link is
+        // the parser's Api -> handler `Calls` edge resolved to the seed's own
+        // node id — a same-named function in another file (fastapi's
+        // `routes/private.py::create_user` next to the seeded
+        // `crud.create_user`) does not qualify.
+        let route_files_of_seeds: HashSet<std::path::PathBuf> = seed_set
+            .iter()
+            .flat_map(|seed| graph.get_connected_neighbors(seed))
+            .filter(|(_, edge)| {
+                edge.edge_type == EdgeType::Calls && seed_set.contains(&edge.target)
+            })
+            .filter_map(|(id, _)| graph.get_node(&id))
+            .filter(|n| n.node_type == NodeType::Api)
+            .map(|n| n.file_path)
+            .collect();
+        // Files joined to a seed (or the seed's file) by an edge feedback has
+        // reinforced (`reinforce_path`): `reinforcement_count` only ever moves
+        // on feedback, so it is the learned signal without a threshold.
+        let reinforced_files: HashSet<NodeId> = seed_set
+            .iter()
+            .flat_map(|seed| {
+                let mut ends = vec![seed.clone()];
+                if let Some(fid) = graph
+                    .get_node(seed)
+                    .and_then(|n| graph.file_id_for_path(&n.file_path))
+                {
+                    ends.push(fid);
+                }
+                ends
+            })
+            .flat_map(|end| graph.get_connected_neighbors(&end))
+            .filter(|(_, edge)| edge.reinforcement_count > 0)
+            .filter_map(|(id, _)| graph.get_node(&id))
+            .filter_map(|n| graph.file_id_for_path(&n.file_path))
+            .collect();
 
         let materialize = |id: &NodeId,
                            scores: &HashMap<NodeId, f32>,
@@ -823,8 +855,18 @@ impl ContextActivator {
             // tube files are left alone: they are graph-theoretic bridges
             // (e.g. a router wiring a controller to its template) that the
             // question does not name directly but that connect the seeds.
-            if large_project
-                && sidecar
+            // A file the user's feedback has reinforced (synaptic spikes,
+            // `reinforce_node_access`) carries its own justification: that is
+            // the learning loop, and the gate must not undo it. F31 found the
+            // gate had been doing exactly that on every project over 20
+            // files — the loop's own unit tests only ran on smaller ones.
+            let learned = graph.file_id_for_path(&node.file_path).is_some_and(|fid| {
+                learning_index.get(&fid).copied().unwrap_or(0.0) > 0.0
+                    || reinforced_files.contains(&fid)
+            });
+            if sidecar
+                && !learned
+                && !route_files_of_seeds.contains(&node.file_path)
                 && !focus_terms_ask_for_consumers(&focus_terms)
                 && !consumer_named_in_focus(&node.name, &node.file_path, &focus_terms)
             {

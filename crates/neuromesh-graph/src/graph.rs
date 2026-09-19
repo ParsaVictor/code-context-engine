@@ -677,11 +677,10 @@ impl NeuralProjectGraph {
                     }
                 }
                 EdgeType::Calls => {
+                    let source_file = rel.source_file.to_string_lossy();
                     let source = self
-                        .resolve_unique(
-                            &rel.source_symbol,
-                            Some(&rel.source_file.to_string_lossy()),
-                        )
+                        .resolve_api_in_file(&rel.source_symbol, &source_file)
+                        .or_else(|| self.resolve_unique(&rel.source_symbol, Some(&source_file)))
                         .unwrap_or_else(|| file_id.clone());
                     // Overlay templates (`hello` → `theme/default/hello.twig`) must
                     // bind the file before the stem can steal another symbol.
@@ -1322,6 +1321,22 @@ impl NeuralProjectGraph {
             None => Some(first.clone()),
             Some(_) => None,
         }
+    }
+
+    /// The `Api` route node named `name` in exactly this file, if any.
+    ///
+    /// Route overlays emit `Api -> handler` as a `Calls` whose source is the
+    /// route (`GET /`). `resolve_unique` is the general `Calls` resolver and
+    /// stays as it is (see `resolve_in_file`); it did not bind these names
+    /// and the edge fell back to the *file* node, which made a route file
+    /// indistinguishable from any other caller of the handler (F31).
+    pub fn resolve_api_in_file(&self, name: &str, file: &str) -> Option<NodeId> {
+        let id = self.resolve_in_file(name, file)?;
+        let data = self.inner.read();
+        data.mesh
+            .node(&id)
+            .filter(|n| n.node_type == NodeType::Api)
+            .map(|_| id)
     }
 
     /// Whether a seed query should be read as a file hint at all.
