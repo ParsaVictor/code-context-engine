@@ -1831,6 +1831,7 @@ dependencies = [
 name = "neuromesh-context"
 version = "0.9.0"
 dependencies = [
+ "blake3",
  "chrono",
  "neuromesh-core",
  "neuromesh-embed",

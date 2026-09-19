@@ -761,3 +761,36 @@ recall/forbidden/strict روی هر ۸ مجموعه بدون تغییر. ratchet
 (twin کلاس هم‌نام؛ گلد base.py را می‌خواهد؛ tie-break باید از «compile a parsed node list» بیاید: `nodelist` فقط در base.py).
 `ultra_predict_stream` — `postprocess` هم‌نام در `detect/val.py`، `obb/val.py`، `classify/val.py` (twin در فایل خواهر، همان
 خانواده‌ی F58 برای peft). `ultra_detection_loss` — `data/utils.py` با `file_seed:unexpanded` و `models/nas/model.py`.
+
+## S1 — کش ایندکس در harness + F63 (session 12، PR #90)
+
+**کش:** `tests/support/index_cache.rs` — گراف هر checkout یک بار ساخته و در `target/third_party_index_cache/<set>/<name>-<rev>-<hash>.bin`
+ذخیره می‌شود؛ کلید = rev گیت checkout + هش سورس چهار crate گراف‌ساز (core/parser/index/graph). تغییر در
+`neuromesh-context` (seed/fold/selection) کش را نگه می‌دارد — همان بخشی که بدون کش هم بدون تغییر اجرا می‌شد.
+`NM_INDEX_CACHE=0` خاموشش می‌کند. large: ۴۱۶s → ۱۵۱s (بقیه‌ی ۱۵۱s = build + load ۷۰MB + ۲۰ activation).
+
+**F63 (باگ واقعی که کش لو داد):** اولین مقایسه‌ی fresh/cached روی large *یکسان نبود* — packet fresh امضای
+`async def asend()` را دو بار و `sync_send` را سه بار چاپ می‌کرد. علت: در `insert_indexed_node` هر تعریف
+هم‌نام در یک فایل (django `Signal.send` دو `asend` در دو شاخه‌ی if دارد) همان id را دوباره به `file_to_nodes`/
+`name_to_nodes`/`impl_index` push می‌کرد؛ mesh یک نود نگه می‌دارد ولی `nodes_in_file` همان span را ۲–۳ بار می‌داد.
+گراف بارشده از snapshot (سرور MCP بعد از ری‌استارت، کش harness) index ها را از نو و بدون تکرار می‌ساخت → دو
+مسیر با هم اختلاف داشتند. رفع: `push_unique`. همچنین `rebuild_indexes` توکن‌های stem فایل را (که `ingest_file`
+ایندکس می‌کند) از دست می‌داد → اضافه شد. حالا fresh == cached روی large خط‌به‌خط، به‌جز `ultra_predict_stream`
+که *بین دو اجرای fresh هم* مجموعه‌ی `val.py` های هم‌نام‌ش فرق می‌کند (nondeterminism قدیمی، precision/strict ثابت؛
+ثبت برای D1).
+
+**اثر F63 روی اعداد (اندازه‌گیری صادقانه‌تر، نه رگرسیون موتور):**
+
+| set | قبل | بعد | چرا |
+|---|---|---|---|
+| holdout-c | 0.656 / strict 12 | **0.573** / strict **14** | fmt: ۴ تسک فایل `format.h`/`base.h` اضافه می‌گیرند. با explain: `format.h` با `utility:18.00` = callee با stem-focus. عدد قدیمی از تکرار idها در index (نسبت‌های per-file رقیق) سود می‌برد؛ سرور MCP بعد از ری‌استارت از قبل رفتار جدید را داشت |
+| holdout-ml | 0.365 / strict 9 | 0.370 / strict **10** | — |
+| بقیه‌ی ۶ مجموعه | — | بدون تغییر | — |
+
+تلاش برای بازگرداندن holdout-c با حذف «قطعه‌های stem فایل نام‌برده» از focus terms (`format-inl.h` → `format`) در
+سه جای activator: **بی‌اثر** (0.573 ثابت) → برگردانده شد؛ منشأ term `format` هنوز پیدا نشده. طبق اصل holdout
+بیش از این روی holdout-c کار نشد. گیت target-only ی holdout-c (≥0.60) الان قرمز است — صادقانه ثبت شد.
+
+**S2 — ابزار probe دسته‌ای:** `NM_EXPLAIN=1` (+ `NM_EXPLAIN_MAX_PRECISION`) در همه‌ی harnessهای مشترک →
+`target/explain-<set>.txt`: هر تسک کم‌precision با فایل‌ها (reason/sidecar/tokens)، ✓/✗ نسبت به gold، و seedها
+(query → node @ file). دیگر eprintln موقت لازم نیست.

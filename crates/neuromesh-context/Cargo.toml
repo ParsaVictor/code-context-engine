@@ -25,3 +25,4 @@ embeddings = ["dep:neuromesh-embed", "neuromesh-graph/embeddings"]
 [dev-dependencies]
 neuromesh-index = { path = "../neuromesh-index" }
 neuromesh-parser = { path = "../neuromesh-parser" }
+blake3.workspace = true

@@ -20,9 +20,11 @@ use neuromesh_context::gold::{
 };
 use neuromesh_context::task_harness::{oracle_outcome, parse_task_toml, Presence};
 use neuromesh_context::{ContextActivator, ReversibleContextRegistry};
-use neuromesh_core::{OptimizationMode, ProjectId};
-use neuromesh_graph::NeuralProjectGraph;
-use neuromesh_index::ProjectWalker;
+use neuromesh_core::OptimizationMode;
+#[path = "explain.rs"]
+mod explain;
+#[path = "index_cache.rs"]
+mod index_cache;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -107,14 +109,11 @@ pub fn run_gold_set(set: &str) -> GoldSetSummary {
             "{name}: checkout missing at {} — run: bash scripts/fetch-third-party.sh tests/third_party/{set}/repos.toml {set}",
             repo.display()
         );
-        let pid = ProjectId::new(name);
-        let graph = NeuralProjectGraph::new(pid.clone());
-        graph.set_workspace(&repo);
-        let scanned = ProjectWalker::new(repo.clone(), pid)
-            .scan()
-            .unwrap_or_else(|e| panic!("{name}: scan failed: {e}"));
-        graph.ingest_workspace(&scanned);
-        lines.push(format!("== {name}: {} files", scanned.len()));
+        let (graph, file_count, cached) = index_cache::graph_for_checkout(&root, set, name, &repo);
+        lines.push(format!(
+            "== {name}: {file_count} files{}",
+            if cached { " (index cache)" } else { "" }
+        ));
 
         let set_dir = set_dir(&root, set).join(name);
         let gold_path = set_dir.join("gold_tasks.toml");
@@ -138,6 +137,16 @@ pub fn run_gold_set(set: &str) -> GoldSetSummary {
                 .iter()
                 .filter(|f| gold_file_hit(f, &names_in, &paths_in))
                 .collect();
+            explain::record(
+                set,
+                &task.id,
+                &task.prompt,
+                &task.gold_files,
+                metrics.precision,
+                &hit,
+                &graph,
+                &view,
+            );
             forbidden_hits += hit.len();
             recalls.push(metrics.recall);
             precisions.push(metrics.precision);
