@@ -25,9 +25,9 @@ use neuromesh_context::gold::{
 };
 use neuromesh_context::task_harness::{oracle_outcome, parse_task_toml, Presence};
 use neuromesh_context::{ContextActivator, ReversibleContextRegistry};
-use neuromesh_core::{OptimizationMode, ProjectId};
-use neuromesh_graph::NeuralProjectGraph;
-use neuromesh_index::ProjectWalker;
+use neuromesh_core::OptimizationMode;
+#[path = "support/index_cache.rs"]
+mod index_cache;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -90,14 +90,12 @@ fn real_repositories_gold_and_task_oracle() {
             "{name}: checkout missing at {} — run scripts/fetch-third-party.sh",
             repo.display()
         );
-        let pid = ProjectId::new(name);
-        let graph = NeuralProjectGraph::new(pid.clone());
-        graph.set_workspace(&repo);
-        let scanned = ProjectWalker::new(repo.clone(), pid)
-            .scan()
-            .unwrap_or_else(|e| panic!("{name}: scan failed: {e}"));
-        graph.ingest_workspace(&scanned);
-        lines.push(format!("== {name}: {} files", scanned.len()));
+        let (graph, file_count, cached) =
+            index_cache::graph_for_checkout(&root, "dev", name, &repo);
+        lines.push(format!(
+            "== {name}: {file_count} files{}",
+            if cached { " (index cache)" } else { "" }
+        ));
 
         let gold_path = root
             .join("tests/third_party")

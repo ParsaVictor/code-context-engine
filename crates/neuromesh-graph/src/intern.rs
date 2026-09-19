@@ -428,9 +428,17 @@ pub(crate) fn insert_indexed_node(data: &mut GraphData, node: ContextNode) {
     let name = node.name.clone();
     let parent = node.parent.clone();
     let node_type = node.node_type;
+    // A file can define the same name twice (`async def asend()` in two
+    // branches of django's `Signal.send`); both share one id, so the mesh
+    // keeps one node but every index used to get the id once per
+    // definition. `nodes_in_file` then yielded the surviving span two or
+    // three times and the packet printed its signature that many times —
+    // while a graph reloaded from a snapshot (the MCP server after a
+    // restart, the harness index cache) rebuilt the indexes with the id
+    // once, so the two paths disagreed (F63).
     data.mesh.insert_node(node);
     index_path(data, &id, node_type, &path);
-    data.file_to_nodes.entry(path).or_default().push(id.clone());
+    push_unique(data.file_to_nodes.entry(path).or_default(), &id);
     index_name_keys(data, &id, node_type, &name);
     index_tokens(data, &id, &name);
     if node_type != NodeType::File && node_type != NodeType::Api {
@@ -438,7 +446,13 @@ pub(crate) fn insert_indexed_node(data: &mut GraphData, node: ContextNode) {
     }
     if let Some(parent) = parent {
         let key = format!("{}::{}", parent.to_lowercase(), name.to_lowercase());
-        data.impl_index.entry(key).or_default().push(id);
+        push_unique(data.impl_index.entry(key).or_default(), &id);
+    }
+}
+
+fn push_unique(ids: &mut Vec<NodeId>, id: &NodeId) {
+    if !ids.iter().any(|existing| existing == id) {
+        ids.push(id.clone());
     }
 }
 
@@ -453,10 +467,10 @@ fn index_path(data: &mut GraphData, id: &NodeId, node_type: NodeType, path: &Pat
 }
 
 fn index_name_keys(data: &mut GraphData, id: &NodeId, node_type: NodeType, name: &str) {
-    data.name_to_nodes
-        .entry(name.to_lowercase())
-        .or_default()
-        .push(id.clone());
+    push_unique(
+        data.name_to_nodes.entry(name.to_lowercase()).or_default(),
+        id,
+    );
     if node_type != NodeType::Api {
         return;
     }
@@ -579,6 +593,15 @@ pub(crate) fn rebuild_indexes(data: &mut GraphData) {
             .push(id.clone());
         index_name_keys(data, &id, node.node_type, &node.name);
         index_tokens(data, &id, &node.name);
+        // `ingest_file` also indexes a file node under its stem tokens
+        // (`val` for `val.py`); a graph rebuilt from a snapshot lost those,
+        // so a stem query ranked differently after a restart than on the
+        // first index (F63).
+        if node.node_type == NodeType::File {
+            if let Some(stem) = node.file_path.file_stem().and_then(|s| s.to_str()) {
+                index_tokens(data, &id, stem);
+            }
+        }
         if node.node_type != NodeType::File && node.node_type != NodeType::Api {
             data.concept_index.register_symbol(id.clone(), &node.name);
         }
