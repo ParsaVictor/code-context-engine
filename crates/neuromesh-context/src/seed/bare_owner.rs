@@ -56,7 +56,27 @@ pub(crate) fn prune_bare_owner_seeds(
         }
         members.push(member.to_ascii_lowercase());
     }
-    if owners.is_empty() && members.is_empty() {
+    // F61: a bare acronym the question wrote next to the identifier it is
+    // part of. "How does CsrfViewMiddleware check the CSRF token" yields
+    // `CsrfViewMiddleware` and `CSRF`; the acronym resolved to an unrelated
+    // module-level `csrf()` in another package. A bare identifier that is a
+    // token of a longer *resolved* identifier seed is a fragment of that
+    // anchor, not a second one.
+    let mut fragments: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for seed in seeds.iter() {
+        let Some(body) = identifier_body(&seed.query) else {
+            continue;
+        };
+        if seed.resolved_id.is_none() || body.contains(['.', '/', '\\']) {
+            continue;
+        }
+        let tokens = neuromesh_parser::tokenize_ident(body);
+        if tokens.len() < 2 {
+            continue;
+        }
+        fragments.extend(tokens.into_iter().map(|t| t.to_ascii_lowercase()));
+    }
+    if owners.is_empty() && members.is_empty() && fragments.is_empty() {
         return;
     }
     let mut dropped: Vec<NodeId> = Vec::new();
@@ -68,7 +88,12 @@ pub(crate) fn prune_bare_owner_seeds(
             return true;
         }
         let bare = body.to_ascii_lowercase();
-        if !owners.contains(&bare) && !members.contains(&bare) {
+        let acronym_fragment = body.len() >= 3
+            && body
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+            && fragments.contains(&bare);
+        if !owners.contains(&bare) && !members.contains(&bare) && !acronym_fragment {
             return true;
         }
         if let Some(id) = seed.resolved_id.as_ref() {
@@ -146,6 +171,29 @@ mod tests {
         ];
         run(&mut seeds);
         assert_eq!(seeds.len(), 3);
+    }
+
+    #[test]
+    fn acronym_that_is_a_token_of_a_resolved_identifier_is_dropped() {
+        let mut seeds = vec![
+            seed(
+                "identifier:CsrfViewMiddleware",
+                Some("sym:django/middleware/csrf.py:CsrfViewMiddleware"),
+            ),
+            seed(
+                "identifier:CSRF",
+                Some("sym:django/template/context_processors.py:csrf"),
+            ),
+            // lower-case word, not an acronym: left to the weak-seed rules
+            seed("identifier:view", Some("sym:django/views/base.py:View")),
+        ];
+        let left = run(&mut seeds);
+        let queries: Vec<&str> = seeds.iter().map(|s| s.query.as_str()).collect();
+        assert_eq!(
+            queries,
+            vec!["identifier:CsrfViewMiddleware", "identifier:view"]
+        );
+        assert_eq!(left.len(), 2);
     }
 
     #[test]
