@@ -3,7 +3,7 @@
 # set, dev and holdout, in one run. Prints one summary line per set.
 #
 #   bash scripts/benchmark-holdout.sh            # all sets
-#   bash scripts/benchmark-holdout.sh holdout    # one set: dev|large|holdout|holdout-c|holdout-lang|holdout-ml|holdout-cfg|private
+#   bash scripts/benchmark-holdout.sh holdout    # one set: dev|large|holdout|holdout-c|holdout-lang|holdout-ml|holdout-ml2|holdout-cfg|private
 #
 # "private" is the phase-5b holdout on a repository that is not in this tree:
 # set NM_PRIVATE_SET_DIR (manifest + gold) and NM_PRIVATE_DIR (checkouts); it is
@@ -24,6 +24,7 @@ declare -A MANIFEST=(
   [holdout-c]="tests/third_party/holdout-c/repos.toml"
   [holdout-lang]="tests/third_party/holdout-lang/repos.toml"
   [holdout-ml]="tests/third_party/holdout-ml/repos.toml"
+  [holdout-ml2]="tests/third_party/holdout-ml2/repos.toml"
   [holdout-cfg]="tests/third_party/holdout-cfg/repos.toml"
 )
 declare -A TEST=(
@@ -33,11 +34,12 @@ declare -A TEST=(
   [holdout-c]="third_party_c_holdout_gold"
   [holdout-lang]="third_party_lang_holdout_gold"
   [holdout-ml]="third_party_ml_holdout_gold"
+  [holdout-ml2]="third_party_ml2_holdout_gold"
   [holdout-cfg]="third_party_cfg_holdout_gold"
   [private]="third_party_private_gold"
 )
 sets=("$@")
-if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml holdout-cfg); fi
+if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml holdout-ml2 holdout-cfg); fi
 for set in "${sets[@]}"; do
   if [ "$set" = private ]; then
     [ -n "${NM_PRIVATE_SET_DIR:-}" ] || { echo "private: NM_PRIVATE_SET_DIR unset; skipping" >&2; }

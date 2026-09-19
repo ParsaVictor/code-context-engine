@@ -1,0 +1,38 @@
+# peft gold — written from the source before any engine run. G1 checked:
+# every forbidden file grepped for the question's symbols (0 hits, or a
+# NotImplemented stub as in mixed_model.save_pretrained).
+
+[[task]]
+id = "peft_save_pretrained"
+prompt = "How does PeftModel.save_pretrained write each selected adapter's weights and config to the output directory, and how does get_peft_model_state_dict pick out that adapter's parameters?"
+gold_files = ["src/peft/peft_model.py", "src/peft/utils/save_and_load.py"]
+forbidden_files = ["src/peft/mixed_model.py", "src/peft/tuners/lora/eva.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "peft_load_adapter"
+prompt = "How does PeftModel.load_adapter fetch the adapter weights with load_peft_weights and apply them with set_peft_model_state_dict?"
+gold_files = ["src/peft/peft_model.py", "src/peft/utils/save_and_load.py"]
+forbidden_files = ["src/peft/utils/merge_utils.py", "src/peft/auto.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "peft_lora_linear_merge"
+prompt = "How does the LoRA Linear layer merge and unmerge the adapter into the base layer weight, and how does get_delta_weight compute the delta from lora_A and lora_B?"
+gold_files = ["src/peft/tuners/lora/layer.py"]
+forbidden_files = ["src/peft/tuners/loha/layer.py", "src/peft/tuners/oft/layer.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "peft_get_peft_model"
+prompt = "How does get_peft_model wrap a base model into a PeftModel, choosing the task-specific class from MODEL_TYPE_TO_PEFT_MODEL_MAPPING or PeftMixedModel when mixed is set?"
+gold_files = ["src/peft/mapping_func.py", "src/peft/peft_model.py", "src/peft/mixed_model.py"]
+forbidden_files = ["src/peft/auto.py", "src/peft/tuners/lora/config.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "peft_dora"
+prompt = "How does DoraLinearLayer compute the weight norm and apply the magnitude vector in forward, and how does DoraLinearVariant wire it into the LoRA layer?"
+gold_files = ["src/peft/tuners/lora/dora.py", "src/peft/tuners/lora/variants.py"]
+forbidden_files = ["src/peft/tuners/oft/layer.py", "src/peft/tuners/lora/loraga.py"]
+expect_seeds_missed = false
