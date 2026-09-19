@@ -27,7 +27,7 @@ expect_seeds_missed = false
 id = "peft_get_peft_model"
 prompt = "How does get_peft_model wrap a base model into a PeftModel, choosing the task-specific class from MODEL_TYPE_TO_PEFT_MODEL_MAPPING or PeftMixedModel when mixed is set?"
 gold_files = ["src/peft/mapping_func.py", "src/peft/peft_model.py", "src/peft/mixed_model.py"]
-forbidden_files = ["src/peft/auto.py", "src/peft/tuners/lora/config.py"]
+forbidden_files = ["src/peft/utils/merge_utils.py", "src/peft/tuners/lora/config.py"]
 expect_seeds_missed = false
 
 [[task]]

@@ -24,7 +24,7 @@ id = "peft_get_peft_model"
 repo = "peft"
 prompt = "How does get_peft_model wrap a base model into a PeftModel, choosing the task-specific class from MODEL_TYPE_TO_PEFT_MODEL_MAPPING or PeftMixedModel when mixed is set?"
 needs = ["src/peft/mapping_func.py::get_peft_model"]
-forbidden = ["src/peft/auto.py"]
+forbidden = ["src/peft/utils/merge_utils.py"]
 
 [[task]]
 id = "peft_dora"
