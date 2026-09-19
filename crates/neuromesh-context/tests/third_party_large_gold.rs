@@ -28,10 +28,10 @@
 #[path = "support/gold_set.rs"]
 mod gold_set;
 
-const MIN_MEAN_RECALL: f32 = 0.94; // measured 0.950
-const MIN_MEAN_PRECISION: f32 = 0.52; // measured 0.541 (F61; -0.02 ratchet margin)
+const MIN_MEAN_RECALL: f32 = 0.99; // measured 1.000 (F64 twin body words)
+const MIN_MEAN_PRECISION: f32 = 0.54; // measured 0.566 (F64; -0.02 ratchet margin)
 const MAX_FORBIDDEN_HITS: usize = 0; // measured 0 (F44: trainer.py homonym seed gone)
-const MIN_TASK_REACHABLE: f32 = 0.94; // measured 19/20 (F44)
+const MIN_TASK_REACHABLE: f32 = 1.0; // measured 20/20 (F64)
 
 #[test]
 fn large_repositories_gold_and_task_oracle() {
