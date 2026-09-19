@@ -1001,6 +1001,16 @@ fn push_pinoox_controller_api(
         format!("action([{short}::class, '{method}'])"),
         line,
     );
+    // The route node calls its handler method (F31). Same edge Laravel and
+    // FastAPI routes get; without it the only link from a route file to the
+    // handler was a file-level `Calls`, which reads like any other caller.
+    link_api_to_handler(
+        ast,
+        &name,
+        method,
+        Some(format!("Controller/{short}.php")),
+        Some(short.to_string()),
+    );
     if ast.relationships.iter().any(|r| {
         r.source_symbol == name
             && r.target_symbol == short
@@ -2317,6 +2327,23 @@ mod tests {
             has_api(&ast, "/api/sms"),
             "symbols = {:?}",
             ast.symbols.iter().map(|s| &s.name).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn pinoox_route_calls_its_handler() {
+        let src = "<?php\nuse function Pinoox\\Router\\{get};\nget('/')->action([MainController::class, 'index'])->name('home');\n";
+        let ast = analyze("routes/web.php", src, SourceLanguage::PHP);
+        assert!(has_api(&ast, "home"));
+        assert!(
+            ast.relationships.iter().any(|r| {
+                r.source_symbol == "home"
+                    && r.target_symbol == "index"
+                    && r.relationship == EdgeType::Calls
+                    && r.receiver_hint.as_deref() == Some("MainController")
+            }),
+            "home must Call index (F31), relationships = {:?}",
+            ast.relationships
         );
     }
 
