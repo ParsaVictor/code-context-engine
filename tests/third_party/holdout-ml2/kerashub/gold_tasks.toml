@@ -1,0 +1,37 @@
+# keras-hub gold — written from the source before any engine run. G1
+# checked: every forbidden file grepped for the question's symbols, 0 hits.
+
+[[task]]
+id = "kh_backbone_from_preset"
+prompt = "How does Backbone.from_preset load a preset through get_preset_loader and KerasPresetLoader, and how does save_to_preset write the backbone back to a preset directory?"
+gold_files = ["keras_hub/src/models/backbone.py", "keras_hub/src/utils/preset_utils.py"]
+forbidden_files = ["keras_hub/src/utils/pipeline_model.py", "keras_hub/src/layers/modeling/transformer_encoder.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "kh_backbone_lora"
+prompt = "How does Backbone.enable_lora enable LoRA on the target layers, and how do save_lora_weights and load_lora_weights persist only the LoRA variables?"
+gold_files = ["keras_hub/src/models/backbone.py"]
+forbidden_files = ["keras_hub/src/models/task.py", "keras_hub/src/utils/preset_utils.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "kh_causal_lm_generate"
+prompt = "How does CausalLM.generate normalize its inputs, build the compiled generate function with make_generate_function, and drive the Sampler run_loop to produce tokens?"
+gold_files = ["keras_hub/src/models/causal_lm.py", "keras_hub/src/samplers/sampler.py"]
+forbidden_files = ["keras_hub/src/models/masked_lm.py", "keras_hub/src/models/text_classifier.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "kh_topk_sampler"
+prompt = "How does TopKSampler.get_next_token pick the next token from the top-k probabilities, and how does the base Sampler compute_probabilities apply temperature?"
+gold_files = ["keras_hub/src/samplers/top_k_sampler.py", "keras_hub/src/samplers/sampler.py"]
+forbidden_files = ["keras_hub/src/models/causal_lm_preprocessor.py", "keras_hub/src/layers/modeling/transformer_decoder.py"]
+expect_seeds_missed = false
+
+[[task]]
+id = "kh_bert_masked_lm"
+prompt = "How does BertMaskedLM wire BertBackbone into a MaskedLMHead, and how does MaskedLM.compile set the default loss and metrics?"
+gold_files = ["keras_hub/src/models/bert/bert_masked_lm.py", "keras_hub/src/models/masked_lm.py"]
+forbidden_files = ["keras_hub/src/models/bert/bert_text_classifier.py", "keras_hub/src/models/causal_lm.py"]
+expect_seeds_missed = false

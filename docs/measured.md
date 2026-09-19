@@ -19,7 +19,7 @@ not the project's number.** Only the holdout rows are.
 | **holdout-2** | gin (Go), torchvision (Python) | never tuned on | **1.000** | **0.496** | **0** | 20/20 · 16 |
 | **holdout-c** | libuv (C), fmt (C++) | never tuned on | **1.000** | **0.656** | **0** | 16/16 · 10 |
 | **holdout-lang** | os-lib (Scala), r-lib/cli (R), Flux.jl (Julia) | never tuned on | **1.000** | **0.502** | **1** | 14/15 · 9 |
-| **holdout-ml** | keras-io examples (Keras), setfit (Hugging Face) | never tuned on | **1.000** | **0.360** | **0** | 10/10 · 8 |
+| holdout-ml | keras-io examples (Keras), setfit (Hugging Face) | **tuned on in D-3** (5 iterations read its numbers) — dev-class since then; fresh ML holdout is `holdout-ml2` | **1.000** | **0.360** | **0** | 10/10 · 8 |
 | **holdout-cfg** | lightning-hydra-template (Hydra YAML), detr (argparse) | never tuned on; Config→Code questions | **0.879** | **0.610** | **0** | — |
 | **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.587** | **0** | — |
 

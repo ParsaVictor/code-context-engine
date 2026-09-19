@@ -1,0 +1,20 @@
+# Phase D (session 12) fresh ML holdout. holdout-ml (keras-io, setfit) was
+# tuned on during D-3 (five iterations were run while reading its numbers), so
+# it no longer counts as unseen. These two repositories are library-shaped ML
+# code the overlay has never been run on. Gold written from the source before
+# any engine run; G1 checked by grep on every forbidden file.
+#
+#   peft     — huggingface/peft: adapter library (PeftModel, LoRA tuners,
+#              save/load adapters), HF-style
+#   kerashub — keras-team/keras-hub: Keras 3 model library (backbones,
+#              tasks, presets, tokenizers)
+
+[[repo]]
+name = "peft"
+url = "https://github.com/huggingface/peft"
+rev = "50a277e7c87db460ef7444055788f9da29f2da71"
+
+[[repo]]
+name = "kerashub"
+url = "https://github.com/keras-team/keras-hub"
+rev = "40379a619a8b300d2ddcb999f91241a50fa58caf"

@@ -1,0 +1,34 @@
+[[task]]
+id = "peft_save_pretrained"
+repo = "peft"
+prompt = "How does PeftModel.save_pretrained write each selected adapter's weights and config to the output directory, and how does get_peft_model_state_dict pick out that adapter's parameters?"
+needs = ["src/peft/peft_model.py::save_pretrained", "src/peft/utils/save_and_load.py::get_peft_model_state_dict"]
+forbidden = ["src/peft/mixed_model.py"]
+
+[[task]]
+id = "peft_load_adapter"
+repo = "peft"
+prompt = "How does PeftModel.load_adapter fetch the adapter weights with load_peft_weights and apply them with set_peft_model_state_dict?"
+needs = ["src/peft/peft_model.py::load_adapter", "src/peft/utils/save_and_load.py::load_peft_weights", "src/peft/utils/save_and_load.py::set_peft_model_state_dict"]
+forbidden = ["src/peft/utils/merge_utils.py"]
+
+[[task]]
+id = "peft_lora_linear_merge"
+repo = "peft"
+prompt = "How does the LoRA Linear layer merge and unmerge the adapter into the base layer weight, and how does get_delta_weight compute the delta from lora_A and lora_B?"
+needs = ["src/peft/tuners/lora/layer.py::Linear.merge", "src/peft/tuners/lora/layer.py::Linear.unmerge", "src/peft/tuners/lora/layer.py::Linear.get_delta_weight"]
+forbidden = ["src/peft/tuners/loha/layer.py"]
+
+[[task]]
+id = "peft_get_peft_model"
+repo = "peft"
+prompt = "How does get_peft_model wrap a base model into a PeftModel, choosing the task-specific class from MODEL_TYPE_TO_PEFT_MODEL_MAPPING or PeftMixedModel when mixed is set?"
+needs = ["src/peft/mapping_func.py::get_peft_model"]
+forbidden = ["src/peft/auto.py"]
+
+[[task]]
+id = "peft_dora"
+repo = "peft"
+prompt = "How does DoraLinearLayer compute the weight norm and apply the magnitude vector in forward, and how does DoraLinearVariant wire it into the LoRA layer?"
+needs = ["src/peft/tuners/lora/dora.py::DoraLinearLayer.get_weight_norm", "src/peft/tuners/lora/dora.py::DoraLinearLayer.forward", "src/peft/tuners/lora/variants.py::DoraLinearVariant"]
+forbidden = ["src/peft/tuners/oft/layer.py"]
