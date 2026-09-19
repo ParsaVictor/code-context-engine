@@ -169,8 +169,7 @@ pub fn signature_params(signature: &str) -> Vec<String> {
             let piece = piece.split(':').next().unwrap_or("");
             piece
                 .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                .filter(|t| !t.is_empty())
-                .next_back()
+                .rfind(|t: &&str| !t.is_empty())
                 .map(str::to_string)
         })
         .filter(|name| is_specific_param(name))
