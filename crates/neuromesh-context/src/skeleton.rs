@@ -1,5 +1,6 @@
 use crate::fold::{
-    call_keyword_args, make_fold_id, signature_params, FoldPolicy, KWARG_DISPATCH_BONUS,
+    call_keyword_args, calls_member, make_fold_id, signature_params, FoldPolicy,
+    KWARG_DISPATCH_BONUS, ORCHESTRATOR_BONUS,
 };
 use crate::genetic_optimizer::ContextChromosome;
 use neuromesh_core::TokenCounter;
@@ -494,6 +495,34 @@ impl CodeSkeletonizer {
                 if unique {
                     scores[i] += KWARG_DISPATCH_BONUS;
                 }
+            }
+        }
+        // F60: the orchestrator of a seeded class. `v8DetectionLoss.__call__`
+        // is `return self.loss(self.parse_output(preds), batch)` — it scores
+        // below the helpers it calls because they carry the prompt's words
+        // and it carries none. A method under a structural owner whose body
+        // calls two or more sibling exons the first pass already picked is
+        // the entry the question is about; it moves up with them.
+        {
+            let picked = policy.select_exons(&scores);
+            let mut bump = Vec::new();
+            for (i, span) in ordered.iter().enumerate() {
+                if picked.contains(&i)
+                    || !policy.is_structural_exon(&span.name, span.owner.as_deref())
+                {
+                    continue;
+                }
+                let called = picked
+                    .iter()
+                    .filter(|j| ordered[**j].owner == span.owner && ordered[**j].name != span.name)
+                    .filter(|j| calls_member(&bodies[i], &ordered[**j].name))
+                    .count();
+                if called >= 2 {
+                    bump.push(i);
+                }
+            }
+            for i in bump {
+                scores[i] += ORCHESTRATOR_BONUS;
             }
         }
         let exon_idx = policy.select_exons(&scores);

@@ -172,6 +172,14 @@ fn symbol_matches(folded: &str, wanted: &str) -> bool {
 /// fold list is the authority for "shipped but folded"; this only decides
 /// "present at all".
 fn code_defines_symbol(code: &str, symbol: &str) -> bool {
+    count_symbol_definitions(code, symbol) > 0
+}
+
+/// Definition lines of `symbol` in `code` (one per line at most). A folded
+/// body keeps its signature line, so this counts folded and open
+/// definitions alike; the caller subtracts the folds.
+fn count_symbol_definitions(code: &str, symbol: &str) -> usize {
+    let mut count = 0usize;
     const DEF_WORDS: &[&str] = &[
         "def",
         "fn",
@@ -205,7 +213,7 @@ fn code_defines_symbol(code: &str, symbol: &str) -> bool {
     ];
     let leaf = symbol.rsplit(['.', ':']).next().unwrap_or(symbol);
     if leaf.is_empty() {
-        return false;
+        return 0;
     }
     let is_ident = |c: char| c.is_alphanumeric() || c == '_';
     for line in code.lines() {
@@ -234,7 +242,8 @@ fn code_defines_symbol(code: &str, symbol: &str) -> bool {
                     .unwrap_or(0);
                 let ret = &scoped[..owner_start];
                 if after.starts_with('(') && c_style_type_prefix(ret) {
-                    return true;
+                    count += 1;
+                    break;
                 }
                 continue;
             }
@@ -255,33 +264,37 @@ fn code_defines_symbol(code: &str, symbol: &str) -> bool {
             let body_opener =
                 trimmed.ends_with('{') || trimmed.ends_with(':') || trimmed.ends_with("=>");
             if keyword_before || (before.is_empty() && body_opener) {
-                return true;
+                count += 1;
+                break;
             }
             // `int uv_timer_start(uv_timer_t* handle,` / `void Foo::bar(int x) {`:
             // a return-type-first definition (C, C++, Java, C#) has only
             // type-shaped tokens before the name and a parameter list after it.
             if after.starts_with('(') && c_style_type_prefix(before) {
-                return true;
+                count += 1;
+                break;
             }
             // R `name <- function(` / `name = function(`; Julia short form
             // `name(args) = body` with the name opening the line.
             if before.is_empty() {
                 let rest = after.trim_start_matches(['<', '-', '=']).trim_start();
                 if rest.starts_with("function") {
-                    return true;
+                    count += 1;
+                    break;
                 }
                 if after.starts_with('(') {
                     if let Some(close) = after.find(')') {
                         let tail = after[close + 1..].trim_start();
                         if tail.starts_with('=') && !tail.starts_with("==") {
-                            return true;
+                            count += 1;
+                            break;
                         }
                     }
                 }
             }
         }
     }
-    false
+    count
 }
 
 /// Whether `before` (the text left of a symbol name) reads as a C-family
@@ -335,10 +348,27 @@ pub fn oracle_outcome(
             });
             continue;
         };
+        let code_of = |path: &str| {
+            view.active_nodes
+                .iter()
+                .find(|n| {
+                    n.node.node_type == NodeType::File
+                        && n.node.file_path.to_string_lossy().replace('\\', "/") == path
+                })
+                .and_then(|n| n.node.content.clone())
+                .unwrap_or_default()
+        };
         let folded_here = if symbol.contains(['.', ':']) {
             find_fold(registry, view, path, symbol).is_some()
         } else {
-            folded.iter().any(|f| symbol_matches(f, symbol))
+            // An unqualified `file::train` with several same-named
+            // definitions (`BaseTrainer.train`, `MultiTrainer.train`) is
+            // satisfied by any one of them open: it is folded only when the
+            // folds account for every definition. Before this, one folded
+            // sibling marked the need Folded while the asked-for method was
+            // open (large: 4 of 6 non-strict tasks).
+            let folds_here = folded.iter().filter(|f| symbol_matches(f, symbol)).count();
+            folds_here > 0 && count_symbol_definitions(&code_of(path), symbol) <= folds_here
         };
         if folded_here {
             let expansion_tokens = fold_expansion_tokens(registry, view, path, symbol);
@@ -686,7 +716,16 @@ needs = ["lib/a.js"]
 
 #[cfg(test)]
 mod definition_shapes {
-    use super::code_defines_symbol;
+    use super::{code_defines_symbol, count_symbol_definitions};
+
+    #[test]
+    fn definitions_are_counted_per_line() {
+        // F59: `trainer.py::train` with BaseTrainer.train open and
+        // MultiTrainer.train folded is one need, satisfied.
+        let code = "class BaseTrainer:\n    def train(self):\n        pass\n\nclass MultiTrainer:\n    def train(self):\n        # folded\n";
+        assert_eq!(count_symbol_definitions(code, "train"), 2);
+        assert_eq!(count_symbol_definitions(code, "missing"), 0);
+    }
 
     #[test]
     fn c_r_and_julia_definition_shapes_count() {

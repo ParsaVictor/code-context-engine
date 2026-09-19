@@ -91,6 +91,35 @@ pub const SEED_EXON_BUDGET: usize = 4;
 /// to clear `EXON_SCORE_FLOOR` and to beat a verb-only sibling under a seeded
 /// owner (40 + 8), not enough to displace a seed (100+).
 pub const KWARG_DISPATCH_BONUS: f32 = 60.0;
+/// Score for a method whose exact identifier the prompt spells out. With the
+/// seeded-owner 40 it reaches 100, level with a resolved seed.
+pub const PROMPT_LITERAL_BONUS: f32 = 60.0;
+/// F60: a seeded class's method that calls two or more of its already-picked
+/// sibling exons (`__call__` → `loss`, `parse_output`). Enough to pass a helper
+/// that only out-scores it on prompt words (56 → 86 vs 83).
+pub const ORCHESTRATOR_BONUS: f32 = 30.0;
+
+/// `body` invokes `member` as a method of the receiver (`self.m(`, `this.m(`,
+/// `self->m(`, `m(` at a word boundary): the same-owner call a class's
+/// orchestrator makes.
+pub fn calls_member(body: &str, member: &str) -> bool {
+    let mut from = 0usize;
+    while let Some(rel) = body[from..].find(member) {
+        let at = from + rel;
+        let end = at + member.len();
+        from = end;
+        let before_ok = at == 0
+            || !body[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_');
+        let after_ok = body[end..].trim_start().starts_with('(');
+        if before_ok && after_ok {
+            return true;
+        }
+    }
+    false
+}
 
 /// Keyword arguments passed in calls inside `body`: `name = value` that
 /// follows `(` or `,`. Statement-level assignments never follow those, and a
@@ -357,6 +386,17 @@ impl FoldPolicy {
             return 100.0;
         }
         let mut score = 0.0;
+        // The prompt spelled this exact identifier ("in its __call__",
+        // "how does get_labels load it"). `tokenize_name` splits it into
+        // parts (`call`, `get`/`labels`) that the prompt tokens — which keep
+        // the underscores — never contain, so a dunder or snake_case name
+        // written verbatim scored nothing for its own name. Only
+        // identifier-shaped words count: a plain word (`forward`, `train`)
+        // names every method of that name in the file and is left to the
+        // per-token hits below (F7).
+        if self.prompt_names_identifier(name) {
+            score += PROMPT_LITERAL_BONUS;
+        }
         // A method literally named in the prompt ("how does forward work")
         // counts even when the name never made it into `ident_tokens`
         // (built from the extracted signature, not the raw prompt words):
@@ -429,6 +469,15 @@ impl FoldPolicy {
 
     fn ident_hits(&self, tokens: &[String]) -> usize {
         token_hits(tokens, &self.ident_tokens)
+    }
+
+    /// The prompt contains `name` verbatim and `name` is identifier-shaped
+    /// (an underscore, or mixed case): `__call__`, `get_labels`, `_do_train`.
+    fn prompt_names_identifier(&self, name: &str) -> bool {
+        let shaped = name.contains('_')
+            || (name.chars().any(|c| c.is_ascii_uppercase())
+                && name.chars().any(|c| c.is_ascii_lowercase()));
+        shaped && name.len() >= 5 && self.prompt_tokens.contains(&name.to_lowercase())
     }
 
     fn focus_hits(&self, tokens: &[String]) -> usize {
@@ -809,6 +858,33 @@ mod qualified_tests {
             !pairs.iter().any(|(o, _)| o == "v1"),
             "numbers are not pairs: {pairs:?}"
         );
+    }
+
+    #[test]
+    fn dunder_or_snake_name_spelled_in_prompt_scores_its_own_name() {
+        let signature = neuromesh_task::TaskSignatureExtractor::extract(
+            "How does the Mosaic augmentation combine four images in its __call__?",
+        );
+        let policy = FoldPolicy::from_task(&HashSet::new(), &signature);
+        let call = policy.score(
+            "__call__",
+            Some("Mosaic"),
+            "def __call__(self, labels):",
+            "",
+        );
+        let sibling = policy.score("get_indexes", Some("Mosaic"), "def get_indexes(self):", "");
+        assert!(call > sibling, "__call__ {call} get_indexes {sibling}");
+        // a plain word is not an identifier: every `forward` would match
+        assert!(!policy.prompt_names_identifier("forward"));
+    }
+
+    #[test]
+    fn calls_member_finds_receiver_calls_only() {
+        let body = "def __call__(self, preds, batch):\n    return self.loss(self.parse_output(preds), batch)";
+        assert!(calls_member(body, "loss"));
+        assert!(calls_member(body, "parse_output"));
+        assert!(!calls_member(body, "preds"));
+        assert!(!calls_member("x = total_loss + 1", "loss"));
     }
 
     #[test]
