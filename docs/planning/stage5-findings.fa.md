@@ -721,3 +721,18 @@ G1 با grep، PR #86 قفل قبل از هر اجرا.
   دقیق در prompt + تابع سطح ماژول، ولی fold. probe لازم روی dev (نه اینجا).
 - keras-hub `kh_topk_sampler`: هر پنج sampler خواهر (beam/top_p/…) وارد packet شدند (precision 0.40) — همان الگوی
   «هم‌نام در فایل خواهر» با `get_next_token`.
+
+## F58 → probe روی dev (session 12، PR #88): دو باگ واقعی، هر دو عمومی، هر دو روی dev قابل بازتولید
+
+F58 روی holdout-ml2 گفت «`get_peft_model` با نام دقیق در prompt fold می‌شود» (strict 6/10). طبق اصل holdout، probe فقط
+روی dev انجام شد: مجموعه‌ی `large` همان الگو را داشت (strict 14/20؛ ۴ تسک با need ی Folded که نامش دقیقاً در prompt
+بود: `BaseTrainer.train`، `get_labels`، `predict`، `__call__`). سه چیز پیدا شد:
+
+| # | یافته | نوع | فیکس |
+|---|---|---|---|
+| **F59** | **باگ harness**: need بدون owner (`trainer.py::train`) وقتی `BaseTrainer.train` باز و `MultiTrainer.train` fold بود، Folded گزارش می‌شد — `folded.iter().any(...)` روی نام برهنه. یعنی strict این‌همه مدت *کمتر از واقعی* گزارش می‌شد | harness | need بدون owner فقط وقتی Folded است که تعداد fold های هم‌نام ≥ تعداد تعریف‌های هم‌نام در کد ارسالی (`count_symbol_definitions`). large strict 14→17 بدون هیچ تغییر موتور |
+| **F58** | نام dunder/snake_case که در prompt عیناً آمده (`__call__`, `get_labels`) برای نام خودش هیچ امتیازی نمی‌گرفت: `tokenize_name` آن را به `call`/`get`,`labels` می‌شکند ولی `prompt_tokens` زیرخط‌ها را نگه می‌دارد → هیچ‌وقت match | موتور، fold | `prompt_names_identifier`: کلمه‌ی identifier-شکل (زیرخط یا mixed-case، ≥۵ کاراکتر) که عیناً در prompt است +۶۰. کلمه‌ی ساده (`forward`, `train`) عمداً نه — F7. large strict 17→18 |
+| **F60** | orchestrator کلاس seed: `v8DetectionLoss.__call__` = `return self.loss(self.parse_output(preds), batch)` — ۵۶ امتیاز، زیر helperهایی که کلمات prompt را دارند (۸۳/۷۲/۶۴/۶۰)، با بودجه‌ی ۴ fold می‌شد | موتور، fold | متدِ owner ساختاری که بدنه‌اش ≥۲ exon خواهرِ انتخاب‌شده در pass اول را صدا می‌زند (`calls_member`) +۳۰. large strict 18→**19/20** (تنها باقی‌مانده `django_template_render` = FileMissing، مسئله‌ی recall نه fold) |
+
+dev بدون تغییر (0.906 / strict 20). holdout-ml2 **دست نخورد** — اگر عددش بعد از این PR تغییر کند، اثر جانبی یک فیکس
+dev-driven است و همان‌طور ثبت می‌شود، نه هدف.
