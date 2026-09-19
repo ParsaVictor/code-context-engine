@@ -690,3 +690,34 @@ forbidden hits: **۰ در هر ۹ سلول** (بعد از فیکس هم).
 شمارنده فقط با feedback حرکت می‌کنند. اثر روی ۷ مجموعه‌ی بنچمارک: صفر (بنچمارک feedback ندارد) — یعنی همین
 اعداد هم نشان نمی‌دهند حلقه‌ی یادگیری روی ریپوی واقعی *کار می‌کند*؛ فقط دیگر ساختاراً مسدود نیست. سنجش
 واقعی آن (packet دوم بعد از feedback روی dev-4) یک آیتم باز است.
+
+## فاز D — holdout-ml2 (peft + keras-hub)، اولین اجرا (session 12، ۱۹ سپتامبر ۲۰۲۶، main بعد از #86)
+
+چرا: holdout-ml (keras-io + setfit) در D-۳ پنج بار با نگاه به عددش تیون شد → طبق اصل holdout دیگر «ندیده» نیست
+(در `measured.md` به dev-class برچسب خورد). دو ریپوی کتابخانه‌ای ML که overlay هرگز رویشان اجرا نشده بود انتخاب شد:
+peft (HF adapter library، ۴۴۶ فایل py) و keras-hub (Keras 3 model library، ۱۳۴۹ فایل py). ۵+۵ سؤال از خواندن کد،
+G1 با grep، PR #86 قفل قبل از هر اجرا.
+
+| اجرا | recall | precision | forbidden | reachable / strict |
+|---|---|---|---|---|
+| اول، بدون هیچ تغییر موتور | 1.000 | 0.557 | 1 | 9/10 / 6 |
+| همان، بعد از اصلاح یک خطای گلد (پایین) | **1.000** | **0.632** | **0** | **10/10** / 6 |
+
+**خطای گلد (مثل ۲ مورد از ۴ در ۵a):** `peft_get_peft_model` فایل `auto.py` را forbidden داشت، در حالی که prompt
+صریحاً `MODEL_TYPE_TO_PEFT_MODEL_MAPPING` را نام می‌برد و `auto.py` آن را import و استفاده می‌کند — G1 من روی
+این symbol را جدا از فایل forbidden اجرا کرده بودم. forbidden به `merge_utils.py` (۰ hit) اصلاح شد؛ موتور درست بود.
+
+**خوانش:** گیت holdout (recall ≥0.90 / precision ≥0.60 / forbidden 0) **بدون هیچ تیونی پاس شد** — اولین holdout
+دامنه‌ای که این اتفاق برایش می‌افتد (holdout-ml اولش 0.203 بود). یعنی قواعد ساختاری D-۳ (examples-as-core،
+ترجیح کد بر md/ipynb، file_by_stem) به ریپوی ML کتابخانه‌ای تعمیم پیدا کرد. keras-hub: ۳ تسک precision 1.00.
+ضعف‌ها (ثبت، تیون نمی‌شود — F58):
+- **peft بسته‌های خیلی بزرگ** می‌دهد (۲۵–۳۰k توکن برای `save_pretrained`/`load_adapter`): `peft_model.py` ~۲۰۰۰ خط
+  است و `tuners_utils.py` + `utils/other.py` هم‌راه می‌آیند. precision 0.50 آنجا از دو فایل «زیرساخت» هم‌سایه است.
+- **هم‌نام در tunerهای خواهر**: `Linear.merge` در `adamss/layer.py` و `glora/layer.py` هم هست؛ prompt «LoRA Linear»
+  را می‌گوید ولی resolver «LoRA» را به پوشه‌ی `lora/` گره نمی‌زند (precision 0.33). هم‌جنس F21/F28 (twin هم‌نام)،
+  این‌بار تمایز از *مسیر پوشه* می‌آید نه owner.
+- **strict 6/10**: چهار fold روی متد اصلی سؤال — `get_peft_model` (تابع سطح ماژول که *اسم خود prompt* است، fold شده!)،
+  `Linear.merge/unmerge`، `load_peft_weights/set_peft_model_state_dict`، `get_weight_norm`. مورد اول باگ‌نماست: اسم
+  دقیق در prompt + تابع سطح ماژول، ولی fold. probe لازم روی dev (نه اینجا).
+- keras-hub `kh_topk_sampler`: هر پنج sampler خواهر (beam/top_p/…) وارد packet شدند (precision 0.40) — همان الگوی
+  «هم‌نام در فایل خواهر» با `get_next_token`.
