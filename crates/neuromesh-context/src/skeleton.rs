@@ -85,8 +85,25 @@ fn is_block_closer(line: &str) -> bool {
     matches!(line.trim(), "}" | "};" | "}," | ")" | ");" | "end" | "end;")
 }
 
+/// Indentation-scoped languages have no block closers: a lone `}` in a Python
+/// file ends a dict literal, and keeping it as "the fold's closing line" put
+/// stray `}` lines under folded methods (F66).
+fn is_indent_language(file_path: &str) -> bool {
+    let lower = file_path.to_ascii_lowercase();
+    lower.ends_with(".py")
+        || lower.ends_with(".pyi")
+        || lower.ends_with(".ipynb")
+        || lower.ends_with(".yaml")
+        || lower.ends_with(".yml")
+}
+
 /// Fold the body, keep the signature (and a trailing `}` / `end`) as the file map.
-fn interior_range(lines: &[&str], span: &FunctionSpan, min_lines: usize) -> Option<(usize, usize)> {
+fn interior_range(
+    lines: &[&str],
+    span: &FunctionSpan,
+    min_lines: usize,
+    closers: bool,
+) -> Option<(usize, usize)> {
     let start = span.start_line.saturating_sub(1);
     let end = span.end_line.min(lines.len()).saturating_sub(1);
     if start >= lines.len() || end < start {
@@ -94,7 +111,7 @@ fn interior_range(lines: &[&str], span: &FunctionSpan, min_lines: usize) -> Opti
     }
     let interior_start = start.saturating_add(1);
     let mut interior_end = end;
-    if interior_end >= interior_start && is_block_closer(lines[interior_end]) {
+    if closers && interior_end >= interior_start && is_block_closer(lines[interior_end]) {
         if interior_end == interior_start {
             return None;
         }
@@ -157,6 +174,47 @@ fn is_preamble_line(line: &str) -> bool {
 
 /// Module-level runs up to this many code lines ship verbatim; longer runs fold.
 const MODULE_GAP_KEEP_LINES: usize = 6;
+/// A docstring inside an open body longer than this folds to its first line.
+const DOC_FOLD_MIN_LINES: usize = 3;
+
+/// The triple-quoted docstring that opens the body of the span at
+/// `lines[start..=end]`: `(first_line, last_line)` of the string, 0-based.
+/// The signature may run over several lines; the docstring is the first
+/// non-blank line after the line that ends the signature (`:` for Python).
+fn docstring_block(lines: &[&str], start: usize, end: usize) -> Option<(usize, usize)> {
+    let mut i = start;
+    // skip the signature: through the first line ending with `:`
+    while i <= end && !lines[i].trim_end().ends_with(':') {
+        i += 1;
+    }
+    i += 1;
+    while i <= end && lines[i].trim().is_empty() {
+        i += 1;
+    }
+    if i > end {
+        return None;
+    }
+    let first = lines[i].trim_start();
+    let quote = if first.starts_with("\"\"\"") {
+        "\"\"\""
+    } else if first.starts_with("'''") {
+        "'''"
+    } else {
+        return None;
+    };
+    // one-line docstring: `"""Summary."""`
+    if first.len() > 3 && first[3..].contains(quote) {
+        return Some((i, i));
+    }
+    let mut j = i + 1;
+    while j <= end {
+        if lines[j].contains(quote) {
+            return Some((i, j));
+        }
+        j += 1;
+    }
+    None
+}
 
 enum Block {
     Group {
@@ -171,7 +229,12 @@ enum Block {
 
 /// Maximal runs of lines (0-based, inclusive) after the preamble that no span
 /// or class group covers, trimmed of blank lines and lone block closers.
-fn module_gaps(lines: &[&str], covered: &[bool], preamble: usize) -> Vec<(usize, usize)> {
+fn module_gaps(
+    lines: &[&str],
+    covered: &[bool],
+    preamble: usize,
+    closers: bool,
+) -> Vec<(usize, usize)> {
     let mut gaps = Vec::new();
     let mut i = preamble;
     while i < lines.len() {
@@ -190,13 +253,13 @@ fn module_gaps(lines: &[&str], covered: &[bool], preamble: usize) -> Vec<(usize,
         // shown and `git apply` matches context exactly — dropping the blank
         // between `require` and `function` failed every packet-mode patch on
         // that file (phase C) while whole-file mode passed.
-        while start <= end && is_block_closer(lines[start]) {
+        while closers && start <= end && is_block_closer(lines[start]) {
             start += 1;
         }
-        while end > start && is_block_closer(lines[end]) {
+        while closers && end > start && is_block_closer(lines[end]) {
             end -= 1;
         }
-        if start <= end && !is_block_closer(lines[start]) {
+        if start <= end && !(closers && is_block_closer(lines[start])) {
             gaps.push((start, end));
         }
     }
@@ -228,16 +291,34 @@ fn enclosing_header_line(lines: &[&str], owner: &str, before: usize) -> Option<u
     let owner_l = owner.to_lowercase();
     let start = before.min(lines.len());
     let floor = start.saturating_sub(80);
+    // The keyword must be followed by the owner as the next identifier:
+    // a docstring line "class names for the YOLOE model" contains both
+    // `class ` and the owner and used to be taken as the header, which
+    // folded the real `class YOLOE(Model):` into a module gap and leaked
+    // that docstring line into the packet (F66).
+    const TYPE_WORDS: &[&str] = &[
+        "class",
+        "struct",
+        "interface",
+        "enum",
+        "impl",
+        "object",
+        "trait",
+    ];
     for i in (floor..start).rev() {
         let l = lines[i].to_lowercase();
-        let is_type = l.contains("class ")
-            || l.contains("struct ")
-            || l.contains("interface ")
-            || l.contains("enum ")
-            || l.contains("impl ")
-            || l.contains("object ")
-            || l.contains("trait ");
-        if is_type && l.contains(&owner_l) {
+        let tokens: Vec<&str> = l
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .filter(|t| !t.is_empty())
+            .collect();
+        let header = tokens
+            .windows(2)
+            .any(|w| TYPE_WORDS.contains(&w[0]) && w[1] == owner_l)
+            // `impl Trait for Owner`, `impl<T> Owner<T>`
+            || tokens
+                .windows(3)
+                .any(|w| w[0] == "impl" && w[2] == owner_l);
+        if header {
             return Some(i);
         }
     }
@@ -448,6 +529,7 @@ impl CodeSkeletonizer {
         spans: &[FunctionSpan],
         min_lines: usize,
     ) -> SkeletonResult {
+        let closers = !is_indent_language(file_path);
         let lines: Vec<&str> = content.lines().collect();
         let mut ordered: Vec<FunctionSpan> = spans.to_vec();
         ordered.sort_by_key(|s| (s.start_line, std::cmp::Reverse(s.end_line)));
@@ -544,7 +626,7 @@ impl CodeSkeletonizer {
                 emit_spans.push((span.clone(), true, scores[i]));
                 continue;
             }
-            match interior_range(&lines, span, min_lines) {
+            match interior_range(&lines, span, min_lines, closers) {
                 Some((interior_start, interior_end)) => {
                     fold_plans.push((interior_start, interior_end, span.clone()));
                     emit_spans.push((span.clone(), false, scores[i]));
@@ -625,7 +707,7 @@ impl CodeSkeletonizer {
             }
             blocks.push((block_start, Block::Group { header, items }));
         }
-        for (start, end) in module_gaps(&lines, &covered, preamble) {
+        for (start, end) in module_gaps(&lines, &covered, preamble, closers) {
             blocks.push((start, Block::Gap { start, end }));
         }
         blocks.sort_by_key(|(start, _)| *start);
@@ -686,8 +768,69 @@ impl CodeSkeletonizer {
                 let start = span.start_line.saturating_sub(1).min(lines.len());
                 let end = span.end_line.min(lines.len()).saturating_sub(1).max(start);
                 if is_exon {
-                    for line in &lines[start..=end] {
-                        result_lines.push((*line).to_string());
+                    // An open body keeps its code; a long docstring inside it
+                    // is folded to its summary line plus a marker (F67). In
+                    // ultralytics 38% of an open file's packet lines were
+                    // Google-style docstrings; the model can expand one like
+                    // any other fold.
+                    let doc = docstring_block(&lines, start, end);
+                    match doc {
+                        Some((doc_start, doc_end))
+                            if doc_end - doc_start + 1 > DOC_FOLD_MIN_LINES =>
+                        {
+                            for line in &lines[start..=doc_start] {
+                                result_lines.push((*line).to_string());
+                            }
+                            let body_content = lines[doc_start + 1..=doc_end].join("\n");
+                            let saved_tokens = TokenCounter::count_tokens(&body_content);
+                            let indent = lines[doc_start]
+                                .chars()
+                                .take_while(|c| c.is_whitespace())
+                                .collect::<String>();
+                            let fold_id = make_fold_id(
+                                file_path,
+                                &format!("{}__doc__", span.name),
+                                folds.len() + 1,
+                                doc_start + 2,
+                            );
+                            result_lines.push(format!(
+                                "{indent}/* [neuromesh:fold:{fold_id} | {} lines | docstring] */",
+                                doc_end - doc_start
+                            ));
+                            // Close the string the packet opened: the original
+                            // closer line when it stands alone, a synthesized one
+                            // when the closer shares a line with text.
+                            let closer = lines[doc_end].trim();
+                            if closer == "\"\"\"" || closer == "'''" {
+                                result_lines.push(lines[doc_end].to_string());
+                            } else {
+                                let quote = if lines[doc_start].trim_start().starts_with("'''") {
+                                    "'''"
+                                } else {
+                                    "\"\"\""
+                                };
+                                result_lines.push(format!("{indent}{quote}"));
+                            }
+                            folds.push(FoldedIntron {
+                                fold_id,
+                                symbol_name: format!("{}.__doc__", span.name),
+                                signature: format!("docstring of {}", span.name),
+                                original_body: body_content,
+                                start_line: doc_start + 2,
+                                end_line: doc_end + 1,
+                                saved_tokens,
+                                owner: span.owner.clone(),
+                                task_score: score,
+                            });
+                            for line in &lines[doc_end + 1..=end] {
+                                result_lines.push((*line).to_string());
+                            }
+                        }
+                        _ => {
+                            for line in &lines[start..=end] {
+                                result_lines.push((*line).to_string());
+                            }
+                        }
                     }
                     continue;
                 }
@@ -748,7 +891,7 @@ impl CodeSkeletonizer {
                     task_score: score,
                 });
             }
-            if let Some(indent) = close_indent {
+            if let (Some(indent), true) = (close_indent, closers) {
                 result_lines.push(format!("{indent}}}"));
             }
         }
@@ -816,6 +959,50 @@ export function untargetedHeavyHelper2() {
             .skeleton_code
             .contains("neuromesh:fold:fold_untargetedHeavyHelper"));
         assert!(res.skeleton_tokens < res.original_tokens);
+    }
+
+    #[test]
+    fn python_class_header_is_found_past_its_docstring_and_no_brace_closers_leak() {
+        // F66: the docstring line mentions "class names for the YOLOE model",
+        // which used to be taken as the class header; and `}` lines that end
+        // dict literals used to be kept as fold closers in Python.
+        let code = "class YOLOE(Model):\n    \"\"\"YOLOE model.\n\n    Methods:\n        set_vocab: Set vocabulary and class names for the YOLOE model.\n    \"\"\"\n\n    def task_map(self):\n        return {\n            \"a\": 1,\n            \"b\": 2,\n        }\n\n    def run(self):\n        \"\"\"Run it.\n\n        Args:\n            x: the thing.\n            y: the other thing.\n        \"\"\"\n        a = 1\n        return a\n";
+        let mut active = HashSet::new();
+        active.insert("run".into());
+        let spans = vec![
+            FunctionSpan {
+                name: "task_map".into(),
+                start_line: 8,
+                end_line: 12,
+                signature: "def task_map(self):".into(),
+                owner: Some("YOLOE".into()),
+            },
+            FunctionSpan {
+                name: "run".into(),
+                start_line: 14,
+                end_line: 22,
+                signature: "def run(self):".into(),
+                owner: Some("YOLOE".into()),
+            },
+        ];
+        let res = CodeSkeletonizer::skeletonize_with_spans("yolo/model.py", code, &active, &spans);
+        let out = &res.skeleton_code;
+        assert!(out.contains("class YOLOE(Model):"), "header kept: {out}");
+        assert!(
+            !out.contains("set_vocab: Set vocabulary"),
+            "docstring line is not the header: {out}"
+        );
+        assert!(
+            !out.lines().any(|l| l.trim() == "}"),
+            "no stray brace closer: {out}"
+        );
+        // F67: the open body keeps its code; its long docstring folds to the
+        // summary line plus a marker and stays a terminated string.
+        assert!(out.contains("\"\"\"Run it."), "{out}");
+        assert!(out.contains("| docstring] */"), "{out}");
+        assert!(!out.contains("y: the other thing"), "{out}");
+        assert!(out.contains("return a"), "{out}");
+        assert!(res.folds.iter().any(|f| f.symbol_name == "run.__doc__"));
     }
 
     #[test]
