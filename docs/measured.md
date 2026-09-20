@@ -87,6 +87,26 @@ reaching the file the task actually needed), fixed and rerun; see F56 in
 called for in `docs/planning/06-plan-revision-2026-09-14.fa.md` (row C) — this run only covers the
 current `main`. Full trace: `docs/planning/stage5-findings.fa.md` ("فاز C").
 
+## Task success with a real model — second run (2026-09-20, main after PR #105)
+
+Same harness, answerer `deepseek-ai/DeepSeek-V4-Pro` (a reasoning model), judge `zai-org/GLM-5.3`, via Baseten.
+Eight engine PRs (#84–#105) sit between the two runs.
+
+| set | packet (success / strict / mean tokens / per-1k) | whole-gold-files | grep |
+|---|---|---|---|
+| fixtures (dev, 26) | **0.808** / 0.769 / 4181 / **0.193** | 0.808 / 0.769 / 8729 / 0.093 | 0.577 / 0.538 / 4897 / 0.118 |
+| **holdout-gin** (10) | **1.000** / 0.800 / 8102 / **0.123** | 1.000 / 0.800 / 11103 / 0.090 | 0.800 / 0.700 / 22400 / 0.036 |
+| **holdout-vision** (10) | **1.000** / **1.000** / 7762 / **0.129** | 0.800 / 0.800 / 8710 / 0.092 | 0.600 / 0.600 / 20531 / 0.029 |
+
+Forbidden hits 0 in all nine cells; all three gates pass in all nine (success ≥0.5; per-1k packet >
+whole-gold-files, 1.4–2.1×; packet ≥ grep). Versus the first run: holdout-vision/packet 0.800→1.000
+(strict 0.700→1.000), fixtures/packet 0.769→0.808. Of the five fixture failures under `packet`, two
+were the harness, not the model: the patch was right but its hunk header was `@@ ... @@`, which `git
+apply` rejects — fixed in F76 (header rebuilt from the file). The rerun of those two cells hit Baseten
+`402 Payment Required` (credit exhausted by the reasoning model) and is pending; the table above is the
+pre-F76 measurement. One failure is a real packet defect: `rs_router_handle` passes with whole files
+and fails with the packet (a fold hid `extract_route`'s body) — open.
+
 ## Not measured
 
 - **Private/enterprise repositories.** No number. The holdout protocol for one is written
