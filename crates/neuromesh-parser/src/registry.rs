@@ -9,6 +9,7 @@ use crate::query_extract::{
 };
 use crate::rust_lang::RustParser;
 use crate::scss::ScssParser;
+use crate::shell::ShellParser;
 use crate::sql::SqlParser;
 use crate::types::AstAnalysisResult;
 use crate::typescript::TypeScriptParser;
@@ -40,6 +41,7 @@ enum Fallback {
     Less,
     Json,
     Sql,
+    Shell,
     Yaml,
     None,
 }
@@ -221,6 +223,13 @@ impl LanguageSpec {
                 options: QueryOptions::typescript(),
                 fallback: Fallback::Yaml,
             },
+            SourceLanguage::Shell => Self {
+                language,
+                grammar: None,
+                queries: None,
+                options: QueryOptions::typescript(),
+                fallback: Fallback::Shell,
+            },
             SourceLanguage::Markdown | SourceLanguage::Unknown => Self {
                 language,
                 grammar: None,
@@ -255,6 +264,7 @@ impl Fallback {
             Fallback::Less => ScssParser::parse_less(path, content),
             Fallback::Json => JsonParser::parse(path, content),
             Fallback::Sql => SqlParser::parse(path, content),
+            Fallback::Shell => ShellParser::parse(path, content),
             Fallback::Yaml => YamlParser::parse(path, content),
             Fallback::None => AstAnalysisResult::default(),
         }

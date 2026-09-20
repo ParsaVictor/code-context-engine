@@ -1073,3 +1073,24 @@ Parsa: «همه‌ی اشکال‌ها را با هم و سریع». یک PR، �
 باقی‌مانده‌ی self: `self_eval_judge` (هیچ نامی: «CLI eval command» → `commands/tasks.rs`؛ نام دستور CLI به فایل map نمی‌شود)،
 `self_negative_feedback` («learning loop» → `tests/learning_loop.rs` به‌جای activator — گلد قابل بحث)، `self_packet_cap`
 (fallback شلوغ). درس تازه: **cap کل seed (۵) با seedهای فایل‌محور (literal) می‌جنگد** — ترتیب ingest نباید سرنوشت را تعیین کند.
+
+## F78 — دور دوم dogfood (۱۰ سؤال جدید، self = ۲۰ سؤال): اسکریپت‌ها ایندکس نمی‌شدند (session 13، PR #109)
+
+۱۰ سؤال جدید روی خود ریپو با engine بعد از #108: recall 4/10. خوشه‌ها و فیکس‌ها (یک PR):
+
+| عیب | فیکس |
+|---|---|
+| **`.sh`/`.ps1` اصلاً ایندکس نمی‌شد** («How does the benchmark-holdout script…» → `benchmark_suite.rs`؛ «phase-c-run script … clean» → `site.css`) | زبان `Shell` (sh/bash/zsh/ps1) + `ShellParser` (توابع `name() {`، `function name`)؛ walker آن را code می‌شمارد |
+| kebab token (`benchmark-holdout`) توسط extractor نصفه می‌شد (`benchmark`) | kebab token = stem فایل (یکتا) → file seed. **فقط kebab**: نسخه‌ی با `_` هم `roi_heads` را در holdout-2 به فایل تبدیل کرد (0.554→0.552) — snake token مال مسیر symbol است |
+| `NM_EXPLAIN` (env var، یک `_`) در literal index نبود | قاعده‌ی env-var: تمام‌حروف‌بزرگ + یک `_` کافی است |
+| literal فقط در فایل‌های تست/اسکریپت (explain.rs زیر `tests/support/`) به‌خاطر فیلتر نویز صفر می‌شد | نویز فقط وقتی فیلتر می‌شود که فایل غیرنویزی هم literal را داشته باشد |
+| F75-E: artifact ML در `tests/fixtures/ml-*` برای «positive feedback» | artifact seeds مسیر نویز (با احترام به `examples_are_core`) را رد می‌کنند مگر prompt fixture/example بگوید |
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| self (۲۰ سؤال) | recall 0.525 / precision 0.306 | **0.675 / 0.406** |
+| ۸ مجموعه‌ی گلد | — | بدون تغییر |
+
+باقی‌مانده‌ی self (recall 0): `self_large_ratchet` («large gold set» ≠ stem `third_party_large_gold`)، `self_argparse_flags`
+(`add_argument` فقط داخل regex)، `self_exon_budget`، `self_pheromone_reinforce` («reinforced» ↔ `reinforce_path`؛ prefix
+symbol چند‌معنی)، `self_eval_judge`. همه «مفهوم بدون نام» اند — نیازمند embedding/semantic یا گلد بحث‌برانگیز.

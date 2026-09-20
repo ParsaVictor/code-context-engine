@@ -46,6 +46,7 @@ pub enum SourceLanguage {
     Svelte,
     Astro,
     SQL,
+    Shell,
     Unknown,
 }
 
@@ -117,6 +118,7 @@ impl SourceLanguage {
             "svelte" => SourceLanguage::Svelte,
             "astro" => SourceLanguage::Astro,
             "sql" => SourceLanguage::SQL,
+            "sh" | "bash" | "zsh" | "ps1" => SourceLanguage::Shell,
             _ => SourceLanguage::Unknown,
         }
     }
@@ -158,6 +160,7 @@ impl SourceLanguage {
             Self::Svelte => "svelte",
             Self::Astro => "astro",
             Self::SQL => "sql",
+            Self::Shell => "shell",
             Self::Unknown => "unknown",
         }
     }

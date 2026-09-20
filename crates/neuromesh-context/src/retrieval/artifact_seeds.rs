@@ -195,6 +195,15 @@ pub fn resolve_artifact_seeds(
             .filter(|(_, ty)| ty == kind)
             .filter_map(|(id, ty)| {
                 let node = graph.get_node(id)?;
+                // An ML artifact in a test fixture or example is not what a
+                // question about the product's own code means ("positive
+                // feedback" → `train.py` in tests/fixtures/ml-*; F75-E).
+                if crate::selector::is_noise_path_in(&node.file_path, graph.examples_are_core())
+                    && !signature.raw_prompt.to_lowercase().contains("fixture")
+                    && !signature.raw_prompt.to_lowercase().contains("example")
+                {
+                    return None;
+                }
                 let named = prompt_names_node(&node.name, node.parent.as_deref(), signature);
                 if covered.contains(kind) && !named {
                     return None;
