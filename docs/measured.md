@@ -10,12 +10,12 @@ bash scripts/benchmark-holdout.sh holdout  # one set
 The rule behind the table: **a number from a repository the engine was tuned on is
 not the project's number.** Only the holdout rows are.
 
-## Gold sets (2026-09-20, main after PR #101)
+## Gold sets (2026-09-20, main after PR #112)
 
 | set | repos | role | recall | precision | forbidden | oracle reachable / strict |
 |---|---|---|---|---|---|---|
 | dev-4 | nanoGPT, express, vit-pytorch, full-stack-fastapi | tuning set | 1.000 | 0.938 | 0 | 21/21 · 20 |
-| large | django (3.5k files), ultralytics | tuning set, large | 1.000 | 0.641 | 0 | 20/20 · 20 |
+| large | django (3.5k files), ultralytics | tuning set, large | 1.000 | 0.666 | 0 | 20/20 · 20 |
 | **holdout-2** | gin (Go), torchvision (Python) | never tuned on | **1.000** | **0.554** | **0** | 20/20 · 18 |
 | **holdout-c** | libuv (C), fmt (C++) | never tuned on | **1.000** | **0.573** | **0** | 16/16 · 14 |
 | **holdout-lang** | os-lib (Scala), r-lib/cli (R), Flux.jl (Julia) | never tuned on | **1.000** | **0.541** | **1** | 14/15 · 12 |
