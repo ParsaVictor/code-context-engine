@@ -1787,6 +1787,17 @@ fn resolve_seed_query_once(
         if !seed_path_allowed(graph, &hit.id, prompt) {
             return false;
         }
+        // A bare word is a symbol query. A *file* in a docs/markdown path
+        // that merely starts with it (`API` → `docs/.../api.md`, F65) is not
+        // an anchor for it; a file is asked for by name (`api.md`) or stem.
+        if hit.node_type == NodeType::File
+            && !query.contains(['.', '/', '\\'])
+            && graph.get_node(&hit.id).is_some_and(|n| {
+                crate::selector::is_noise_path_in(&n.file_path, graph.examples_are_core())
+            })
+        {
+            return false;
+        }
         if hit.name.eq_ignore_ascii_case(query) {
             return true;
         }

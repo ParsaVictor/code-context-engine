@@ -873,3 +873,11 @@ torch.compile?» — `configs/model/mnist.yaml` نمی‌آمد. سه لایه �
 باقی‌مانده‌ی cfg: `hydra_early_stopping` (کلید در دو فایل: `early_stopping.yaml` تعریف با `_target_`، `default.yaml`
 مقداردهی؛ گلد دومی را می‌خواهد — نیازمند فهم ترکیب `defaults:` هایدرا) و `detr_masks_flag` (`datasets/coco.py` که
 `args.masks` را می‌خواند؛ seed `masks` هست ولی خواننده‌ی دوم وارد نمی‌شود).
+
+## F65 — کلمه‌ی برهنه به فایل markdown با پیشوند (session 12، PR #94)
+
+`ultra_model_train_api` («… from the high-level Model API?»): identifier `API` → `search_symbols` → نود *File*
+`docs/en/datasets/explorer/api.md` با قاعده‌ی پیشوند (`api.md`.starts_with(`api`)، score ≥86) → seed با
+`file_seed:unexpanded` و ۳۷۰۰ توکن markdown. قاعده: کلمه‌ی برهنه یک query ی symbol است؛ نود File در مسیر noise
+(md/rst/txt/docs) که فقط با آن شروع می‌شود anchor نیست — فایل را با نام (`api.md`) یا stem می‌خواهند.
+large 0.574 → **0.578**؛ بقیه بدون تغییر.
