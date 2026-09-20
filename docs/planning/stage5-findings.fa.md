@@ -974,3 +974,23 @@ compute the loss for a token?» روی دو فایل؛ `token` با prefix searc
 seed قوی `Trainer` prune می‌شود — روی کد قبلی header آن را اعلام می‌کرد و packet نمی‌فرستاد (تست روی main قبلی قرمز،
 با فیکس سبز). فیکس: تولید header بعد از آخرین prune و درست قبل از `seed_set`. تغییری در انتخاب فایل‌ها نیست؛ ۸ مجموعه
 بدون تغییر.
+
+## F73 — جدول alias با `contains` خام: «in**validate**» = خوشه‌ی validation (session 13، dogfood)
+
+اولین dogfood فورک روی خود ریپو: «How does the index cache in the third-party harness decide when to invalidate?» →
+packet فقط `tests/fixtures/mini-pinoox/Controller/MainController.php`. JSON نشان داد `client_keywords` =
+validation/schemas/schemaController/Validator/validate/schema/Validierung — از هیچ‌جای prompt. ریشه: هر سه matcher در
+`retrieval/alias.rs` (`prompt_has_alias_cluster_match`، `expand_aliases`، `alias_code_seeds_inner`) با
+`lower.contains(term)` کار می‌کردند؛ «invalidate» ⊃ «validate». همان خانواده‌ی F61 (زیررشته)، روی مسیر alias.
+
+فیکس: `term_in_prompt` — term باید در *ابتدای* یک کلمه باشد (کاراکتر قبلش alphanumeric نباشد)؛ صرف‌ها همچنان match
+(`validates`، `sessions`، `authentication`←`auth`). تست واحد `alias_term_must_start_a_word`.
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| large | 0.583 | **0.641** (`django_management_command` 0.50→1.00 — «Command**Error**» خوشه‌ی error را فعال می‌کرد؛ `ultra_base_model_forward` 0.33→1.00) |
+| holdout-ml (dev-class) | 0.432 | 0.437 |
+| ۶ مجموعه‌ی دیگر | — | بدون تغییر |
+
+ratchet large 0.56 → 0.62. درس: **dogfood با سؤال‌های واقعی روی ریپوی خودمان یک finding در پنج سؤال داد** و آن
+finding روی large ‎+0.058 آورد — بیش از هر تیون امتیازی در دو session اخیر.
