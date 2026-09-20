@@ -965,3 +965,12 @@ Imports/DependsOn دارد، B composer است و صندلی می‌گیرد (sc
 | ۷ مجموعه‌ی دیگر | — | بدون تغییر (dev 0.938، large 0.583، holdout-2 0.554، -c 0.573، -lang 0.541، -ml 0.432، -ml2 0.632) |
 
 ratchet cfg: recall 0.90→0.95، precision 0.60→0.69 (margin −0.02).
+
+## F68 — `@nm:seeds` در micro-header seedهای prune‌شده را نشان می‌داد (session 13)
+
+header در `activate_inner` *قبل* از زنجیره‌ی prune ساخته می‌شد (bare_owner، off-family، data-seed، weak file، weak
+substring، style noise). تست جدید `micro_header_lists_only_seeds_that_survived_pruning`: prompt «How does Trainer.run
+compute the loss for a token?» روی دو فایل؛ `token` با prefix search به `Tokenizer` در `data/tokenizer.py` می‌رسد و کنار
+seed قوی `Trainer` prune می‌شود — روی کد قبلی header آن را اعلام می‌کرد و packet نمی‌فرستاد (تست روی main قبلی قرمز،
+با فیکس سبز). فیکس: تولید header بعد از آخرین prune و درست قبل از `seed_set`. تغییری در انتخاب فایل‌ها نیست؛ ۸ مجموعه
+بدون تغییر.
