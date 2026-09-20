@@ -10,7 +10,7 @@ bash scripts/benchmark-holdout.sh holdout  # one set
 The rule behind the table: **a number from a repository the engine was tuned on is
 not the project's number.** Only the holdout rows are.
 
-## Gold sets (2026-09-14, main after PR #71)
+## Gold sets (2026-09-20, main after PR #95)
 
 | set | repos | role | recall | precision | forbidden | oracle reachable / strict |
 |---|---|---|---|---|---|---|
@@ -47,6 +47,21 @@ narrowest where a question names one object (Scala: 0.80).
 ultralytics, 931 files: index ≈3.6 s; one question end-to-end p50 ≈0.70 s (n=10, cold process each
 time). Internal `l1_p95` gate on this repository: 47 ms (ceiling 50 ms). The 2026-09-13 numbers
 (index 2.1 s, p50 0.28 s) were taken under different load; compare like with like.
+
+## What changed on 2026-09-20 (session 12) and how to read the table
+
+- **holdout-c 0.656 → 0.573 is a corrected measurement, not a regression.** A fresh index used to
+  register the same symbol id once per same-named definition in a file (F63); a snapshot-loaded graph
+  (the MCP server after a restart) never did. The two paths disagreed, the duplicates flattered
+  holdout-c, and the harness now measures the deduplicated graph both paths share.
+- **holdout-ml (keras-io + setfit) and holdout-cfg are dev-class now**: phase D-3 iterated on the
+  former, F55 was traced on the latter's two hydra tasks. `holdout-ml2` (peft + keras-hub) is the
+  fresh ML holdout and was never tuned on; its gate passed on the first run.
+- **Strict oracle numbers before F59 were under-reported**: an unqualified need (`trainer.py::train`)
+  counted as folded whenever any same-named fold existed. The current column is right.
+- The harness caches each checkout's graph under `target/third_party_index_cache/` (keyed on git rev +
+  the graph crates' source hash); `NM_INDEX_CACHE=0` rebuilds. `NM_EXPLAIN=1` writes, per low-precision
+  task, every packet file with its reason and every resolved seed to `target/explain-<set>.txt`.
 
 ## Task success with a real model (2026-09-15, main after PR #79)
 
