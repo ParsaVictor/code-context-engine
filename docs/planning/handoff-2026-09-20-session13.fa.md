@@ -40,3 +40,19 @@ probe، فیکس خوشه‌ای؛ کلید Baseten برای فاز C؛ هدف �
    `tests/fixtures/mini-pinoox` می‌رفت و `tests/support/index_cache.rs` (stem `index_cache`) نمی‌آمد؛ احتمالاً F74
    (fixture ی خود ریپو به‌عنوان نویز + stem دوکلمه‌ای).
 4. feedback منفی روی strong-seed twin عمداً بی‌اثر — اگر Parsa بخواهد.
+
+## ۵. ادامه‌ی session 13 (بعد از گزارش)
+
+| PR | چه |
+|---|---|
+| #103 | F74 — «index cache» → `index_cache.rs` (compound stem)، نیمه‌های bare حذف؛ ۸ مجموعه ثابت |
+| #104 | مجموعه‌ی self dogfood (`tests/third_party/self`, ۱۰ سؤال) + F75: **recall 0.600 / precision 0.325 روی خود ریپو**، پنج خوشه‌ی ریشه |
+
+**فاز C اجرا نشد:** کلید Baseten داده شد؛ endpoint برای این ماشین 403 (Cloud Armor؛ حتی بدون کلید؛ exit VPN آذربایجان و
+بعد یک IP دیگر هم 403). دستور چک: `curl -s -o /dev/null -w "%{http_code}\n" https://inference.baseten.co/v1/models` —
+باید 401/200 بدهد. بعدش: `OPENAI_BASE_URL=https://inference.baseten.co/v1 OPENAI_API_KEY=… PROVIDER=openai
+PAIRS="deepseek-ai/DeepSeek-V4-Flash-0731:zai-org/GLM-5.3" bash scripts/phase-c-run.sh` (نتیجه‌ی قبلی در
+`reports/phase-c-2026-09-15-pr81`، git-ignored). کلید در هیچ فایلی نیست.
+
+**قدم بعدی پیشنهادی (به ترتیب):** F75-B (fallback seeds در مسیر نویز/تست) → F75-A (ایندکس literal های snake_case؛ feature)
+→ فاز C به محض باز شدن مسیر → ۳۰ سؤال B2B تیم (5b).
