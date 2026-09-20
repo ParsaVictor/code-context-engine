@@ -40,6 +40,10 @@ use std::time::Instant;
 
 const MAX_INACTIVE: usize = 12;
 const MAX_PHYSARUM_SIDECAR_FILES: usize = 3;
+/// A required file (not named by the prompt) whose file node, or any symbol
+/// in it, has more negative than positive feedback (`base_relevance` starts
+/// at 1.0, −0.12 per "not useful", +0.08 per "useful") is demoted (F69).
+const REQUIRED_DEMOTE_RELEVANCE: f32 = 0.9;
 
 struct MaterializedNode {
     node: neuromesh_core::ContextNode,
@@ -672,6 +676,45 @@ impl ContextActivator {
         let thresholds = Thresholds::default();
         let learning_index = graph.file_learning_boost_index();
         let mut emission = EmissionPipeline::default();
+        // F69: negative feedback only ever touched *optional* files, while
+        // the files users complain about are required ones a weak seed or a
+        // callee brought in. A required file that no strong seed (a symbol,
+        // file or config key the prompt named) resolved into, and that
+        // feedback has marked not useful, is demoted. A file the prompt
+        // named is never demoted by feedback.
+        let strong_seed_files: HashSet<std::path::PathBuf> = seed_resolutions
+            .iter()
+            .filter(|s| {
+                let prefix = s.query.split(':').next().unwrap_or("");
+                matches!(
+                    prefix,
+                    "identifier"
+                        | "entity"
+                        | "file"
+                        | "path_hint"
+                        | "client_keyword"
+                        | "config_key"
+                )
+            })
+            .filter_map(|s| s.resolved_id.as_ref())
+            .filter_map(|id| graph.get_node(id))
+            .map(|n| n.file_path)
+            .collect();
+        selection.required.retain(|id| {
+            let Some(node) = graph.get_node(id) else {
+                return true;
+            };
+            if strong_seed_files.contains(&node.file_path) {
+                return true;
+            }
+            let penalized = graph
+                .file_min_base_relevance(id)
+                .is_some_and(|r| r < REQUIRED_DEMOTE_RELEVANCE);
+            if penalized {
+                emission.record_drop(id, EmissionDropStage::PenalizedSuppress);
+            }
+            !penalized
+        });
         let required_set: HashSet<NodeId> = selection.required.iter().cloned().collect();
         EmissionPipeline::suppress_penalized_optional(
             graph,
