@@ -259,6 +259,103 @@ pub(crate) fn push_path_hint_seeds(
         let energy = signal_weight(config, SignalKind::EntityType, pos);
         sink.push(graph, prompt, et.clone(), energy, "entity_type");
     }
+    push_compound_stem_seeds(graph, prompt, config, sink);
+}
+
+/// Two adjacent prompt words that spell a file's stem name that file: "the
+/// index cache" is `index_cache.rs`, "rate limiter" is `rate-limiter.ts`.
+/// The identifier extractor only sees the single word `index`, which lands
+/// on whatever symbol is called `index` (F74: a PHP fixture's controller
+/// action). The stem must be unique among non-noise files, else the pair is
+/// ambiguous and stays out.
+pub(crate) fn push_compound_stem_seeds(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    config: &SeedResolutionConfig,
+    sink: &mut SeedSink<'_, '_, '_>,
+) {
+    // Two *separate* prose words. An identifier the prompt already wrote as
+    // one token (`roi_heads`, `rate-limiter`) is one word here, not a pair:
+    // it is the extractor's identifier and resolves on its own.
+    let words: Vec<String> = prompt
+        .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+        .filter(|w| w.len() >= 3)
+        .map(|w| {
+            if w.chars().all(|c| c.is_alphanumeric()) {
+                w.to_lowercase()
+            } else {
+                String::new() // keeps its place so its neighbours do not pair up
+            }
+        })
+        .collect();
+    if words.len() < 2 {
+        return;
+    }
+    let stems: Vec<(String, String)> = graph
+        .file_node_paths()
+        .into_iter()
+        .filter_map(|(_, p)| {
+            let stem = p.file_stem()?.to_str()?.to_lowercase();
+            let joined: String = stem.chars().filter(|c| c.is_alphanumeric()).collect();
+            (stem.contains(['_', '-']) && joined.len() >= 6)
+                .then(|| (joined, p.to_string_lossy().replace('\\', "/")))
+        })
+        .collect();
+    let mut pushed = 0usize;
+    for pair in words.windows(2) {
+        if pair[0].is_empty()
+            || pair[1].is_empty()
+            || is_prompt_stopword(&pair[0])
+            || is_prompt_stopword(&pair[1])
+        {
+            continue;
+        }
+        let joined = format!("{}{}", pair[0], pair[1]);
+        let mut hits = stems.iter().filter(|(s, _)| *s == joined);
+        let Some((_, path)) = hits.next() else {
+            continue;
+        };
+        if hits.next().is_some() {
+            continue;
+        }
+        let energy = signal_weight(config, SignalKind::PathHint, pushed);
+        let before = sink.resolved_count();
+        sink.push(graph, prompt, path.clone(), energy, "file");
+        if sink.resolved_count() == before {
+            continue;
+        }
+        // The halves of the pair are not symbols of their own once the pair
+        // named a file (the bare_owner rule for `owner.member`): the
+        // `identifier:index` that reached some unrelated `index()` goes.
+        let halves = [
+            format!("identifier:{}", pair[0]),
+            format!("identifier:{}", pair[1]),
+        ];
+        let buffers = sink.buffers_mut();
+        let dropped: Vec<neuromesh_core::NodeId> = buffers
+            .resolutions
+            .iter()
+            .filter(|s| halves.iter().any(|h| s.query.eq_ignore_ascii_case(h)))
+            .filter_map(|s| s.resolved_id.clone())
+            .collect();
+        buffers
+            .resolutions
+            .retain(|s| !halves.iter().any(|h| s.query.eq_ignore_ascii_case(h)));
+        for id in dropped {
+            let still_used = buffers
+                .resolutions
+                .iter()
+                .any(|s| s.resolved_id.as_ref() == Some(&id));
+            if !still_used {
+                buffers.energies.remove(&id);
+                buffers.reasons.remove(&id);
+            }
+        }
+        pushed += 1;
+        if pushed >= 2 {
+            break;
+        }
+    }
 }
 
 pub(crate) fn token_fallback_seeds(

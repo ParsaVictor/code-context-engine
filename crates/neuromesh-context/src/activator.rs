@@ -3367,6 +3367,68 @@ pub fn unused_helper() {
         );
     }
 
+    /// F74: two prose words that spell a file stem name that file, and the
+    /// bare halves stop being symbols of their own — `identifier:index` no
+    /// longer lands on an unrelated `index()` action. An identifier the
+    /// prompt already wrote as one token (`roi_heads`) is not a pair.
+    #[test]
+    fn compound_stem_names_the_file_and_drops_the_bare_halves() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("nm"));
+        let files: [(&str, &str); 3] = [
+            (
+                "crates/ctx/tests/support/index_cache.rs",
+                "pub fn graph_for_checkout(rev: &str) -> bool {\n    invalidate_when(rev)\n}\nfn invalidate_when(rev: &str) -> bool {\n    rev.is_empty()\n}\n",
+            ),
+            (
+                "fixtures/app/controller.rs",
+                "pub struct MainController;\nimpl MainController {\n    pub fn index(&self) -> String {\n        String::from(\"home\")\n    }\n}\n",
+            ),
+            (
+                "crates/ctx/src/roi_heads.rs",
+                "pub fn roi_heads() -> u32 {\n    1\n}\n",
+            ),
+        ];
+        for (path, src) in files {
+            let mut file = indexed(path);
+            file.language = SourceLanguage::Rust;
+            graph.ingest_file(
+                &file,
+                &CodeIntelligenceEngine::analyze(&PathBuf::from(path), src, SourceLanguage::Rust),
+                Some(src),
+            );
+        }
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let shipped = |prompt: &str| -> HashSet<String> {
+            activator
+                .activate(
+                    &graph,
+                    &TaskSignatureExtractor::extract(prompt),
+                    OptimizationMode::Balanced,
+                )
+                .active_nodes
+                .iter()
+                .map(|n| n.node.file_path.to_string_lossy().replace('\\', "/"))
+                .collect()
+        };
+        let got = shipped("How does the index cache decide when to invalidate?");
+        assert!(
+            got.contains("crates/ctx/tests/support/index_cache.rs"),
+            "the pair 'index cache' names index_cache.rs, got {got:?}"
+        );
+        assert!(
+            !got.contains("fixtures/app/controller.rs"),
+            "bare `index` must not ship the controller, got {got:?}"
+        );
+        // `roi_heads` is one token: no pair, so no file seed from "roi"+"heads".
+        let got = shipped("How does MainController.index handle roi_heads?");
+        assert!(
+            got.contains("fixtures/app/controller.rs"),
+            "dotted identifier still resolves, got {got:?}"
+        );
+    }
+
     /// F68: `@nm:seeds` used to be written before the seed pipeline pruned
     /// bare owners, off-family and weak substring seeds, so the header named
     /// files the packet then did not ship. Seeds always ship, so every path

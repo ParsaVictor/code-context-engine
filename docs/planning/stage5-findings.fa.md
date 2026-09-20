@@ -994,3 +994,20 @@ validation/schemas/schemaController/Validator/validate/schema/Validierung — ا
 
 ratchet large 0.56 → 0.62. درس: **dogfood با سؤال‌های واقعی روی ریپوی خودمان یک finding در پنج سؤال داد** و آن
 finding روی large ‎+0.058 آورد — بیش از هر تیون امتیازی در دو session اخیر.
+
+## F74 — دو کلمه‌ی prompt که stem یک فایل را می‌سازند: «index cache» → `index_cache.rs` (session 13، dogfood)
+
+همان سؤال F73 بعد از فیکس alias هنوز `tests/fixtures/mini-pinoox/Controller/MainController.php` را می‌آورد (identifier
+`index` → متد `index()` با exact-name) و `tests/support/index_cache.rs` را نه. extractor فقط `index` را identifier می‌گیرد؛
+هیچ مکانیزمی دو کلمه‌ی پشت‌سرهم را با stem فایل مقایسه نمی‌کرد.
+
+قاعده (`push_compound_stem_seeds`، کنار path hints): هر جفت کلمه‌ی *مجزای* prompt که به‌هم‌چسبیده برابر stem یک فایل با
+`_`/`-` باشد (یکتا در ریپو، ≥۶ حرف) → file seed با وزن path_hint؛ و نیمه‌های bare (`identifier:index`) حذف می‌شوند —
+همان قاعده‌ی bare_owner برای `owner.member`. **نسخه‌ی اول holdout-2 را 0.554→0.552 انداخت** (`vision_generalized_rcnn`):
+`roi_heads` ی prompt روی `_` شکسته و دوباره به `roi_heads.py` چسبیده شد و آن فایل از sidecar به required رفت. سیگنال
+گم‌شده: identifier یک‌تکه (`roi_heads`) یک کلمه است نه جفت؛ جای خودش را نگه می‌دارد تا همسایه‌هایش جفت نشوند. بعد از آن
+۸ مجموعه بدون تغییر؛ Q4 دقیقاً `index_cache.rs`. تست `compound_stem_names_the_file_and_drops_the_bare_halves` روی کد
+قبلی قرمز.
+
+نکته‌ی ثبت‌شده، فیکس‌نشده: `tests/fixtures/` به‌عنوان testdata شناخته نمی‌شود (`is_testdata_path` فقط `testdata`/
+`test_data`)؛ افزودنش امتحان شد ولی برای این سؤال اثری نداشت و برای یک finding جدا نگه داشته شد.
