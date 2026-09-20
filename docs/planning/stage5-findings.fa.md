@@ -1094,3 +1094,22 @@ Parsa: «همه‌ی اشکال‌ها را با هم و سریع». یک PR، �
 باقی‌مانده‌ی self (recall 0): `self_large_ratchet` («large gold set» ≠ stem `third_party_large_gold`)، `self_argparse_flags`
 (`add_argument` فقط داخل regex)، `self_exon_budget`، `self_pheromone_reinforce` («reinforced» ↔ `reinforce_path`؛ prefix
 symbol چند‌معنی)، `self_eval_judge`. همه «مفهوم بدون نام» اند — نیازمند embedding/semantic یا گلد بحث‌برانگیز.
+
+## F79 — آیا embedding (MiniLM، engine hybrid) مفهوم‌های بی‌نام را می‌گیرد؟ نه — اندازه‌گیری شد (session 13، PR #110)
+
+پنج سؤال self با recall 0 همه «مفهوم بدون نام» بودند («ratchet»، «exon budget»، «reinforced» ↔ `reinforce_path`). فرض:
+engine hybrid با MiniLM آن‌ها را می‌گیرد. اندازه‌گیری روی همان ۲۰ سؤال، همان گراف، با ایندکس embedding واقعی
+(`NM_EMBED=1` در harness — هوک جدید و اختیاری در `tests/support/gold_set.rs`، `--features embeddings`؛ مدل
+`minilm-multilingual-q` که `install embed` به‌خاطر شبکه شکست خورد و دستی در `%LOCALAPPDATA%\neuromesh\models\` گذاشته شد):
+
+| engine | recall | precision | forbidden |
+|---|---|---|---|
+| fast (پیش‌فرض) | **0.675** | **0.406** | 0 |
+| hybrid بدون ایندکس embedding (سکوت‌آمیز به مسیر لغوی می‌افتد) | 0.425 | 0.256 | 1 |
+| hybrid با MiniLM واقعی | 0.500 | 0.122 | 1 |
+
+هیچ‌کدام از ۵ سؤال مفهومی با embedding هم recall نگرفت؛ در عوض ۵ سؤالِ قبلاً درست، خراب شدند و یک forbidden آمد. **نتیجه:**
+embedding به شکل فعلی اهرم بزرگ نیست — سرمایه‌گذاری روی آن (به‌عنوان جایگزین مسیر لغوی) توجیه ندارد. اگر روزی برگردیم،
+فقط به‌عنوان *fallback برای سؤال بدون هیچ seed* و با گیت روی همین self set. تله: `NEUROMESH_ENGINE=hybrid` بدون ایندکس
+embedding خطا نمی‌دهد و بی‌صدا بدتر می‌شود — در MCP هم همین است (کاربری که hybrid را روشن کند و index را با embed نساخته
+باشد، packet بدتری می‌گیرد).
