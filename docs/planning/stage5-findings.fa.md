@@ -881,3 +881,23 @@ torch.compile?» — `configs/model/mnist.yaml` نمی‌آمد. سه لایه �
 `file_seed:unexpanded` و ۳۷۰۰ توکن markdown. قاعده: کلمه‌ی برهنه یک query ی symbol است؛ نود File در مسیر noise
 (md/rst/txt/docs) که فقط با آن شروع می‌شود anchor نیست — فایل را با نام (`api.md`) یا stem می‌خواهند.
 large 0.574 → **0.578**؛ بقیه بدون تغییر.
+
+## F66/F67 — skeleton پایتون: header کلاس گم‌شده، `}` سرگردان، docstring های باز (session 12، PR #95)
+
+D4 (اندازه‌ی packet) با dump یک packet واقعی ultralytics شروع شد (`ultra_model_predict_api`، ۱۱.۸k توکن). سه چیز
+دیده شد که هیچ متریک فایل‌سطحی نشان نمی‌دهد:
+
+| # | مشکل | ریشه | رفع |
+|---|---|---|---|
+| **F66a** | `class YOLOE(Model):` در packet نبود؛ به‌جایش fold ماژول + یک خط docstring سرگردان («set_vocab: Set vocabulary and class names for the YOLOE model.») | `enclosing_header_line` خطی را header می‌گرفت که *شامل* `class ` و نام owner باشد — آن خط docstring هر دو را داشت | keyword نوع باید بلافاصله با نام owner به‌عنوان identifier بعدی بیاید (`impl Trait for Owner` هم) |
+| **F66b** | `}` تنها زیر متدهای fold شده‌ی پایتون و یک `}` بعد از هر کلاس | `is_block_closer` و بستنِ گروه کلاس برای زبان indent-محور اعمال می‌شد (`}` در پایتون پایان dict literal است) | `is_indent_language` (py/pyi/ipynb/yaml/yml) → بدون closer |
+| **F67** | ۳۸٪ خطوط فایل seed در packet docstring های Google-style بود | بدنه‌ی باز کامل چاپ می‌شد | docstring ی که بدنه‌ی باز را شروع می‌کند و >۳ خط است: خط خلاصه + marker fold (`<name>.__doc__`، قابل expand) + بستن رشته |
+
+| | قبل | بعد |
+|---|---|---|
+| مجموع توکن packet های large (۲۰ تسک) | 123,913 | **115,535** (−۶.۸٪) |
+| dev-4 | 25,435 | 25,274 |
+| recall/precision/forbidden | — | ۷ مجموعه یکسان؛ holdout-ml 0.437→0.432 (−0.005: packet کوچک‌تر → fill یک فایل بیشتر جا داد؛ زیر آستانه‌ی ۰.۰۲)، holdout-2 strict 17→**18** |
+
+اثر اصلی کیفی است: مدل حالا نام کلاس‌ها را می‌بیند و متن پایتون معتبر (بدون `}`) می‌گیرد — چیزی که task-success
+با مدل واقعی (فاز C) حس می‌کند، نه بنچمارک فایل‌سطحی.

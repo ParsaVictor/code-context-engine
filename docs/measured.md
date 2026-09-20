@@ -16,10 +16,10 @@ not the project's number.** Only the holdout rows are.
 |---|---|---|---|---|---|---|
 | dev-4 | nanoGPT, express, vit-pytorch, full-stack-fastapi | tuning set | 1.000 | 0.938 | 0 | 21/21 · 20 |
 | large | django (3.5k files), ultralytics | tuning set, large | 1.000 | 0.578 | 0 | 20/20 · 20 |
-| **holdout-2** | gin (Go), torchvision (Python) | never tuned on | **1.000** | **0.554** | **0** | 20/20 · 17 |
+| **holdout-2** | gin (Go), torchvision (Python) | never tuned on | **1.000** | **0.554** | **0** | 20/20 · 18 |
 | **holdout-c** | libuv (C), fmt (C++) | never tuned on | **1.000** | **0.573** | **0** | 16/16 · 14 |
 | **holdout-lang** | os-lib (Scala), r-lib/cli (R), Flux.jl (Julia) | never tuned on | **1.000** | **0.541** | **1** | 14/15 · 12 |
-| holdout-ml | keras-io examples (Keras), setfit (Hugging Face) | **tuned on in D-3** (5 iterations read its numbers) — dev-class since then; fresh ML holdout is `holdout-ml2` | **1.000** | **0.437** | **0** | 10/10 · 10 |
+| holdout-ml | keras-io examples (Keras), setfit (Hugging Face) | **tuned on in D-3** (5 iterations read its numbers) — dev-class since then; fresh ML holdout is `holdout-ml2` | **1.000** | **0.432** | **0** | 10/10 · 10 |
 | **holdout-ml2** | peft (Hugging Face adapter library), keras-hub (Keras 3 model library) | never tuned on; first run after gold lock (session 12) | **1.000** | **0.632** | **0** | 10/10 · 7 |
 | **holdout-cfg** | lightning-hydra-template (Hydra YAML), detr (argparse) | D-4 gold; two hydra tasks probed for F55 (session 12) — dev-class for config questions | **0.924** | **0.690** | **0** | — |
 | **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.587** | **0** | — |
