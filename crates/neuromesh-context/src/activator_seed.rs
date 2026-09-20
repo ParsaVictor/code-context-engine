@@ -26,15 +26,27 @@ pub(crate) fn push_anchor_queries(
         // name (`neuromesh_record_feedback`), a route, an event, an env var.
         // Up to eight files — a literal in more places is a shared constant,
         // not the place the question means (F75-A).
-        let mut files: Vec<neuromesh_core::NodeId> = graph
-            .files_with_literal(ident)
-            .into_iter()
-            .filter(|id| {
-                graph
-                    .get_node(id)
-                    .is_some_and(|n| !crate::selector::is_noise_path(&n.file_path))
-            })
-            .collect();
+        let all = graph.files_with_literal(ident);
+        let is_noise = |id: &neuromesh_core::NodeId| {
+            graph
+                .get_node(id)
+                .is_some_and(|n| crate::selector::is_noise_path(&n.file_path))
+        };
+        // Product code first; but an exact string that only a test or a
+        // script spells (`NM_EXPLAIN` in the harness) still names that file.
+        let mut files: Vec<neuromesh_core::NodeId> = if all.iter().any(|id| !is_noise(id)) {
+            all.iter().filter(|id| !is_noise(id)).cloned().collect()
+        } else {
+            all.iter()
+                .filter(|id| {
+                    graph.get_node(id).is_some_and(|n| {
+                        let p = n.file_path.to_string_lossy().to_lowercase();
+                        !(p.ends_with(".md") || p.ends_with(".txt") || p.ends_with(".rst"))
+                    })
+                })
+                .cloned()
+                .collect()
+        };
         if files.is_empty() || files.len() > 8 {
             continue;
         }
@@ -74,12 +86,9 @@ pub(crate) fn push_anchor_queries(
             .resolutions
             .retain(|s| !(s.resolved_id.is_none() && s.query == *ident));
         for (pos, file_id) in files.iter().enumerate() {
-            let Some(node) = graph.get_node(file_id) else {
+            if graph.get_node(file_id).is_none() {
                 continue;
             };
-            if crate::selector::is_noise_path(&node.file_path) {
-                continue;
-            }
             sink.insert(
                 file_id.clone(),
                 if pos == 0 { 0.9 } else { 0.75 },
@@ -420,6 +429,28 @@ pub(crate) fn push_compound_stem_seeds(
         })
         .collect();
     let mut pushed = 0usize;
+    // A kebab token the prompt wrote (`benchmark-holdout`, `phase-c-run`)
+    // that is exactly a file's stem names that file — the identifier
+    // extractor keeps only its first half (`benchmark`). Kebab only: a
+    // snake token (`roi_heads`) is an identifier the symbol path already
+    // owns, and as a file name it turned a listed attribute into a required
+    // module (holdout-2 −0.002 the first time).
+    for token in prompt
+        .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+        .filter(|t| t.len() >= 6 && t.contains('-') && !t.contains('_'))
+    {
+        let joined: String = token
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+            .to_lowercase();
+        let mut hits = stems.iter().filter(|(s, _)| *s == joined);
+        if let (Some((_, path)), None) = (hits.next(), hits.next()) {
+            let energy = signal_weight(config, SignalKind::PathHint, pushed);
+            sink.push(graph, prompt, path.clone(), energy, "file");
+            pushed += 1;
+        }
+    }
     for pair in words.windows(2) {
         if pair[0].is_empty()
             || pair[1].is_empty()

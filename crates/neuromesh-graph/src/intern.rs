@@ -692,7 +692,13 @@ pub(crate) fn is_name_like_literal(s: &str) -> bool {
             });
     }
     let separators = s.chars().filter(|c| matches!(c, '_' | '-' | '.')).count();
-    separators >= 2
+    // `NM_EXPLAIN`, `DATABASE_URL`: an env-var name has one separator and
+    // is all upper-case — as much a name as any two-separator literal.
+    let env_var = separators >= 1
+        && s.contains('_')
+        && s.chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+    (separators >= 2 || env_var)
         && s.chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
         && s.chars().next().is_some_and(|c| c.is_ascii_alphabetic())

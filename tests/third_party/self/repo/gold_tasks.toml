@@ -67,3 +67,75 @@ prompt = "How does the CLI eval command pick the judge model and reject self-jud
 gold_files = ["crates/neuromesh-cli/src/commands/tasks.rs"]
 forbidden_files = []
 expect_seeds_missed = false
+
+# --- round 2 (session 13, after #108) ---
+
+[[task]]
+id = "self_large_ratchet"
+prompt = "Where is the ratchet for the large gold set precision defined?"
+gold_files = ["crates/neuromesh-context/tests/third_party_large_gold.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_benchmark_script"
+prompt = "How does the benchmark-holdout script pick which cargo test to run for a set?"
+gold_files = ["scripts/benchmark-holdout.sh"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_openai_base_url"
+prompt = "Where does the OpenAI provider read OPENAI_BASE_URL?"
+gold_files = ["crates/neuromesh-provider/src/openai.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_phase_c_clean"
+prompt = "How does the phase-c-run script decide a report file is clean and can be kept?"
+gold_files = ["scripts/phase-c-run.sh"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_mcp_descriptor"
+prompt = "Where does the MCP server register the get_context_packet tool description?"
+gold_files = ["crates/neuromesh-mcp/src/descriptors.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_argparse_flags"
+prompt = "How does the Python parser detect argparse add_argument flags as hyperparameters?"
+gold_files = ["crates/neuromesh-parser/src/config_reads.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_nm_explain"
+prompt = "Where is NM_EXPLAIN read and the explain file written?"
+gold_files = ["crates/neuromesh-context/tests/support/explain.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_exon_budget"
+prompt = "How does the packet skeleton decide the exon budget for seed files?"
+gold_files = ["crates/neuromesh-context/src/activator.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_pheromone_reinforce"
+prompt = "Where are pheromone edge weights reinforced after positive feedback?"
+gold_files = ["crates/neuromesh-graph/src/graph.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_code_hash"
+prompt = "How does the index cache compute the code hash that keys the cached graph?"
+gold_files = ["crates/neuromesh-context/tests/support/index_cache.rs"]
+forbidden_files = []
+expect_seeds_missed = false

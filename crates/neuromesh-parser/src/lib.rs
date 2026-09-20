@@ -15,6 +15,7 @@ pub mod registry;
 pub mod rust_lang;
 pub mod scss;
 pub mod semantic;
+pub mod shell;
 pub mod sql;
 pub mod text_normalize;
 pub mod tree_sitter_lang;
