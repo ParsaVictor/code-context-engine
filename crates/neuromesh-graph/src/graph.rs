@@ -819,9 +819,19 @@ impl NeuralProjectGraph {
                     let reader = self
                         .resolve_in_file(&rel.source_symbol, &rel.source_file.to_string_lossy())
                         .unwrap_or_else(|| file_id.clone());
-                    match self
-                        .resolve_config_key(&rel.target_symbol, rel.target_file_hint.as_deref())
-                    {
+                    let resolved = self
+                        .resolve_config_key_for_reader(
+                            &rel.target_symbol,
+                            rel.target_file_hint.as_deref(),
+                            &reader,
+                        )
+                        .or_else(|| {
+                            self.resolve_config_key(
+                                &rel.target_symbol,
+                                rel.target_file_hint.as_deref(),
+                            )
+                        });
+                    match resolved {
                         Some((key, confidence)) if key != reader => {
                             self.add_edge_with_confidence(
                                 key,
@@ -1382,6 +1392,96 @@ impl NeuralProjectGraph {
     /// `pick_dominant_candidate` as `Likely` — `lr0` in `cfg/default.yaml`
     /// and in a docs snippet is the former, not the latter, and the ranking
     /// bonus already prefers the shallower, non-doc path.
+    /// F55: the same key in several config files, none of them named by the
+    /// reader's module. Hydra's `configs/model/mnist.yaml` says
+    /// `_target_: src.models.mnist_module.MNISTLitModule` and sets `compile`;
+    /// `configs/experiment/example.yaml` overrides `compile` too. The reader
+    /// is `MNISTLitModule.setup`, so the file whose values name the reader's
+    /// owner (or its module) is the one that configures it. Only decides when
+    /// exactly one candidate file does; otherwise `None` and the plain
+    /// resolver's dominant pick stands.
+    pub fn resolve_config_key_for_reader(
+        &self,
+        key: &str,
+        file_hint: Option<&str>,
+        reader: &NodeId,
+    ) -> Option<(NodeId, EdgeConfidence)> {
+        let reader_node = self.get_node(reader)?;
+        // Only code reads a key: a Config node or a file as the "reader"
+        // would match its own file's stem against every config's values.
+        if matches!(
+            reader_node.node_type,
+            NodeType::File | NodeType::Config | NodeType::Hyperparameter
+        ) {
+            return None;
+        }
+        let mut names: Vec<String> = Vec::new();
+        if let Some(owner) = &reader_node.parent {
+            names.push(owner.to_lowercase());
+        }
+        if let Some(stem) = reader_node.file_path.file_stem().and_then(|s| s.to_str()) {
+            names.push(stem.to_lowercase());
+        }
+        if names.is_empty() {
+            return None;
+        }
+        let candidates: Vec<NodeId> = {
+            let data = self.inner.read();
+            data.name_to_nodes
+                .get(&key.to_lowercase())
+                .into_iter()
+                .flatten()
+                .filter(|id| {
+                    data.mesh.node(id).is_some_and(|n| {
+                        matches!(n.node_type, NodeType::Config | NodeType::Hyperparameter)
+                    })
+                })
+                .cloned()
+                .collect()
+        };
+        if candidates.len() < 2 {
+            return None;
+        }
+        let _ = file_hint;
+        let names_reader = |file: &Path| {
+            self.nodes_in_file(file).iter().any(|n| {
+                n.signature.as_deref().is_some_and(|sig| {
+                    let sig = sig.to_lowercase();
+                    names.iter().any(|name| {
+                        sig.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                            .any(|tok| tok == name)
+                    })
+                })
+            })
+        };
+        let mut hits: Vec<NodeId> = candidates
+            .into_iter()
+            .filter(|id| {
+                self.get_node(id)
+                    .is_some_and(|n| names_reader(&n.file_path))
+            })
+            .collect();
+        hits.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        hits.dedup();
+        (hits.len() == 1).then(|| (hits.remove(0), EdgeConfidence::Proven))
+    }
+
+    /// Every Config / Hyperparameter node named `key`, unordered.
+    pub fn config_key_candidates(&self, key: &str) -> Vec<NodeId> {
+        let data = self.inner.read();
+        data.name_to_nodes
+            .get(&key.to_lowercase())
+            .into_iter()
+            .flatten()
+            .filter(|id| {
+                data.mesh.node(id).is_some_and(|n| {
+                    matches!(n.node_type, NodeType::Config | NodeType::Hyperparameter)
+                })
+            })
+            .cloned()
+            .collect()
+    }
+
     pub fn resolve_config_key(
         &self,
         key: &str,

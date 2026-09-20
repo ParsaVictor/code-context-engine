@@ -18,6 +18,7 @@ pub(crate) const STRONG: &[&str] = &[
     "entity",
     "file",
     "client_keyword",
+    "config_key",
     "path_hint",
 ];
 pub(crate) const WEAK: &[&str] = &[
