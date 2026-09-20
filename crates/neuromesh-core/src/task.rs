@@ -41,6 +41,11 @@ pub struct TaskSignature {
     /// Optional English code keywords from the client LLM (natural-language / non-English prompts).
     #[serde(default)]
     pub client_keywords: Vec<String>,
+    /// `client_keywords` were inferred by the server from the prompt (MCP
+    /// `auto_extract_keywords`), not supplied by the client: guesses, so
+    /// they seed at the weak tier and the weak-seed pruning applies (F62).
+    #[serde(default)]
+    pub client_keywords_inferred: bool,
     /// Semantically related concepts from the client (synonyms, lifecycle hooks).
     #[serde(default)]
     pub client_expansion: Vec<String>,
@@ -82,6 +87,7 @@ impl TaskSignature {
             identifiers: Vec::new(),
             file_hints: Vec::new(),
             client_keywords: Vec::new(),
+            client_keywords_inferred: false,
             client_expansion: Vec::new(),
             client_path_hints: Vec::new(),
             client_entity_types: Vec::new(),

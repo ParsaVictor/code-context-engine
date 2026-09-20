@@ -6,8 +6,8 @@ fn tier_for_reason(reason: &str) -> Option<&'static str> {
     use crate::retrieval::embedding_confidence::{TIER_EMBEDDING_PRIMARY, TIER_L1_EXACT};
     match reason {
         "identifier" | "entity" | "file" | "client_keyword" | "alias_code" => Some(TIER_L1_EXACT),
-        "client_expansion" | "path_hint" | "entity_type" | "token" | "style_hint"
-        | "style_component" | "style_partial" | "style_mixin" | "style_token"
+        "client_expansion" | "inferred_keyword" | "path_hint" | "entity_type" | "token"
+        | "style_hint" | "style_component" | "style_partial" | "style_mixin" | "style_token"
         | "view_component" => Some(TIER_L1_EXACT),
         r if r.starts_with("fallback:") => Some(TIER_L1_EXACT),
         r if r.starts_with("semantic_embed") => Some(TIER_EMBEDDING_PRIMARY),

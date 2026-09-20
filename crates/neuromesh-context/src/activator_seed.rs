@@ -138,7 +138,16 @@ pub(crate) fn push_client_keywords(
         }
         let energy = signal_weight(config, SignalKind::Keyword, pos);
         let before = sink.resolved_count();
-        sink.push(graph, prompt, kw.clone(), energy, "client_keyword");
+        // A keyword the server inferred from the prompt is a guess, not a
+        // client anchor: it seeds at the weak tier so the noise-path,
+        // off-family and style-asset pruning apply to it (F62: "style asset"
+        // → `stat` → `applyStatic` in the docs site for a Rust question).
+        let reason = if signature.client_keywords_inferred {
+            "inferred_keyword"
+        } else {
+            "client_keyword"
+        };
+        sink.push(graph, prompt, kw.clone(), energy, reason);
         if sink.resolved_count() > before {
             resolved += 1;
         }
