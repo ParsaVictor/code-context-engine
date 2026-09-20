@@ -35,9 +35,73 @@ fn stem_covered(path: &std::path::Path, prompt_tokens: &HashSet<String>) -> bool
             .all(|t| prompt_tokens.contains(&t.to_lowercase()))
 }
 
+/// (seeds defined together, stem named, dir words, body words)
+type FileScore = (usize, bool, usize, usize);
+
 struct Twinned {
     seed_idx: usize,
     by_file: HashMap<PathBuf, NodeId>,
+}
+
+/// Directory components of `file` the prompt names ("On Unix" →
+/// `src/unix/getaddrinfo.c` over `src/win/getaddrinfo.c`). Ranks above body
+/// words: the platform variant a question names is settled by its path, and
+/// the other variant's body can hold more of the prompt's words simply by
+/// being longer (holdout-c, libuv).
+fn dir_word_hits(file: &std::path::Path, prompt_tokens: &HashSet<String>) -> usize {
+    let mut comps: Vec<&str> = file
+        .components()
+        .filter_map(|c| c.as_os_str().to_str())
+        .collect();
+    comps.pop();
+    comps
+        .iter()
+        .flat_map(|c| tokenize(c))
+        .map(|t| t.to_lowercase())
+        .filter(|t| t.len() >= 3 && prompt_tokens.contains(t))
+        .count()
+}
+
+/// Distinct prompt words (≥4 letters, not a seed's own name) found in the
+/// bodies of the twins that live in `file`. Django defines `Template` in
+/// `template/base.py` and again as a thin wrapper in
+/// `template/backends/django.py`; both hold `Template` and `Template.render`,
+/// so `together` ties. "compile a parsed node list into rendered output"
+/// names what only the real one does — `nodelist`, `compile`, `render` are
+/// in its body, not the wrapper's (F64).
+fn body_word_hits(
+    graph: &NeuralProjectGraph,
+    file: &PathBuf,
+    twinned: &[Twinned],
+    prompt_tokens: &HashSet<String>,
+    seed_names: &HashSet<String>,
+) -> usize {
+    let Some(source) = graph.read_source(file) else {
+        return 0;
+    };
+    let lines: Vec<&str> = source.lines().collect();
+    let mut body_tokens: HashSet<String> = HashSet::new();
+    for t in twinned {
+        let Some(id) = t.by_file.get(file) else {
+            continue;
+        };
+        let Some(range) = graph.get_node(id).and_then(|n| n.line_range) else {
+            continue;
+        };
+        let start = range.start.saturating_sub(1).min(lines.len());
+        let end = range.end.min(lines.len());
+        for line in &lines[start..end] {
+            for w in line.split(|c: char| !c.is_alphanumeric() && c != '_') {
+                for tok in tokenize(w) {
+                    body_tokens.insert(tok.to_lowercase());
+                }
+            }
+        }
+    }
+    prompt_tokens
+        .iter()
+        .filter(|t| t.len() >= 4 && !seed_names.contains(*t) && body_tokens.contains(*t))
+        .count()
 }
 
 pub(crate) fn cohere_twin_definitions(
@@ -95,25 +159,40 @@ pub(crate) fn cohere_twin_definitions(
     for t in &twinned {
         candidates.extend(t.by_file.keys());
     }
-    let score = |file: &PathBuf| -> (usize, bool) {
+    let seed_names: HashSet<String> = twinned
+        .iter()
+        .filter_map(|t| t.by_file.values().next())
+        .filter_map(|id| graph.get_node(id))
+        .flat_map(|n| tokenize(&n.name))
+        .map(|t| t.to_lowercase())
+        .collect();
+    let score = |file: &PathBuf| -> FileScore {
         let together = twinned
             .iter()
             .filter(|t| t.by_file.contains_key(file))
             .count()
             + usize::from(anchor_files.contains(file));
-        (together, stem_covered(file, &prompt_tokens))
+        (
+            together,
+            stem_covered(file, &prompt_tokens),
+            dir_word_hits(file, &prompt_tokens),
+            body_word_hits(graph, file, &twinned, &prompt_tokens, &seed_names),
+        )
     };
-    let mut ranked: Vec<(&PathBuf, (usize, bool))> =
+    let mut ranked: Vec<(&PathBuf, FileScore)> =
         candidates.into_iter().map(|f| (f, score(f))).collect();
     ranked.sort_by(|a, b| {
         b.1 .0
             .cmp(&a.1 .0)
             .then_with(|| b.1 .1.cmp(&a.1 .1))
+            .then_with(|| b.1 .2.cmp(&a.1 .2))
+            .then_with(|| b.1 .3.cmp(&a.1 .3))
             .then_with(|| a.0.cmp(b.0))
     });
     let (best_file, best_score) = ranked[0];
     // Without a second seed or a named stem there is nothing to prefer; the
-    // per-symbol ranking stands.
+    // per-symbol ranking stands. Body words only break a tie between files
+    // that already qualify.
     if best_score.0 < 2 && !best_score.1 {
         return;
     }
@@ -164,7 +243,7 @@ mod tests {
                 last_modified: chrono::Utc::now(),
             };
             let ast = CodeIntelligenceEngine::analyze(Path::new(rel), src, SourceLanguage::Python);
-            graph.ingest_ast(&file, &ast);
+            graph.ingest_file(&file, &ast, Some(src));
         }
         graph.finalize_links();
         graph
@@ -230,6 +309,55 @@ mod tests {
         assert!(energies
             .keys()
             .all(|id| id.as_str().contains("simple_vit.py")));
+    }
+
+    #[test]
+    fn tied_twins_go_to_the_body_the_prompt_describes_then_to_the_named_dir() {
+        // F64: `Template` + `Template.render` exist in both files (together
+        // ties); the real one compiles a nodelist, the wrapper delegates.
+        let real = "class Template:\n    def render(self, context):\n        nodelist = self.compile_nodelist()\n        return nodelist.render(context)\n";
+        let wrapper = "class Template:\n    def render(self, context=None, request=None):\n        return self.template.render(context)\n";
+        let graph = graph_with(&[
+            ("template/base.py", real),
+            ("template/backends/django.py", wrapper),
+        ]);
+        let mut seeds = vec![
+            seed_in(&graph, "template/backends/django.py", "Template"),
+            seed_in(&graph, "template/backends/django.py", "render"),
+        ];
+        let mut energies: HashMap<NodeId, f32> = seeds
+            .iter()
+            .map(|s| (s.resolved_id.clone().unwrap(), 1.0))
+            .collect();
+        cohere_twin_definitions(
+            &graph,
+            &mut seeds,
+            &mut energies,
+            "How does Template.render compile a parsed nodelist into rendered output for a context?",
+        );
+        assert_eq!(file_of(&graph, &seeds[0]), "template/base.py");
+        assert_eq!(file_of(&graph, &seeds[1]), "template/base.py");
+
+        // A directory the prompt names beats body words: "On Unix" picks
+        // src/unix even when the win body holds more of the prompt's words.
+        let unix = "def uv_getaddrinfo(loop):\n    return 0\n";
+        let win = "def uv_getaddrinfo(loop):\n    hostname = service = hints = buffer = validate = 0\n    return 0\n";
+        let graph = graph_with(&[
+            ("src/unix/getaddrinfo.py", unix),
+            ("src/win/getaddrinfo.py", win),
+        ]);
+        let mut seeds = vec![seed_in(&graph, "src/win/getaddrinfo.py", "uv_getaddrinfo")];
+        let mut energies: HashMap<NodeId, f32> = seeds
+            .iter()
+            .map(|s| (s.resolved_id.clone().unwrap(), 1.0))
+            .collect();
+        cohere_twin_definitions(
+            &graph,
+            &mut seeds,
+            &mut energies,
+            "On Unix, how does uv_getaddrinfo validate the hostname, service and hints buffer?",
+        );
+        assert_eq!(file_of(&graph, &seeds[0]), "src/unix/getaddrinfo.py");
     }
 
     #[test]

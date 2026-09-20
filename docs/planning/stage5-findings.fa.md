@@ -794,3 +794,23 @@ recall/forbidden/strict روی هر ۸ مجموعه بدون تغییر. ratchet
 **S2 — ابزار probe دسته‌ای:** `NM_EXPLAIN=1` (+ `NM_EXPLAIN_MAX_PRECISION`) در همه‌ی harnessهای مشترک →
 `target/explain-<set>.txt`: هر تسک کم‌precision با فایل‌ها (reason/sidecar/tokens)، ✓/✗ نسبت به gold، و seedها
 (query → node @ file). دیگر eprintln موقت لازم نیست.
+
+## F64 — twin هم‌نام: بدنه‌ای که prompt توصیف می‌کند، و پوشه‌ای که prompt نام می‌برد (session 12، PR #91)
+
+اولین خروجی ابزار explain روی large: `django_template_render` recall 0 — `Template`/`Template.render` به
+`template/backends/django.py` (wrapper نازک) می‌رفت نه `template/base.py`. `twin_cohere` دو سیگنال داشت (چند seed
+در یک فایل، stem فایل در prompt) و هر دو *مساوی* بودند → tie → ranking per-symbol (اندازه‌ی بدنه/degree) برنده.
+دو سیگنال جدید، فقط برای شکستن tie بین فایل‌هایی که از قبل واجد شرایط‌اند (guard قبلی دست‌نخورده):
+1. **کلمات پوشه**: جزء مسیرِ نام‌برده در prompt («On Unix» → `src/unix/…` نه `src/win/…`).
+2. **کلمات بدنه**: تعداد کلمات متمایز prompt (≥۴ حرف، نه نام خود seed) در بدنه‌ی twinهای آن فایل — «compile a
+   parsed node list into rendered output» فقط در بدنه‌ی `Template.render` واقعی هست.
+ترتیب: together → stem → dir → body. نسخه‌ی اول فقط body داشت و روی holdout-c یک تسک libuv را از `unix/` به
+`win/` برد (بدنه‌ی win طولانی‌تر = کلمات بیشتر) → dir قبل از body قرار گرفت؛ holdout-c به عدد قبل برگشت.
+
+| set | قبل | بعد |
+|---|---|---|
+| large | 0.950 / 0.541 / 19/20 strict 19 | **1.000 / 0.566 / 20/20 strict 20** |
+| dev-4 | 1.000 / 0.906 | 1.000 / **0.921** |
+| ۶ holdout | — | بدون تغییر |
+
+ratchet large: recall 0.99، precision 0.54، reachable 1.0.
