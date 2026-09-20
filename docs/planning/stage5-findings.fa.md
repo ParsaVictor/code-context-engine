@@ -1141,3 +1141,25 @@ dev-class برای دامنه‌ی web است (گلد خصوصی تیم همچن
 callee نمی‌آید + forbidden `webhooks/stripe/route.ts` از twin `POST`)، `tx_stripe_checkout`/`webhook` (route های stripe بدون
 نام symbol؛ path-words با anchor `lib/stripe.ts` خاموش است). درس: **قاعده‌ی «کلمات مسیر» با anchor نمی‌سازد** — راه درست
 احتمالاً امتیازدهی کلمات مسیر *داخل* selection است نه seed جدید.
+
+## F81 (ثبت، ship نشد) / F82 — دومین دور روی holdout-web (session 13، PR #112)
+
+**F81 — یال Calls از تابع هم‌نام به فایل می‌چسبد:** در `finalize_links` منبع یک Calls با `resolve_unique(name)` پیدا می‌شد؛
+وقتی `POST` در هفت `route.ts` هست، unique شکست می‌خورد و یال از *فایل* بیرون می‌رفت → callee های seed (`getUserSubscriptionPlan`)
+هرگز صندلی نمی‌گرفتند. فیکس درست (`resolve_in_file` اول) recall web را 0.642→0.667 برد ولی **large 0.641→0.558 + forbidden،
+dev 0.938→0.925** — گراف تماس درست، callee های بیشتری را زیر سقف ۳ صندلی می‌نشاند و قواعد focus برای آن تنظیم نشده‌اند.
+revert شد؛ باز می‌ماند: قبل از F81 باید صندلی callee با «آیا prompt آن callee را نام برده» سخت‌گیرتر شود.
+
+**F82 — stem قراردادی فریم‌ورک «نام‌برده» نیست:** فایل fill ی با stem مشترک بین ≥۳ فایل (`route.ts`) به‌خاطر focus «route»
+sidecar می‌شد، از جمله forbidden. حالا فقط برای stemهای قراردادی (`route`، `index`، `page`، `layout`، `handler`، `controller`، …) و
+فقط وقتی هیچ پوشه‌ی مسیرش focus term نباشد. نسخه‌ی عمومی (هر stem مشترک) `src/train.jl` ی flux را می‌انداخت (holdout-lang
+recall 1.0→0.933) → whitelist قراردادی. یک قاعده‌ی دیگر («کلمه‌ای که نام پوشه است به symbol با prefix نمی‌رسد») web را به
+0.767 می‌برد ولی تست kosha (پوشه‌ی `school/`) را می‌شکست — کنار گذاشته شد، ثبت برای بعد.
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| holdout-web | 0.642 / 0.502 / forbidden 1 | 0.642 / **0.602** / **0** |
+| large | 0.641 | **0.666** |
+| ۷ مجموعه‌ی دیگر + self | — | بدون تغییر |
+
+سقف token تسک `handle_tool_call_intent` (فیکسچر روی خود ریپو) 27.5k→28.5k: `activator.rs` خودش فایل گلد است و با هر PR بزرگ‌تر می‌شود.

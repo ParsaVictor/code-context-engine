@@ -1206,8 +1206,8 @@ forbidden_files = ["src/directive/clipboard.js", "src/views/profile/UserCard.vue
                 assert_eq!(view.budget_fill_cap, 5_000);
                 if task.id == "handle_tool_call_intent" {
                     assert!(
-                        view.active_tokens < 27_500,
-                        "{} packet tokens {} must be below the previous 27500 gold table",
+                        view.active_tokens < 28_500,
+                        "{} packet tokens {} must be below the 28500 gold table (activator.rs is itself a gold file and grows)",
                         task.id,
                         view.active_tokens
                     );
