@@ -17,7 +17,77 @@ pub(crate) fn push_anchor_queries(
         if ident.eq_ignore_ascii_case(signature.technology.as_str()) {
             continue;
         }
+        let before = sink.resolved_count();
         sink.push(graph, prompt, ident.clone(), 1.0, "identifier");
+        if sink.resolved_count() > before {
+            continue;
+        }
+        // No symbol is called that, but a file spells it in quotes: a tool
+        // name (`neuromesh_record_feedback`), a route, an event, an env var.
+        // Up to eight files — a literal in more places is a shared constant,
+        // not the place the question means (F75-A).
+        let mut files: Vec<neuromesh_core::NodeId> = graph
+            .files_with_literal(ident)
+            .into_iter()
+            .filter(|id| {
+                graph
+                    .get_node(id)
+                    .is_some_and(|n| !crate::selector::is_noise_path(&n.file_path))
+            })
+            .collect();
+        if files.is_empty() || files.len() > 8 {
+            continue;
+        }
+        // The seed cap is small, so the files are ranked by how much of the
+        // prompt they echo in their path and symbol names ("MCP server ...
+        // tool call" → `mcp/src/tools.rs` first), then by path.
+        let prompt_words: Vec<String> = prompt
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.len() >= 4)
+            .map(|w| w.to_lowercase())
+            .filter(|w| !is_prompt_stopword(w))
+            .collect();
+        let echo = |id: &neuromesh_core::NodeId| -> (usize, String) {
+            let Some(node) = graph.get_node(id) else {
+                return (0, String::new());
+            };
+            let path = node.file_path.to_string_lossy().replace('\\', "/");
+            let mut hay = path.to_lowercase();
+            for sym in graph.nodes_in_file(&node.file_path) {
+                hay.push(' ');
+                hay.push_str(&sym.name.to_lowercase());
+            }
+            let hits = prompt_words
+                .iter()
+                .filter(|w| hay.contains(w.as_str()))
+                .count();
+            (hits, path)
+        };
+        files.sort_by(|a, b| {
+            let (ha, pa) = echo(a);
+            let (hb, pb) = echo(b);
+            hb.cmp(&ha).then_with(|| pa.cmp(&pb))
+        });
+        files.truncate(4);
+        // The identifier is answered by the file: it is no longer a miss.
+        sink.buffers_mut()
+            .resolutions
+            .retain(|s| !(s.resolved_id.is_none() && s.query == *ident));
+        for (pos, file_id) in files.iter().enumerate() {
+            let Some(node) = graph.get_node(file_id) else {
+                continue;
+            };
+            if crate::selector::is_noise_path(&node.file_path) {
+                continue;
+            }
+            sink.insert(
+                file_id.clone(),
+                if pos == 0 { 0.9 } else { 0.75 },
+                format!("literal:{ident}"),
+                Some(crate::retrieval::embedding_confidence::TIER_L1_EXACT),
+                None,
+            );
+        }
     }
     if !signature.entity.is_empty()
         && signature.entity != "Workspace"
@@ -260,6 +330,54 @@ pub(crate) fn push_path_hint_seeds(
         sink.push(graph, prompt, et.clone(), energy, "entity_type");
     }
     push_compound_stem_seeds(graph, prompt, config, sink);
+    push_word_stem_seeds(graph, prompt, config, sink);
+}
+
+/// A prose word that no symbol matched but that *starts with* a file's stem
+/// names that file: "the skeletonizer" is `skeleton.rs`, "the tokenizer" is
+/// `token.rs`. Only for words the pipeline already tried and missed, only
+/// when exactly one non-noise file qualifies, stem ≥ 5 letters (F75-D).
+pub(crate) fn push_word_stem_seeds(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    config: &SeedResolutionConfig,
+    sink: &mut SeedSink<'_, '_, '_>,
+) {
+    let missed: Vec<String> = sink
+        .resolutions()
+        .iter()
+        .filter(|s| s.resolved_id.is_none())
+        .map(|s| s.query.rsplit(':').next().unwrap_or("").to_lowercase())
+        .filter(|w| w.len() >= 7 && w.chars().all(|c| c.is_ascii_alphabetic()))
+        .collect();
+    if missed.is_empty() {
+        return;
+    }
+    let stems: Vec<(String, String)> = graph
+        .file_node_paths()
+        .into_iter()
+        .filter(|(_, p)| !crate::selector::is_noise_path(p))
+        .filter_map(|(_, p)| {
+            let stem = p.file_stem()?.to_str()?.to_lowercase();
+            (stem.len() >= 5 && stem.chars().all(|c| c.is_ascii_alphabetic()))
+                .then(|| (stem, p.to_string_lossy().replace('\\', "/")))
+        })
+        .collect();
+    let mut pushed = 0usize;
+    for word in missed {
+        let mut hits = stems
+            .iter()
+            .filter(|(s, _)| word.starts_with(s.as_str()) && word.len() - s.len() <= 4);
+        let (Some((_, path)), None) = (hits.next(), hits.next()) else {
+            continue;
+        };
+        let energy = signal_weight(config, SignalKind::PathHint, pushed + 1);
+        sink.push(graph, prompt, path.clone(), energy, "file");
+        pushed += 1;
+        if pushed >= 2 {
+            break;
+        }
+    }
 }
 
 /// Two adjacent prompt words that spell a file's stem name that file: "the
@@ -448,6 +566,54 @@ pub(crate) fn config_key_mentions(prompt: &str) -> Vec<String> {
     out
 }
 
+/// Fallback only: two adjacent prompt words that spell a snake_case symbol
+/// (`packet cap` → `packet_cap`) seed it, when that name has exactly one
+/// definition outside noise paths. Runs after the token guesses, never
+/// instead of them.
+pub(crate) fn push_compound_symbol_seeds(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    sink: &mut SeedSink<'_, '_, '_>,
+) {
+    let words: Vec<String> = prompt
+        .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+        .filter(|w| w.len() >= 3)
+        .map(|w| {
+            if w.chars().all(|c| c.is_alphanumeric()) {
+                w.to_lowercase()
+            } else {
+                String::new()
+            }
+        })
+        .collect();
+    let mut pushed = 0usize;
+    for pair in words.windows(2) {
+        if pair[0].is_empty()
+            || pair[1].is_empty()
+            || is_prompt_stopword(&pair[0])
+            || is_prompt_stopword(&pair[1])
+        {
+            continue;
+        }
+        let name = format!("{}_{}", pair[0], pair[1]);
+        let defs: Vec<_> = graph
+            .nodes_named(&name)
+            .into_iter()
+            .filter(|n| {
+                n.node_type != neuromesh_core::NodeType::File
+                    && !crate::selector::is_noise_path(&n.file_path)
+            })
+            .collect();
+        if defs.len() != 1 {
+            continue;
+        }
+        sink.push(graph, prompt, name, 0.6, "fallback:compound");
+        pushed += 1;
+        if pushed >= 2 {
+            break;
+        }
+    }
+}
 #[cfg(test)]
 mod config_key_tests {
     use super::config_key_mentions;

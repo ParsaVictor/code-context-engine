@@ -82,6 +82,51 @@ impl<'res, 'eng, 'rsn> SeedSink<'res, 'eng, 'rsn> {
             return;
         }
         if let Some((mut id, conf)) = (self.resolve)(graph, &query, prompt) {
+            // A prompt word matched against every symbol in the graph (the
+            // token fallbacks) is a guess; a guess that lands in docs, tests
+            // or fixtures is noise unless the question is about those
+            // (F75-B: `token:learning` → docs/index.html, `token:packet` →
+            // tests/learning_loop.rs while the real code sat in src/).
+            // An acronym (`CLI`, `MCP`, `API`) names exactly that: a symbol
+            // or file called that, case aside. A prefix hit on a longer name
+            // (`CLI` → `cli_request_id`) is the F61 acronym-fragment noise
+            // again, on the resolver's side (F75-C).
+            // A type may carry the acronym as its first CamelCase segment
+            // (`SmsStore`, `McpServer`, `HttpClient`): that is how domain
+            // acronyms are spelled in type names, so it stays.
+            let acronym_fragment = is_acronym(&query)
+                && graph.get_node(&id).is_some_and(|n| {
+                    let typed_prefix =
+                        matches!(
+                            n.node_type,
+                            neuromesh_core::NodeType::Class
+                                | neuromesh_core::NodeType::Model
+                                | neuromesh_core::NodeType::Component
+                        ) && n.name.to_lowercase().starts_with(&query.to_lowercase());
+                    !typed_prefix
+                        && !n.name.eq_ignore_ascii_case(&query)
+                        && !n
+                            .file_path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .is_some_and(|s| s.eq_ignore_ascii_case(&query))
+                });
+            if acronym_fragment
+                || (is_guess_reason(reason)
+                    && !prompt_names_low_priority(prompt)
+                    && graph
+                        .get_node(&id)
+                        .is_some_and(|n| crate::selector::is_noise_path(&n.file_path)))
+            {
+                self.resolutions.push(SeedResolution {
+                    query,
+                    resolved_id: None,
+                    confidence: 0.0,
+                    resolution_tier: None,
+                    embedding_score: None,
+                });
+                return;
+            }
             if graph
                 .get_node(&id)
                 .is_some_and(|n| n.node_type == neuromesh_core::NodeType::File)
@@ -146,4 +191,44 @@ impl<'res, 'eng, 'rsn> SeedSink<'res, 'eng, 'rsn> {
             reasons: self.reasons,
         }
     }
+}
+
+/// Reasons that mean "a prompt word, matched to whatever symbol it fits",
+/// as opposed to something the prompt named (identifier, file, config key).
+fn is_guess_reason(reason: &str) -> bool {
+    matches!(
+        reason,
+        "token"
+            | "fallback:token"
+            | "fallback:lexical"
+            | "concept"
+            | "alias_gap_fill"
+            | "client_expansion"
+            | "inferred_keyword"
+    )
+}
+
+/// The question is about tests, docs, examples or fixtures, so those paths
+/// are its subject and not noise.
+fn prompt_names_low_priority(prompt: &str) -> bool {
+    let lower = prompt.to_lowercase();
+    [
+        "test",
+        "spec",
+        "fixture",
+        "harness",
+        "benchmark",
+        "docs",
+        "documentation",
+        "example",
+        "readme",
+        "tutorial",
+    ]
+    .iter()
+    .any(|w| lower.contains(w))
+}
+
+/// `CLI`, `MCP`, `API`, `RPN`: two to four upper-case letters.
+fn is_acronym(query: &str) -> bool {
+    (2..=4).contains(&query.len()) && query.chars().all(|c| c.is_ascii_uppercase())
 }

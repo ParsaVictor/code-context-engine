@@ -88,7 +88,7 @@ pub fn is_example_path(path: &Path) -> bool {
 }
 
 pub fn is_testdata_path(path: &Path) -> bool {
-    has_dir_segment(path, &["testdata", "test_data"])
+    has_dir_segment(path, &["testdata", "test_data", "fixtures", "__fixtures__"])
 }
 
 /// Older / compat API surfaces (`src/v3/`, `compat/`, `legacy/`).
