@@ -2226,7 +2226,10 @@ fn resolve_cluster_noun_seeds(
         .collect::<Vec<_>>()
         .join(" ");
     let hits = graph.search_symbols(noun, 16);
-    let mut by_file: HashMap<String, (f32, NodeId)> = HashMap::new();
+    // Per file: (score, node, symbol name, discriminated). A file is
+    // discriminated when something beyond the bare symbol match — the path,
+    // the stem, a sibling noun, or the exact name — singled it out.
+    let mut by_file: HashMap<String, (f32, NodeId, String, bool)> = HashMap::new();
     for hit in hits {
         let Some(node) = graph.get_node(&hit.id) else {
             continue;
@@ -2240,6 +2243,7 @@ fn resolve_cluster_noun_seeds(
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("");
+        let raw = hit.score;
         let mut score = hit.score;
         if stem == noun_l {
             score += 24.0;
@@ -2277,13 +2281,44 @@ fn resolve_cluster_noun_seeds(
         {
             score -= 30.0;
         }
-        let entry = by_file.entry(path_l).or_insert((f32::MIN, hit.id.clone()));
+        let discriminated = score != raw || node.name.eq_ignore_ascii_case(noun);
+        let name_l = node.name.to_lowercase();
+        let entry =
+            by_file
+                .entry(path_l)
+                .or_insert((f32::MIN, hit.id.clone(), String::new(), false));
         if score > entry.0 {
-            *entry = (score, hit.id);
+            *entry = (score, hit.id, name_l, discriminated);
         }
     }
-    let mut ranked: Vec<(f32, NodeId)> = by_file.into_values().collect();
-    ranked.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    // Total order: score, then path. `by_file` iterates in map order, and a
+    // tie among twin files otherwise seeds a different `val.py` per run.
+    let mut ranked: Vec<(f32, NodeId, String, bool, String)> = by_file
+        .into_iter()
+        .map(|(path, (score, id, name, disc))| (score, id, name, disc, path))
+        .collect();
+    ranked.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.4.cmp(&b.4))
+    });
+    // One symbol that merely contains the noun, in three or more files, and
+    // nothing — path, stem, sibling noun — prefers any of them (`predictions`
+    // -> `plot_predictions` in seven `val.py` twins): the noun names a
+    // concept, not a place. Seeding it would pick files by tie order.
+    let top_tier_twins = ranked
+        .iter()
+        .take_while(|(score, _, name, disc, _)| {
+            !disc && *name == ranked[0].2 && *score == ranked[0].0
+        })
+        .count();
+    if top_tier_twins >= 3 {
+        return Vec::new();
+    }
+    let ranked: Vec<(f32, NodeId)> = ranked
+        .into_iter()
+        .map(|(score, id, _, _, _)| (score, id))
+        .collect();
     if ranked.is_empty() {
         if let Some(hit) = resolve_file_path_noun(graph, noun) {
             return vec![hit];

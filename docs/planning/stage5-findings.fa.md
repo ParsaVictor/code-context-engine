@@ -919,3 +919,23 @@ ablation (هر مکانیسم جدا): فقط `reinforce_callee_edges` مقصر 
 file/config key نام‌برده در prompt) به آن resolve نشده و `base_relevance` اش < 0.9 است (یک feedback منفی) demote می‌شود.
 فایل نام‌برده در prompt هرگز با feedback حذف نمی‌شود (vit_sincos/vit_recorder به همین دلیل ثابت ماندند — twin هم‌نام
 strong-seed). ۸ مجموعه بدون تغییر.
+
+## F70 — seed اسم خوشه‌ای غیرقطعی: `predictions` → `plot_predictions` در هفت `val.py` دوقلو (session 13)
+
+`ultra_predict_stream` (large) در سه activation پشت‌سرهم سه جفت متفاوت `val.py` می‌آورد ({depth, validator}،
+{depth, detect}، {detect, semantic}). ریشه در `resolve_cluster_noun_seeds` (activator.rs): امتیاز هر فایل در یک
+`HashMap<path, …>` جمع می‌شد و `into_values()` + sort فقط روی امتیاز → بین هفت فایل با امتیاز مساوی (۸۷.۵۱، همه
+`plot_predictions`، هیچ‌کدام بدون bonus مسیر/stem/اسم خواهر) `take(3)` به ترتیب map انتخاب می‌کرد. `search_symbols`
+خودش از قبل ترتیب کامل داشت؛ این فراخوان آن را دور می‌ریخت.
+
+دو فیکس: (۱) ترتیب کامل — امتیاز، سپس مسیر. (۲) قاعده‌ی «اسم بدون تمایز»: اگر ردیف بالای رتبه‌بندی ≥۳ فایل با
+*یک* نام symbol (که فقط شامل اسم است، نه برابر آن) و امتیاز مساوی و بدون هیچ bonus باشد، اسم یک مفهوم است نه یک
+جا؛ seed نمی‌شود. (`predictions`، همان خانواده‌ی F61.)
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| large | 0.578 | **0.583** (`ultra_predict_stream` 0.17→0.25، دیگر بین اجراها فرق نمی‌کند) |
+| dev | 0.938 | 0.938 |
+| ۶ holdout دیگر | — | بدون تغییر (recall/forbidden/strict همه ثابت) |
+
+ratchet large 0.55 → 0.56.
