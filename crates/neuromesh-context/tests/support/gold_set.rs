@@ -114,6 +114,18 @@ pub fn run_gold_set(set: &str) -> GoldSetSummary {
             "== {name}: {file_count} files{}",
             if cached { " (index cache)" } else { "" }
         ));
+        // `NM_EMBED=1` (with `--features embeddings`): build the MiniLM index
+        // for the checkout so `NEUROMESH_ENGINE=hybrid` measures embedding
+        // retrieval rather than silently degrading to the lexical path.
+        #[cfg(feature = "embeddings")]
+        if std::env::var("NM_EMBED").is_ok_and(|v| v == "1") {
+            let mut emb = neuromesh_core::Config::load().embeddings;
+            emb.enabled = true;
+            match neuromesh_graph::rebuild_embeddings_for_workspace(&graph, &repo, &emb) {
+                Ok(()) => lines.push(format!("== {name}: embeddings built")),
+                Err(e) => lines.push(format!("== {name}: embeddings failed: {e}")),
+            }
+        }
 
         let set_dir = set_dir(&root, set).join(name);
         let gold_path = set_dir.join("gold_tasks.toml");
