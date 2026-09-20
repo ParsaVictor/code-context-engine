@@ -56,3 +56,20 @@ PAIRS="deepseek-ai/DeepSeek-V4-Flash-0731:zai-org/GLM-5.3" bash scripts/phase-c-
 
 **قدم بعدی پیشنهادی (به ترتیب):** F75-B (fallback seeds در مسیر نویز/تست) → F75-A (ایندکس literal های snake_case؛ feature)
 → فاز C به محض باز شدن مسیر → ۳۰ سؤال B2B تیم (5b).
+
+## ۶. ادامه (بعد از دور سوم dogfood و holdout-web)
+
+| PR | چه |
+|---|---|
+| #108 | F75 batch + F77 (ایندکس literal، seedهای حدسی خارج از نویز، acronym، stem-prefix، داور با سورس واقعی) |
+| #109 | F78: اسکریپت‌های `.sh`/`.ps1` ایندکس؛ kebab token = فایل؛ env-var literal؛ artifact ML خارج از fixtures |
+| #110 | F79: engine hybrid/MiniLM **بدتر** از fast (self 0.500/0.122 vs 0.675/0.406) — embedding اهرم نیست |
+| #111 | F80: **holdout-web** (fastify/demo + shadcn taxonomy، ۲۰ سؤال، گلد کور) — untuned 0.542/0.402 → 0.642/0.502 |
+| #112 | F82: stem قراردادی (`route.ts`…) نام‌برده نیست؛ web forbidden 0، precision 0.602؛ large 0.666 |
+| #113 | ترمیم: sed بازه‌ای در #112 ماژول تست activator.rs (۲۴۰۴ خط) را برید؛ CI سبز ماند چون lib کامپایل می‌شد. **تله: بعد از هر sed بازه‌ای `wc -l` و `git diff --stat`** |
+
+اعداد فعلی (recall/precision): dev 1.0/0.938 · large 1.0/**0.666** · holdout-2 1.0/0.554 · -c 1.0/0.573 · -lang 1.0/0.541 · -ml 1.0/0.437 ·
+-ml2 1.0/0.632 · cfg 1.0/0.712 · **web 0.642/0.602** · self(20) 0.675/0.406.
+
+ثبت‌شده و ship‌نشده (باز): F81 (Calls از تابع هم‌نام به فایل می‌چسبد؛ فیکس درست large را 0.558 می‌کند — اول صندلی callee
+سخت‌گیرتر شود)، قاعده‌ی «کلمه‌ی نام‌پوشه» (web +0.125 recall ولی تست kosha)، path-words با anchor (web 0.742 ولی c/cfg −0.08).
