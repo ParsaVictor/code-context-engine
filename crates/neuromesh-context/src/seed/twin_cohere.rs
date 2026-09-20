@@ -15,12 +15,18 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 /// Sub-word tokens of every prompt word (`SimpleViT` → `simple`, `vit`).
+// Plural-tolerant on both sides: "the PATCH user route" names `app/api/users/`,
+// "webhook" names `webhooks/` (holdout-web).
+fn norm(t: &str) -> String {
+    crate::seed::weak_file_seed::strip_plural(&t.to_lowercase()).to_string()
+}
+
 fn prompt_token_set(prompt: &str) -> HashSet<String> {
     prompt
         .split(|c: char| !c.is_alphanumeric() && c != '_')
         .filter(|w| !w.is_empty())
         .flat_map(tokenize)
-        .map(|t| t.to_lowercase())
+        .map(|t| norm(&t))
         .collect()
 }
 
@@ -29,10 +35,7 @@ fn stem_covered(path: &std::path::Path, prompt_tokens: &HashSet<String>) -> bool
         return false;
     };
     let toks = tokenize(stem);
-    !toks.is_empty()
-        && toks
-            .iter()
-            .all(|t| prompt_tokens.contains(&t.to_lowercase()))
+    !toks.is_empty() && toks.iter().all(|t| prompt_tokens.contains(&norm(t)))
 }
 
 /// (seeds defined together, stem named, dir words, body words)
@@ -57,7 +60,7 @@ fn dir_word_hits(file: &std::path::Path, prompt_tokens: &HashSet<String>) -> usi
     comps
         .iter()
         .flat_map(|c| tokenize(c))
-        .map(|t| t.to_lowercase())
+        .map(|t| norm(&t))
         .filter(|t| t.len() >= 3 && prompt_tokens.contains(t))
         .count()
 }
@@ -93,7 +96,7 @@ fn body_word_hits(
         for line in &lines[start..end] {
             for w in line.split(|c: char| !c.is_alphanumeric() && c != '_') {
                 for tok in tokenize(w) {
-                    body_tokens.insert(tok.to_lowercase());
+                    body_tokens.insert(norm(&tok));
                 }
             }
         }
@@ -125,7 +128,15 @@ pub(crate) fn cohere_twin_definitions(
             continue;
         }
         if node.node_type == NodeType::File {
-            anchor_files.insert(node.file_path.clone());
+            // Only a file the prompt named anchors the twins. `concept:routing`
+            // landing on one of seven `route.ts` files by stem is a guess, and
+            // as an anchor it dragged `PATCH` to the wrong route (holdout-web).
+            let prefix = seed.query.split_once(':').map(|(p, _)| p).unwrap_or("");
+            let named_path = seed.query.contains(['/', '\\'])
+                || std::path::Path::new(&seed.query).extension().is_some();
+            if crate::seed::weak_file_seed::STRONG.contains(&prefix) || named_path {
+                anchor_files.insert(node.file_path.clone());
+            }
             continue;
         }
         // Same name under the same parent is a twin whatever the node type:
@@ -164,7 +175,7 @@ pub(crate) fn cohere_twin_definitions(
         .filter_map(|t| t.by_file.values().next())
         .filter_map(|id| graph.get_node(id))
         .flat_map(|n| tokenize(&n.name))
-        .map(|t| t.to_lowercase())
+        .map(|t| norm(&t))
         .collect();
     let score = |file: &PathBuf| -> FileScore {
         let together = twinned

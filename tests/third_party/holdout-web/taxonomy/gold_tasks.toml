@@ -1,0 +1,72 @@
+# shadcn-ui/taxonomy — gold written from reading the source (session 13),
+# before any engine run.
+
+[[task]]
+id = "tx_create_post_limit"
+prompt = "How does the POST /api/posts route enforce the free plan's post limit?"
+gold_files = ["app/api/posts/route.ts", "lib/subscription.ts"]
+forbidden_files = ["app/api/webhooks/stripe/route.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_post_access_check"
+prompt = "How does verifyCurrentUserHasAccessToPost protect the PATCH and DELETE post routes?"
+gold_files = ["app/api/posts/[postId]/route.ts"]
+forbidden_files = ["app/api/users/stripe/route.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_stripe_checkout"
+prompt = "How does the stripe route decide between opening the billing portal and creating a checkout session?"
+gold_files = ["app/api/users/stripe/route.ts", "lib/subscription.ts"]
+forbidden_files = ["app/api/posts/route.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_stripe_webhook"
+prompt = "How does the Stripe webhook update the user's subscription on checkout completed and invoice paid?"
+gold_files = ["app/api/webhooks/stripe/route.ts"]
+forbidden_files = ["app/api/posts/route.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_subscription_plan"
+prompt = "How does getUserSubscriptionPlan decide whether a user is on the pro plan?"
+gold_files = ["lib/subscription.ts"]
+forbidden_files = ["components/editor.tsx"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_current_user"
+prompt = "How does getCurrentUser read the session with next-auth and where are the auth options defined?"
+gold_files = ["lib/session.ts", "lib/auth.ts"]
+forbidden_files = ["lib/stripe.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_update_user_name"
+prompt = "How does the PATCH user route validate the body and update the user's name?"
+gold_files = ["app/api/users/[userId]/route.ts", "lib/validations/user.ts"]
+forbidden_files = ["app/api/og/route.tsx"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_post_operations"
+prompt = "How does the PostOperations dropdown delete a post and refresh the page?"
+gold_files = ["components/post-operations.tsx"]
+forbidden_files = ["components/billing-form.tsx"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_editor_save"
+prompt = "How does the Editor component save the post content with a PATCH request?"
+gold_files = ["components/editor.tsx"]
+forbidden_files = ["components/site-footer.tsx"]
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_dashboard_guard"
+prompt = "How does the dashboard layout handle a visitor who is not logged in?"
+gold_files = ["app/(dashboard)/dashboard/layout.tsx", "lib/session.ts"]
+forbidden_files = ["app/(marketing)/pricing/page.tsx"]
+expect_seeds_missed = false

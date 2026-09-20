@@ -1,0 +1,72 @@
+# fastify/demo — gold written from reading the source (session 13), before
+# any engine run. Questions the way a backend developer asks them.
+
+[[task]]
+id = "fd_login_flow"
+prompt = "How does the /login route verify the password and store the user in the session?"
+gold_files = ["src/routes/api/auth/index.ts", "src/plugins/app/password-manager.ts", "src/plugins/app/users/users-repository.ts"]
+forbidden_files = ["src/routes/api/tasks/index.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_auth_hook"
+prompt = "Where is the onRequest hook that rejects unauthenticated requests to the API, and which route is exempt?"
+gold_files = ["src/routes/api/autohooks.ts"]
+forbidden_files = ["src/plugins/app/tasks/tasks-repository.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_update_password"
+prompt = "How does the update-password endpoint check the current password and hash the new one?"
+gold_files = ["src/routes/api/users/index.ts", "src/plugins/app/password-manager.ts"]
+forbidden_files = ["src/plugins/app/tasks/tasks-file-manager.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_task_upload"
+prompt = "How does the task image upload route store the file and update the task's filename in a transaction?"
+gold_files = ["src/routes/api/tasks/index.ts", "src/plugins/app/tasks/tasks-file-manager.ts", "src/plugins/app/tasks/tasks-repository.ts"]
+forbidden_files = ["src/routes/api/auth/index.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_is_admin"
+prompt = "How do the isAdmin and isModerator decorators check the user's roles?"
+gold_files = ["src/plugins/app/authorization.ts"]
+forbidden_files = ["src/plugins/external/knex.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_tasks_paginate"
+prompt = "How does the tasks repository paginate and filter tasks with knex?"
+gold_files = ["src/plugins/app/tasks/tasks-repository.ts"]
+forbidden_files = ["src/plugins/app/password-manager.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_rate_limit"
+prompt = "Where is the rate limit configured and which env variable sets the max?"
+gold_files = ["src/plugins/external/rate-limit.ts", "src/plugins/external/env.ts"]
+forbidden_files = ["src/routes/api/tasks/index.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_scrypt_hash"
+prompt = "How does scryptHash derive the password hash and how does compare verify it?"
+gold_files = ["src/plugins/app/password-manager.ts"]
+forbidden_files = ["src/plugins/app/file-manager.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_task_delete_image"
+prompt = "How does deleting a task's image remove the file and clear the filename?"
+gold_files = ["src/routes/api/tasks/index.ts", "src/plugins/app/tasks/tasks-file-manager.ts", "src/plugins/app/tasks/tasks-repository.ts"]
+forbidden_files = ["src/routes/api/auth/index.ts"]
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_session_plugin"
+prompt = "How is the session cookie plugin configured and where does the secret come from?"
+gold_files = ["src/plugins/external/session.ts", "src/plugins/external/env.ts"]
+forbidden_files = ["src/plugins/app/tasks/tasks-repository.ts"]
+expect_seeds_missed = false

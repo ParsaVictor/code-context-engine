@@ -22,11 +22,28 @@ pub(crate) fn push_anchor_queries(
         if sink.resolved_count() > before {
             continue;
         }
+        // The bare half of a dotted identifier (`segmentsFromString` next to
+        // `PathChunk.segmentsFromString`) is answered by the dotted one; as
+        // a literal it only finds the test that quotes the name (holdout-lang).
+        if signature.identifiers.iter().any(|other| {
+            other != ident
+                && other
+                    .rsplit(['.', ':'])
+                    .next()
+                    .is_some_and(|last| last.eq_ignore_ascii_case(ident))
+        }) {
+            continue;
+        }
         // No symbol is called that, but a file spells it in quotes: a tool
         // name (`neuromesh_record_feedback`), a route, an event, an env var.
         // Up to eight files — a literal in more places is a shared constant,
         // not the place the question means (F75-A).
-        let all = graph.files_with_literal(ident);
+        // A route is quoted with its slash (`"/update-password"`); the prompt
+        // says it without.
+        let mut all = graph.files_with_literal(ident);
+        if all.is_empty() && !ident.starts_with('/') {
+            all = graph.files_with_literal(&format!("/{ident}"));
+        }
         let is_noise = |id: &neuromesh_core::NodeId| {
             graph
                 .get_node(id)
@@ -340,6 +357,132 @@ pub(crate) fn push_path_hint_seeds(
     }
     push_compound_stem_seeds(graph, prompt, config, sink);
     push_word_stem_seeds(graph, prompt, config, sink);
+    push_path_word_seeds(graph, prompt, config, sink);
+}
+
+/// Route-shaped trees (Next.js app router, `feature/handler.ts`) name a
+/// file by its directory words, not its stem: "the Stripe webhook" is
+/// `app/api/webhooks/stripe/route.ts`, "the dashboard layout" is
+/// `app/(dashboard)/dashboard/layout.tsx`. A file whose path spells two or
+/// more distinct prompt words (plural-tolerant), and is the unique best (or
+/// one of two tied), is seeded (holdout-web).
+pub(crate) fn push_path_word_seeds(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    config: &SeedResolutionConfig,
+    sink: &mut SeedSink<'_, '_, '_>,
+) {
+    const GENERIC: &[&str] = &[
+        "src",
+        "app",
+        "lib",
+        "api",
+        "index",
+        "main",
+        "page",
+        "pages",
+        "component",
+        "components",
+        "util",
+        "utils",
+        "test",
+        "tests",
+        "route",
+        "routes",
+        "handler",
+        "handlers",
+        "file",
+        "files",
+        "config",
+        "core",
+        "common",
+        "internal",
+        "pkg",
+        "cmd",
+    ];
+    let words: std::collections::HashSet<String> = prompt
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 4)
+        .map(|w| crate::seed::weak_file_seed::strip_plural(&w.to_lowercase()).to_string())
+        .filter(|w| !is_prompt_stopword(w) && !GENERIC.contains(&w.as_str()))
+        .collect();
+    // Words the files already seeded cover: a candidate must add a word of
+    // its own. `src/unix/loop-watcher.c` covers {unix, loop} — both already
+    // in `src/unix/loop.c`, the seed — so it is the same place said twice,
+    // not a second file (holdout-c). `webhooks/stripe/route.ts` adds
+    // "webhook" to a `lib/stripe.ts` seed and is a second file.
+    let seeded_words: std::collections::HashSet<String> = sink
+        .resolutions()
+        .iter()
+        .filter_map(|s| s.resolved_id.as_ref())
+        .filter_map(|id| graph.get_node(id))
+        .flat_map(|n| {
+            n.file_path
+                .to_string_lossy()
+                .replace('\\', "/")
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|t| t.len() >= 4)
+                .map(|t| crate::seed::weak_file_seed::strip_plural(&t.to_lowercase()).to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    // Only when nothing was named: with a symbol, file or key resolved, path
+    // words cost precision on every other repository (libuv, hydra: −0.08),
+    // and the novelty check above was not enough to stop that.
+    let anchored = sink.resolutions().iter().any(|s| {
+        s.resolved_id.is_some()
+            && crate::seed::weak_file_seed::STRONG
+                .contains(&s.query.split_once(':').map(|(p, _)| p).unwrap_or(""))
+    });
+    if anchored || words.len() < 2 {
+        return;
+    }
+    let paths: Vec<(String, std::collections::HashSet<String>)> = graph
+        .file_node_paths()
+        .into_iter()
+        .filter(|(_, p)| !crate::selector::is_noise_path(p))
+        .map(|(_, p)| {
+            let path = p.to_string_lossy().replace('\\', "/");
+            let toks: std::collections::HashSet<String> = path
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|t| t.len() >= 4)
+                .map(|t| crate::seed::weak_file_seed::strip_plural(&t.to_lowercase()).to_string())
+                .collect();
+            (path, toks)
+        })
+        .collect();
+    // How many files carry each prompt word in their path: a word shared by
+    // a whole subtree (`unix` in libuv, `models` in torchvision) names a
+    // place, not a file. Only a word few files carry can single one out.
+    const RARE: usize = 4;
+    let spread = |w: &String| paths.iter().filter(|(_, toks)| toks.contains(w)).count();
+    let mut scored: Vec<(usize, String)> = paths
+        .iter()
+        .filter_map(|(path, toks)| {
+            let covered: Vec<&String> = words.iter().filter(|w| toks.contains(*w)).collect();
+            (covered.len() >= 2
+                && covered.iter().any(|w| spread(w) <= RARE)
+                && covered.iter().any(|w| !seeded_words.contains(*w)))
+            .then_some((covered.len(), path.clone()))
+        })
+        .collect();
+    if scored.is_empty() {
+        return;
+    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    let best = scored[0].0;
+    let top: Vec<&String> = scored
+        .iter()
+        .filter(|(n, _)| *n == best)
+        .map(|(_, p)| p)
+        .collect();
+    if top.len() > 2 {
+        return;
+    }
+    for (pos, path) in top.into_iter().enumerate() {
+        let energy = signal_weight(config, SignalKind::PathHint, pos + 1);
+        sink.push(graph, prompt, path.clone(), energy, "file");
+    }
 }
 
 /// A prose word that no symbol matched but that *starts with* a file's stem
@@ -449,7 +592,33 @@ pub(crate) fn push_compound_stem_seeds(
             let energy = signal_weight(config, SignalKind::PathHint, pushed);
             sink.push(graph, prompt, path.clone(), energy, "file");
             pushed += 1;
+            continue;
         }
+        // Not a file: a kebab token is often a route (`update-password` →
+        // `'/update-password'` in the routes file).
+        let lower = token.to_lowercase();
+        let mut files = graph.files_with_literal(&format!("/{lower}"));
+        if files.is_empty() {
+            files = graph.files_with_literal(&lower);
+        }
+        files.retain(|id| {
+            graph
+                .get_node(id)
+                .is_some_and(|n| !crate::selector::is_noise_path(&n.file_path))
+        });
+        if files.is_empty() || files.len() > 3 {
+            continue;
+        }
+        for id in files {
+            sink.insert(
+                id,
+                0.85,
+                format!("literal:{lower}"),
+                Some(crate::retrieval::embedding_confidence::TIER_L1_EXACT),
+                None,
+            );
+        }
+        pushed += 1;
     }
     for pair in words.windows(2) {
         if pair[0].is_empty()

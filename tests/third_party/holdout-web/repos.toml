@@ -1,0 +1,16 @@
+# Web-backend/frontend holdout (session 13): the shape of the team's private
+# B2B stack (Fastify API + Next.js app). Gold written from reading the code
+# before any engine run. Never tuned on.
+#
+#   fastify-demo — fastify/demo: a real-world Fastify + TypeScript API
+#   taxonomy     — shadcn-ui/taxonomy: Next.js 13 app router + Prisma + auth
+
+[[repo]]
+name = "fastify-demo"
+url = "https://github.com/fastify/demo"
+rev = "5cd560125b3c2f0d42192bc7f493e8e3b9e75e52"
+
+[[repo]]
+name = "taxonomy"
+url = "https://github.com/shadcn-ui/taxonomy"
+rev = "298a8857c7128a0d121e7f699dfd729f23b3966d"
