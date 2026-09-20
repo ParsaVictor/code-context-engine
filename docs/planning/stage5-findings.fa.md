@@ -1011,3 +1011,24 @@ finding روی large ‎+0.058 آورد — بیش از هر تیون امتیا
 
 نکته‌ی ثبت‌شده، فیکس‌نشده: `tests/fixtures/` به‌عنوان testdata شناخته نمی‌شود (`is_testdata_path` فقط `testdata`/
 `test_data`)؛ افزودنش امتحان شد ولی برای این سؤال اثری نداشت و برای یک finding جدا نگه داشته شد.
+
+## F75 — dogfood روی خود ریپو، ۱۰ سؤال: recall 0.600 / precision 0.325 (session 13، ثبت؛ فیکس‌نشده)
+
+مجموعه‌ی `tests/third_party/self/` (۱۰ سؤال واقعی درباره‌ی همین ریپو، گلد = فایلی که پرسنده انتظار داشت). عدد روی main
+بعد از F74: **recall 0.600، precision 0.325** — بدتر از هر holdout. ریپوی Rust چند-crate هیچ‌وقت در گلدها نبود. خوشه‌های
+ریشه از dump:
+
+| خوشه | نمونه | مکانیزم |
+|---|---|---|
+| **A. identifier ای که string literal است** | `neuromesh_record_feedback` → unresolved (فقط در `"neuromesh_record_feedback" =>` در `mcp/src/tools.rs` است) | هیچ ایندکس متنی از بدنه‌ی فایل‌ها نیست؛ نام ابزار/route/event/env-var هرگز resolve نمی‌شود. نیازمند ایندکس توکن‌های بلند snake_case در زمان index (feature، نه فیکس) |
+| **B. seedهای fallback در مسیر نویز/تست** | `token:learning` → `docs/index.html`، `token:feedback`/`packet` → `tests/learning_loop.rs`، `token:apply` → `overlay.rs` | وقتی هیچ identifier ای resolve نشود، `lexical_fallback` هر کلمه‌ی prompt را به هر symbol ای می‌چسباند، حتی در `/docs/` و `tests/` |
+| **C. acronym → prefix** | `identifier:CLI` → `cli_request_id`، `identifier:MCP` → `McpServer` | همان خانواده‌ی F61 (acronym fragment) |
+| **D. کلمه‌ی prose که فقط پیشوند stem است** | `skeletonizer` → unresolved در حالی که `skeleton.rs`/`CodeSkeletonizer` هست | F65 فقط برای `.md` با پیشوند کار می‌کند |
+| **E. «eval» → artifact overlay ML** | `artifact:EvalLoop→evaluate` در `tests/fixtures/ml-*` برای سؤال CLI eval | overlay ML روی fixtureهای تست فعال می‌شود |
+
+آزمایش رد‌شده: تعمیم F74 به symbol (`packet cap` → `packet_cap()`): self recall 0.60→0.55 / precision 0.325→0.417 —
+مخلوط؛ «python docstring» → `python_docstring()` در parser، seed دقیق ولی غلط، و چون یک seed resolve شد fallback ی که
+تصادفاً `skeleton.rs` را می‌آورد خاموش شد. revert شد. درس: یک seed «دقیق» جای چند seed ضعیف را می‌گیرد — قاعده‌ی جدید
+باید از قاعده‌ی قبلی که جایش را می‌گیرد *بهتر* باشد، نه فقط دقیق‌تر.
+
+ترتیب پیشنهادی: B (کوچک، عمومی: fallback در نویز/تست ممنوع مگر prompt بگوید test/docs) → A (feature: ایندکس literal) → D → C/E.

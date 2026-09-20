@@ -1,0 +1,4 @@
+[[repo]]
+name = "repo"
+url = "local"
+rev = "HEAD"

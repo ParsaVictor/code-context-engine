@@ -1,0 +1,69 @@
+[[task]]
+id = "self_cluster_noun"
+prompt = "How does resolve_cluster_noun_seeds rank twin files for a plain noun and when does it refuse to seed?"
+gold_files = ["crates/neuromesh-context/src/activator.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_hydra_defaults"
+prompt = "Where does the YAML parser turn a Hydra defaults list into import relationships?"
+gold_files = ["crates/neuromesh-parser/src/yaml.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_config_reader_seat"
+prompt = "How does select() give a config key's reader a required seat?"
+gold_files = ["crates/neuromesh-context/src/selector.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_index_cache"
+prompt = "How does the index cache in the third-party harness decide when to invalidate?"
+gold_files = ["crates/neuromesh-context/tests/support/index_cache.rs"]
+forbidden_files = ["tests/fixtures/mini-pinoox/Controller/MainController.php"]
+expect_seeds_missed = false
+
+[[task]]
+id = "self_twin_cohere"
+prompt = "How does cohere_twin_definitions choose between same-named definitions in sibling files?"
+gold_files = ["crates/neuromesh-context/src/seed/twin_cohere.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_negative_feedback"
+prompt = "Where does the learning loop apply negative feedback to a required file that no strong seed resolved to?"
+gold_files = ["crates/neuromesh-context/src/activator.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_docstring_fold"
+prompt = "How does the skeletonizer fold a long Python docstring while keeping the class header?"
+gold_files = ["crates/neuromesh-context/src/skeleton.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_mcp_feedback"
+prompt = "How does the MCP server handle the neuromesh_record_feedback tool call?"
+gold_files = ["crates/neuromesh-mcp/src/tools.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_packet_cap"
+prompt = "Where is the packet cap for Balanced mode enforced after skeletonization?"
+gold_files = ["crates/neuromesh-context/src/activator.rs", "crates/neuromesh-context/src/selector.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_eval_judge"
+prompt = "How does the CLI eval command pick the judge model and reject self-judging?"
+gold_files = ["crates/neuromesh-cli/src/commands/tasks.rs"]
+forbidden_files = []
+expect_seeds_missed = false
