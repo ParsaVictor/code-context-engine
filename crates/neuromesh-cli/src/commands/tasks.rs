@@ -746,7 +746,7 @@ async fn run_model_case(
             &reply,
         );
     }
-    let patch = strip_fences(&reply);
+    let patch = number_hunk_headers(&strip_fences(&reply), repo);
 
     let scratch = std::env::temp_dir().join(format!(
         "nm-task-{}-{}",
@@ -891,6 +891,68 @@ async fn git_apply(scratch: &Path) -> std::io::Result<std::process::Output> {
 }
 
 /// `+++ b/src/x.js` lines of a unified diff → `src/x.js`.
+/// A hunk header the model left as `@@ ... @@` (or any header without
+/// numbers) is "garbage" to `git apply`, even with `--recount`. The lines
+/// under it are usually right, so the header is rebuilt: the first old-side
+/// line of the hunk is looked up in the file under `repo` to find the start
+/// line; `--recount` fixes the counts. Numbered headers are left alone (F76).
+fn number_hunk_headers(patch: &str, repo: &Path) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let lines: Vec<&str> = patch.lines().collect();
+    let mut file: Option<Vec<String>> = None;
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        if let Some(rest) = line.strip_prefix("+++ ") {
+            let rel = rest.trim().trim_start_matches("b/");
+            file = std::fs::read_to_string(repo.join(rel))
+                .ok()
+                .map(|t| t.lines().map(|l| l.to_string()).collect());
+            out.push(line.to_string());
+            i += 1;
+            continue;
+        }
+        let numbered = line.split_whitespace().nth(1).is_some_and(|s| {
+            s.starts_with('-') && s[1..].starts_with(|c: char| c.is_ascii_digit())
+        });
+        let placeholder = line.starts_with("@@") && !numbered;
+        if !placeholder {
+            out.push(line.to_string());
+            i += 1;
+            continue;
+        }
+        // Old-side lines of this hunk: context and `-`, until the next header/file.
+        let body: Vec<&str> = lines[i + 1..]
+            .iter()
+            .take_while(|l| {
+                !l.starts_with("@@") && !l.starts_with("diff ") && !l.starts_with("--- ")
+            })
+            .copied()
+            .collect();
+        let old: Vec<&str> = body
+            .iter()
+            .filter(|l| !l.starts_with('+'))
+            .map(|l| l.get(1..).unwrap_or(""))
+            .collect();
+        let start = file
+            .as_ref()
+            .and_then(|f| {
+                let first = old.iter().find(|l| !l.trim().is_empty())?;
+                let idx_in_old = old.iter().position(|l| l == first)?;
+                f.iter()
+                    .position(|l| l.trim_end() == first.trim_end())
+                    .map(|p| p.saturating_sub(idx_in_old) + 1)
+            })
+            .unwrap_or(1);
+        let new_len = body.iter().filter(|l| !l.starts_with('-')).count();
+        out.push(format!("@@ -{start},{} +{start},{new_len} @@", old.len()));
+        i += 1;
+    }
+    let mut s = out.join("\n");
+    s.push('\n');
+    s
+}
+
 fn patched_paths(patch: &str) -> Vec<String> {
     patch
         .lines()
@@ -978,4 +1040,30 @@ fn sh_available() -> bool {
         .stderr(std::process::Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
+}
+
+#[cfg(test)]
+mod hunk_header_tests {
+    use super::number_hunk_headers;
+
+    #[test]
+    fn placeholder_header_gets_numbers_from_the_file() {
+        let dir = std::env::temp_dir().join(format!("nm-hunk-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(
+            dir.join("src/pricing.js"),
+            "function lineTotal(a, b) {\n    return a * b;\n}\n\n// BUG: tax\nfunction totalFor(subtotal, taxRate) {\n    return subtotal;\n}\n",
+        )
+        .unwrap();
+        let patch = "diff --git a/src/pricing.js b/src/pricing.js\n--- a/src/pricing.js\n+++ b/src/pricing.js\n@@ ... @@ function lineTotal(a, b) {\n \n // BUG: tax\n function totalFor(subtotal, taxRate) {\n-    return subtotal;\n+    return subtotal * (1 + taxRate);\n }\n";
+        let fixed = number_hunk_headers(patch, &dir);
+        assert!(fixed.contains("@@ -4,5 +4,5 @@"), "{fixed}");
+        // A numbered header is left alone.
+        let numbered = "--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n-a\n+b\n c\n";
+        assert_eq!(
+            number_hunk_headers(numbered, &dir).trim_end(),
+            numbered.trim_end()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -1032,3 +1032,22 @@ finding روی large ‎+0.058 آورد — بیش از هر تیون امتیا
 باید از قاعده‌ی قبلی که جایش را می‌گیرد *بهتر* باشد، نه فقط دقیق‌تر.
 
 ترتیب پیشنهادی: B (کوچک، عمومی: fallback در نویز/تست ممنوع مگر prompt بگوید test/docs) → A (feature: ایندکس literal) → D → C/E.
+
+## فاز C — اجرای دوم (2026-09-20، main بعد از #105) + F76 header بی‌شماره‌ی hunk
+
+مسیر: Baseten، `deepseek-ai/DeepSeek-V4-Pro` (reasoning) پاسخ‌دهنده، `zai-org/GLM-5.3` داور. **تله‌ی شبکه:** Baseten
+(Cloud Armor) به exit های VPN آذربایجان 403 می‌دهد حتی بدون کلید؛ فقط با exit اروپا/آمریکا 401/200. جدول کامل در
+`docs/measured.md`. خلاصه: هر ۹ سلول هر سه گیت را پاس می‌کنند؛ holdout-vision/packet 0.80→**1.00** (strict 1.00)؛ packet
+با ۱.۴–۲.۱× کارایی توکن بهتر از فایل‌های کامل.
+
+**F76 (harness):** ۲ از ۵ شکست packet در fixtures (`orders_total_with_tax`، `orders_remove_item_underflow`) patch درست
+داشتند ولی header را `@@ ... @@` نوشته بودند → `git apply --recount` هم «garbage» می‌گوید. فیکس: `number_hunk_headers`
+اولین خط old-side هر hunk بی‌شماره را در فایل پیدا و header را می‌سازد؛ header شماره‌دار دست نمی‌خورد. تست واحد. اجرای
+مجدد دو سلول به 402 (اعتبار تمام) خورد — عدد جدول pre-F76 است؛ انتظار: fixtures/packet 0.808→~0.885.
+
+**عیب واقعی packet (باز):** `rs_router_handle` با whole-gold-files پاس، با packet fail: بدنه‌ی `extract_route` fold شده و
+مدل مکانیزم را حدس زد. probe بعدی: چرا fold policy بدنه‌ی callee ای را که prompt نام برده تا می‌زند (seed_callee_exon_names
+باید نگهش می‌داشت).
+
+**هزینه:** ۹ سلول + ۲ سلول ناتمام، اعتبار Baseten تمام شد — مدل reasoning (Pro) چند برابر Flash توکن خروجی می‌سوزاند؛
+برای اجراهای بعدی Flash کافی و ارزان‌تر است (نتایج ۱۵ سپتامبر با Flash هم گیت‌ها را پاس کرد).
