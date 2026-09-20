@@ -10,8 +10,8 @@
 #[path = "support/gold_set.rs"]
 mod gold_set;
 
-const MIN_MEAN_RECALL: f32 = 0.90;
-const MIN_MEAN_PRECISION: f32 = 0.60;
+const MIN_MEAN_RECALL: f32 = 0.95; // measured 1.000 (F71/F72)
+const MIN_MEAN_PRECISION: f32 = 0.69; // measured 0.712 (F71/F72); -0.02 ratchet margin
 const MAX_FORBIDDEN_HITS: usize = 0;
 
 #[test]

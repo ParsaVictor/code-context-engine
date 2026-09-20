@@ -213,6 +213,98 @@ pub fn select(
             ));
         }
     }
+    // A config key's readers are its callees: `args.masks` in
+    // `datasets/coco.py` is where the `masks` flag does its work. A key is
+    // read from many places, so only a reader whose file stem the prompt
+    // names ("the coco dataset builder") takes a seat; the rest stay in the
+    // ranked fill.
+    for seed in seeds {
+        let Some(seed_node) = graph.get_node(seed) else {
+            continue;
+        };
+        if !matches!(
+            seed_node.node_type,
+            NodeType::Config | NodeType::Hyperparameter
+        ) {
+            continue;
+        }
+        for (neighbor, edge) in graph.get_connected_neighbors(seed) {
+            if edge.edge_type != EdgeType::Parameterizes || edge.source != *seed {
+                continue;
+            }
+            let Some(node) = graph.get_node(&neighbor) else {
+                continue;
+            };
+            let Some(file_id) = graph.file_id_for_path(&node.file_path) else {
+                continue;
+            };
+            if required.contains(&file_id) {
+                continue;
+            }
+            let stem_focus = focus_terms.iter().any(|t| file_stem_eq(&node.file_path, t));
+            // Not the reader's name: `build` is a prompt word and the name of
+            // every dataset and model builder that reads the key.
+            let focus = stem_focus;
+            if !focus {
+                continue;
+            }
+            callee_candidates.push((
+                file_id,
+                node.file_path.to_string_lossy().replace('\\', "/"),
+                focus,
+                stem_focus,
+                node.name.to_lowercase(),
+            ));
+        }
+    }
+    // A config key set again by a file that composes the seed's file (Hydra
+    // `defaults:` → Imports/DependsOn edge) is overridden there: the base
+    // holds the schema, the composer holds the value the run gets. The
+    // composer takes a seat next to the base.
+    for seed in seeds {
+        let Some(seed_node) = graph.get_node(seed) else {
+            continue;
+        };
+        if seed_node.node_type != NodeType::Config {
+            continue;
+        }
+        let Some(base_file) = graph.file_id_for_path(&seed_node.file_path) else {
+            continue;
+        };
+        for twin in graph.nodes_named(&seed_node.name) {
+            if twin.node_type != NodeType::Config || twin.file_path == seed_node.file_path {
+                continue;
+            }
+            let Some(composer) = graph.file_id_for_path(&twin.file_path) else {
+                continue;
+            };
+            if required.contains(&composer) {
+                continue;
+            }
+            let composes =
+                graph
+                    .get_connected_neighbors(&composer)
+                    .into_iter()
+                    .any(|(neighbor, edge)| {
+                        edge.source == composer
+                            && matches!(edge.edge_type, EdgeType::Imports | EdgeType::DependsOn)
+                            && (neighbor == base_file
+                                || graph
+                                    .get_node(&neighbor)
+                                    .is_some_and(|n| n.file_path == seed_node.file_path))
+                    });
+            if !composes {
+                continue;
+            }
+            callee_candidates.push((
+                composer,
+                twin.file_path.to_string_lossy().replace('\\', "/"),
+                true,
+                true, // the key itself is the prompt term; the "stem already required" skip below is for callees
+                twin.name.to_lowercase(),
+            ));
+        }
+    }
     callee_candidates.sort_by(|a, b| match (a.3, b.3) {
         (true, false) => std::cmp::Ordering::Less,
         (false, true) => std::cmp::Ordering::Greater,
