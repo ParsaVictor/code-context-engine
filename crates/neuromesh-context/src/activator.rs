@@ -215,12 +215,21 @@ impl ContextActivator {
                 let skip_concepts = graph.embedding_index().is_loaded();
                 #[cfg(not(feature = "embeddings"))]
                 let skip_concepts = false;
+                // A concept-index hit is a guess ("static" → `applyStatic`
+                // in the docs site, for a Rust question). It used to be
+                // promoted to `identifiers`, the strongest tier, which no
+                // weak-seed prune (noise path, off-family, style asset) ever
+                // touches — and only on this tiered path, the one the MCP
+                // server and CLI use, never the gold harness (F62). It goes
+                // in as a concept, the tier it is.
                 if !skip_concepts {
                     for (id, _score, _reason) in resolve_concept_seeds(graph, &sig, plan) {
                         if let Some(node) = graph.get_node(&id) {
                             let name = node.name.clone();
-                            if !sig.identifiers.iter().any(|i| i == &name) {
-                                sig.identifiers.push(name);
+                            if !sig.identifiers.iter().any(|i| i == &name)
+                                && !sig.related_concepts.iter().any(|c| c == &name)
+                            {
+                                sig.related_concepts.push(name);
                             }
                         }
                     }

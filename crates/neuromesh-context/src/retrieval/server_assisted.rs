@@ -151,6 +151,7 @@ pub fn apply_auto_extract_keywords(
         for k in kw {
             push_unique_ci(&mut signature.client_keywords, &k);
         }
+        signature.client_keywords_inferred = !signature.client_keywords.is_empty();
     }
     if signature.client_expansion.is_empty() {
         for e in ex {

@@ -108,6 +108,8 @@ pub fn is_lexical_reason(reason: &str) -> bool {
         || reason.starts_with("anchor:")
         || reason.starts_with("concept:")
         || reason.contains(":client_keyword")
+        || reason.starts_with("inferred_keyword:")
+        || reason.starts_with("client_keyword:")
         || reason.contains(":identifier")
 }
 

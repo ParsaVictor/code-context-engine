@@ -27,6 +27,7 @@ pub(crate) const WEAK: &[&str] = &[
     "token",
     "fallback",
     "client_expansion",
+    "inferred_keyword",
     "entity_type",
 ];
 

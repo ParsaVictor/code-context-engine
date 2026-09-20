@@ -814,3 +814,35 @@ recall/forbidden/strict روی هر ۸ مجموعه بدون تغییر. ratchet
 | ۶ holdout | — | بدون تغییر |
 
 ratchet large: recall 0.99، precision 0.54، reachable 1.0.
+
+## F62 — کلیدواژه‌های حدسیِ سرور با tier قوی؛ concept-seed ی که identifier می‌شد (session 12، PR #92)
+
+از dogfooding (اولین سؤال واقعی Parsa روی همین ریپو): «How does prune_off_family_weak_seeds drop a weak seed that
+landed in a style asset?» → علاوه بر فایل درست، `docs/assets/i18n.js` (`applyStatic`) و `docs/index.html` (`stats`)
+به‌عنوان seed آمدند. با trace روی مسیر CLI/MCP (`neuromesh packet --json --query …`) دو منشأ:
+
+1. **`auto_extract_keywords`** (MCP/CLI و همین‌طور `production_signature` ی harness): سرور از prompt کلیدواژه حدس
+   می‌زند («style asset» → intent pack اکسپرس: `express.static`، `static`، `stat`) و آن‌ها را در `client_keywords`
+   می‌گذارد؛ `push_client_keywords` همه را با reason `client_keyword` = **tier قوی** push می‌کرد، یعنی هیچ‌کدام از
+   pruneهای seed ضعیف (noise path، off-family، style asset) به آن‌ها نمی‌رسید. `stat` → `<div id="stats">` در سایت
+   مستندات. رفع: پرچم `client_keywords_inferred` روی `TaskSignature` (فقط وقتی سرور پر کرده، نه وقتی client داده)
+   → reason `inferred_keyword` در لیست WEAK.
+2. **مسیر tiered (`activate_tiered` → L1)** که MCP/CLI استفاده می‌کنند و harness نه: `resolve_concept_seeds` («static»
+   → `applyStatic` از concept index) نتیجه را در `sig.identifiers` **ارتقا می‌داد** — قوی‌ترین tier، به‌طور
+   ساختاری از هر prune مصون. رفع: به `related_concepts` (tier concept) می‌رود. بسته‌ی dogfood: ۲۶۹۳ → ۸۴۱ توکن،
+   فقط `lang_cohere.rs`.
+
+اثر روی harness (چون `production_signature` هم auto-extract می‌کند، بند ۱ همه‌جا اثر داشت):
+
+| set | قبل | بعد |
+|---|---|---|
+| dev-4 | 0.921 | **0.938** |
+| large | 0.566 | **0.574** |
+| holdout-2 | 0.538 | **0.554** |
+| holdout-lang | 0.536 | **0.541** |
+| holdout-ml | 0.370 | **0.437** |
+| holdout-cfg | 0.610 | **0.690** |
+| holdout-c، holdout-ml2 | — | ثابت |
+
+recall/forbidden/strict همه‌جا ثابت. ratchet: dev 0.92، large 0.55. **درس:** مسیر MCP/CLI (tiered) و مسیر harness
+(`activate`) یکی نیستند — یک باگ فقط-MCP از هیچ بنچمارکی دیده نمی‌شد؛ dogfooding آن را در اولین سؤال داد.
