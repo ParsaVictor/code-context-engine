@@ -3164,10 +3164,20 @@ impl NeuralProjectGraph {
     }
 
     /// Reinforce 1-hop call/import edges around touched nodes so related files enter packets.
+    /// Reinforce the call/import edges *among* the touched nodes — the path
+    /// the solution actually walked. It used to reinforce every such edge
+    /// touching a touched node, so "this file was useful" made the file's
+    /// whole neighbourhood useful next time: on the dev gold, positive
+    /// feedback on the gold file alone dropped the next packet's precision
+    /// 0.938 → 0.676 and pulled a forbidden file in twice (F69).
     pub fn reinforce_callee_edges(&self, node_ids: &[NodeId], success: bool) {
+        let touched: HashSet<&NodeId> = node_ids.iter().collect();
         let mut edge_ids: HashSet<EdgeId> = HashSet::new();
         for id in node_ids {
-            for (_, edge) in self.get_connected_neighbors(id) {
+            for (other, edge) in self.get_connected_neighbors(id) {
+                if !touched.contains(&other) {
+                    continue;
+                }
                 if matches!(
                     edge.edge_type,
                     EdgeType::Calls | EdgeType::Imports | EdgeType::References | EdgeType::UsedBy

@@ -901,3 +901,21 @@ D4 (اندازه‌ی packet) با dump یک packet واقعی ultralytics شر�
 
 اثر اصلی کیفی است: مدل حالا نام کلاس‌ها را می‌بیند و متن پایتون معتبر (بدون `}`) می‌گیرد — چیزی که task-success
 با مدل واقعی (فاز C) حس می‌کند، نه بنچمارک فایل‌سطحی.
+
+## F69 — حلقه‌ی یادگیری (بعد از F57): feedback مثبت مضر، feedback منفی بی‌اثر (session 12، PR #97)
+
+harness جدید `tests/learning_loop.rs`: برای هر تسک گلد، packet اول → feedback مثل `neuromesh_record_feedback` → packet دوم.
+دو جهت، هر کدام روی گراف تازه: **مثبت** (فایل‌های گلد «مفید») و **منفی** (فایل‌های اضافه‌ی packet «نامفید»).
+
+| اندازه‌گیری | dev مثبت | dev منفی | large مثبت | large منفی |
+|---|---|---|---|---|
+| قبل از فیکس | precision 0.938 → **0.676** (۹/۲۰ packet عوض؛ دو بار فایل forbidden وارد شد) | 0.583 → 0.583 (۰/۳) | — | — |
+| بعد | 0.938 → 0.938 (۰/۲۰) | 0.583 → **0.667** (۱/۳) | 0.578 → 0.578 | 0.398 → **0.494** (۴/۱۴) |
+
+ablation (هر مکانیسم جدا): فقط `reinforce_callee_edges` مقصر بود — *همه‌ی* یال‌های Calls/Imports/References/UsedBy ی
+فایل لمس‌شده را تقویت می‌کرد؛ «این فایل مفید بود» = «کل همسایگی‌اش دفعه‌ی بعد بیاید». رفع: فقط یال‌های *بین* نودهای
+لمس‌شده (مسیری که واقعاً طی شد). feedback منفی: هر دو مکانیسم قبلی (`suppress_penalized_optional`، `negative_penalty`)
+فقط فایل‌های optional را می‌دیدند؛ فایل‌های اضافه‌ی واقعی required اند. رفع: فایل required ی که هیچ seed قوی (symbol/
+file/config key نام‌برده در prompt) به آن resolve نشده و `base_relevance` اش < 0.9 است (یک feedback منفی) demote می‌شود.
+فایل نام‌برده در prompt هرگز با feedback حذف نمی‌شود (vit_sincos/vit_recorder به همین دلیل ثابت ماندند — twin هم‌نام
+strong-seed). ۸ مجموعه بدون تغییر.
