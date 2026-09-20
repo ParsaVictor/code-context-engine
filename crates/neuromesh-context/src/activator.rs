@@ -355,23 +355,7 @@ impl ContextActivator {
             inject_view_component_seeds(graph, prompt, signature, &mut sink);
         }
 
-        let seed_paths: Vec<String> = seed_energies
-            .keys()
-            .filter_map(|id| graph.get_node(id))
-            .map(|n| n.file_path.to_string_lossy().replace('\\', "/"))
-            .collect();
-        let mut manifest = NearestAncestorManifestResolver::new(graph);
-        let stack_line = manifest.stack_line(&seed_paths);
-        seed_result.packet_header = MicroHeaderGenerator::generate(
-            graph,
-            &header_config,
-            stack_line.as_deref(),
-            &seed_resolutions,
-            &seed_energies,
-            header_config.max_call_chain_depth,
-        );
         let seed_resolution_telemetry = seed_result.telemetry.clone();
-        let packet_header = seed_result.packet_header.clone();
 
         crate::seed::bare_owner::prune_bare_owner_seeds(
             &mut seed_resolutions,
@@ -449,6 +433,26 @@ impl ContextActivator {
                     .is_none_or(|id| seed_energies.contains_key(id))
             });
         }
+
+        // The header is written once the seed pipeline has settled: a seed
+        // pruned above (bare owner, off-family, weak substring, noise path)
+        // must not be announced in `@nm:seeds` (F68).
+        let seed_paths: Vec<String> = seed_energies
+            .keys()
+            .filter_map(|id| graph.get_node(id))
+            .map(|n| n.file_path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        let mut manifest = NearestAncestorManifestResolver::new(graph);
+        let stack_line = manifest.stack_line(&seed_paths);
+        seed_result.packet_header = MicroHeaderGenerator::generate(
+            graph,
+            &header_config,
+            stack_line.as_deref(),
+            &seed_resolutions,
+            &seed_energies,
+            header_config.max_call_chain_depth,
+        );
+        let packet_header = seed_result.packet_header.clone();
 
         let seed_set: HashSet<NodeId> = seed_energies.keys().cloned().collect();
         let neighborhood = if seed_set.is_empty() {
@@ -3361,6 +3365,66 @@ pub fn unused_helper() {
             "Grep only when partial: {:?}",
             miss.next_actions
         );
+    }
+
+    /// F68: `@nm:seeds` used to be written before the seed pipeline pruned
+    /// bare owners, off-family and weak substring seeds, so the header named
+    /// files the packet then did not ship. Seeds always ship, so every path
+    /// the header announces must be a packet file.
+    #[test]
+    fn micro_header_lists_only_seeds_that_survived_pruning() {
+        // "token" has no exact symbol; prefix search lands on `Tokenizer` in
+        // a file the question never named. Next to the strong `Trainer` seed
+        // that guess is pruned (weak_symbol_seed) — and must leave the header.
+        let graph = NeuralProjectGraph::new(ProjectId::new("nanogpt"));
+        let files: [(&str, &str); 2] = [
+            (
+                "train.py",
+                "class Trainer:\n    def run(self, batch):\n        loss = self.model(batch)\n        return loss\n",
+            ),
+            (
+                "data/tokenizer.py",
+                "class Tokenizer:\n    def encode(self, text):\n        return [ord(c) for c in text]\n",
+            ),
+        ];
+        for (path, src) in files {
+            let mut file = indexed(path);
+            file.language = SourceLanguage::Python;
+            graph.ingest_file(
+                &file,
+                &CodeIntelligenceEngine::analyze(&PathBuf::from(path), src, SourceLanguage::Python),
+                Some(src),
+            );
+        }
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("How does Trainer.run compute the loss for a token?"),
+            OptimizationMode::Balanced,
+        );
+        let header = view.packet_header.clone().unwrap_or_default();
+        let shipped: HashSet<String> = view
+            .active_nodes
+            .iter()
+            .map(|n| n.node.file_path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        assert!(
+            shipped.contains("train.py"),
+            "packet must ship train.py, got {shipped:?}"
+        );
+        let seeds_line = header
+            .lines()
+            .find(|l| l.starts_with("@nm:seeds:"))
+            .expect("header has a seeds line");
+        for entry in seeds_line["@nm:seeds:".len()..].split(',') {
+            let path = entry.trim().rsplit_once(':').map(|(p, _)| p).unwrap_or("");
+            assert!(
+                shipped.contains(path),
+                "header announces {path} but the packet does not ship it: {header}"
+            );
+        }
     }
 
     #[test]
