@@ -939,3 +939,29 @@ strong-seed). ۸ مجموعه بدون تغییر.
 | ۶ holdout دیگر | — | بدون تغییر (recall/forbidden/strict همه ثابت) |
 
 ratchet large 0.55 → 0.56.
+
+## F71 — خواننده‌ی دوم کلید config وارد نمی‌شد؛ F72 — ترکیب `defaults:` هایدرا (session 13)
+
+**F71 (`detr_masks_flag`، cfg):** یال‌های `Parameterizes` از `masks` (Hyperparameter در main.py) به هر پنج خواننده وجود
+داشت (`build` در coco.py/coco_panoptic.py/detr.py، `build_backbone`، `main`) — probe با یک تست موقت روی گراف. اما
+`select()` فقط برای Calls «صندلی callee» می‌دهد؛ خواننده‌های یک کلید همه با انرژی مساوی در fill می‌ماندند و هیچ‌کدام
+بالا نمی‌آمد. قاعده‌ی جدید: خواننده‌های یک seed از نوع Config/Hyperparameter مثل callee اند، *فقط* وقتی prompt
+stem فایلشان را نام برده باشد («the coco dataset builder» → `coco.py`). نام خود خواننده کافی نیست: `build` هم کلمه‌ی
+prompt است و هم نام همه‌ی builderها — نسخه‌ی اول با آن coco_panoptic.py و detr.py را هم آورد (0.67→0.60)، با stem-only
+0.75.
+
+**F72 (`hydra_early_stopping`، cfg):** کلید `early_stopping` در دو فایل: `early_stopping.yaml` (schema، `_target_`) و
+`default.yaml` که با `defaults: - early_stopping` روی آن سوار می‌شود و monitor/patience را *مقدار می‌دهد*. گراف هیچ
+یالی بین دو فایل نداشت. سه تغییر: (۱) yaml parser آیتم‌های `defaults:` را Imports می‌کند (`- x` → `dir/x.yaml`،
+`- group: x` → `dir/group/x.yaml`، `override`/`_self_`/`null`/`@`/`${}` رد می‌شوند). (۲) linker: import هرگز به
+فایل import‌کننده نمی‌رسد — `resolve_ranked` کلید هم‌نام *خود* default.yaml را ترجیح می‌داد؛ حالا به file hint
+می‌افتد → یال DependsOn به فایل درست. (۳) `select()`: اگر فایل B کلید هم‌نام seed را دارد و به فایل seed
+Imports/DependsOn دارد، B composer است و صندلی می‌گیرد (score 18). نکته: ورودی composer باید `stem_focus=true`
+باشد وگرنه قاعده‌ی «callee هم‌نام term ی که stem اش required است» (برای `build`/`build.py`) آن را می‌انداخت.
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| holdout-cfg (dev-class) | recall 0.924 / precision 0.690 | recall **1.000** / precision **0.712** (`detr_masks_flag` 0.67→0.75، `hydra_early_stopping` 0.50→0.67) |
+| ۷ مجموعه‌ی دیگر | — | بدون تغییر (dev 0.938، large 0.583، holdout-2 0.554، -c 0.573، -lang 0.541، -ml 0.432، -ml2 0.632) |
+
+ratchet cfg: recall 0.90→0.95، precision 0.60→0.69 (margin −0.02).

@@ -8,8 +8,8 @@
 //! configuration keys), nesting stops at depth 2, and CI workflows under
 //! `.github/` are left alone: `jobs`/`steps`/`with` are not project knobs.
 
-use crate::types::{AstAnalysisResult, ParsedSymbol};
-use neuromesh_core::NodeType;
+use crate::types::{AstAnalysisResult, ParsedRelationship, ParsedSymbol};
+use neuromesh_core::{EdgeType, NodeType};
 use std::path::Path;
 
 /// `cfg/default.yaml` in ultralytics has ~120 keys; a cap of 64 (JSON's)
@@ -39,6 +39,35 @@ impl YamlParser {
             let indent = line.len() - trimmed.len();
             // A list item is a value, not a key, even when it carries `k: v`.
             if trimmed.starts_with("- ") || trimmed == "-" {
+                // Hydra composition: an item under a top-level `defaults:`
+                // names another config this file layers over (`- early_stopping`
+                // → `early_stopping.yaml` beside it; `- model: mnist` →
+                // `model/mnist.yaml`). That is an import, and the linker turns
+                // it into the edge that tells a composer from its base.
+                if stack.len() == 1 && stack[0].1 == "defaults" {
+                    if let Some(target) = hydra_default_target(&trimmed[1..]) {
+                        let dir = file_path
+                            .parent()
+                            .and_then(|p| p.file_name())
+                            .and_then(|s| s.to_str())
+                            .filter(|s| !s.is_empty());
+                        let hint = match dir {
+                            Some(dir) => format!("{dir}/{target}.yaml"),
+                            None => format!("{target}.yaml"),
+                        };
+                        result.relationships.push(ParsedRelationship {
+                            source_symbol: file_path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("config")
+                                .to_string(),
+                            target_symbol: target.rsplit('/').next().unwrap_or(&target).to_string(),
+                            relationship: EdgeType::Imports,
+                            target_file_hint: Some(hint),
+                            receiver_hint: None,
+                        });
+                    }
+                }
                 continue;
             }
             let Some((key, value)) = split_key(trimmed) else {
@@ -110,6 +139,43 @@ fn keep_key(key: &str) -> bool {
         )
 }
 
+/// The config a Hydra `defaults:` item names, relative to the composing file's
+/// directory: `early_stopping` → `early_stopping`, `model: mnist` →
+/// `model/mnist`, `override /model: mnist` → `model/mnist`. `_self_`,
+/// `null`, and package-qualified (`@`) or interpolated items are skipped.
+fn hydra_default_target(item: &str) -> Option<String> {
+    let item = item.trim().trim_start_matches("override").trim();
+    if item.is_empty()
+        || item.starts_with('_')
+        || item.contains('$')
+        || item.contains('@')
+        || item.contains('[')
+    {
+        return None;
+    }
+    let (group, name) = match item.split_once(':') {
+        Some((g, n)) => (g.trim().trim_start_matches('/'), n.trim()),
+        None => ("", item),
+    };
+    let name = name.trim_matches(|c| c == '"' || c == '\'');
+    if name.is_empty() || name == "null" || name.starts_with('_') {
+        return None;
+    }
+    let ok = |s: &str| {
+        s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '/' || c == '.')
+    };
+    if !ok(group) || !ok(name) {
+        return None;
+    }
+    let name = name.strip_suffix(".yaml").unwrap_or(name);
+    Some(if group.is_empty() {
+        name.to_string()
+    } else {
+        format!("{group}/{name}")
+    })
+}
+
 fn is_workflow_path(path: &Path) -> bool {
     path.components().any(|c| {
         let s = c.as_os_str().to_string_lossy();
@@ -147,5 +213,30 @@ mod tests {
         let ast = YamlParser::parse(Path::new("mkdocs.yml"), "site_url: https://x.y\nrepo: a\n");
         let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, vec!["site_url", "repo"]);
+    }
+
+    #[test]
+    fn hydra_defaults_compose_sibling_configs() {
+        let src = "defaults:\n  - model_checkpoint\n  - early_stopping\n  - override /model: mnist\n  - _self_\n\nearly_stopping:\n  patience: 100\n";
+        let ast = YamlParser::parse(Path::new("configs/callbacks/default.yaml"), src);
+        let hints: Vec<&str> = ast
+            .relationships
+            .iter()
+            .map(|r| r.target_file_hint.as_deref().unwrap())
+            .collect();
+        assert_eq!(
+            hints,
+            vec![
+                "callbacks/model_checkpoint.yaml",
+                "callbacks/early_stopping.yaml",
+                "callbacks/model/mnist.yaml"
+            ]
+        );
+        assert!(ast
+            .relationships
+            .iter()
+            .all(|r| r.relationship == EdgeType::Imports && r.source_symbol == "default"));
+        let names: Vec<&str> = ast.symbols.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["defaults", "early_stopping", "patience"]);
     }
 }

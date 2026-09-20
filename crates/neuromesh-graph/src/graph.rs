@@ -642,11 +642,20 @@ impl NeuralProjectGraph {
 
             let linked = match rel.relationship {
                 EdgeType::Imports => {
-                    match self.resolve_ranked(
-                        &rel.target_symbol,
-                        rel.target_file_hint.as_deref(),
-                        None,
-                    ) {
+                    // An import never lands in the importing file: a Hydra
+                    // `defaults: - early_stopping` in `default.yaml` names the
+                    // sibling file, not this file's own `early_stopping:` key,
+                    // which the name lookup would otherwise prefer. Such a hit
+                    // falls through to the file hint.
+                    let resolved = self
+                        .resolve_ranked(&rel.target_symbol, rel.target_file_hint.as_deref(), None)
+                        .filter(|(target, _)| {
+                            *target == file_id
+                                || self
+                                    .get_node(target)
+                                    .is_none_or(|n| n.file_path != rel.source_file)
+                        });
+                    match resolved {
                         Some((target, confidence)) if target != file_id => {
                             self.add_edge_with_confidence(
                                 file_id.clone(),

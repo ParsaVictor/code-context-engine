@@ -10,7 +10,7 @@ bash scripts/benchmark-holdout.sh holdout  # one set
 The rule behind the table: **a number from a repository the engine was tuned on is
 not the project's number.** Only the holdout rows are.
 
-## Gold sets (2026-09-20, main after PR #98)
+## Gold sets (2026-09-20, main after PR #99)
 
 | set | repos | role | recall | precision | forbidden | oracle reachable / strict |
 |---|---|---|---|---|---|---|
@@ -21,7 +21,7 @@ not the project's number.** Only the holdout rows are.
 | **holdout-lang** | os-lib (Scala), r-lib/cli (R), Flux.jl (Julia) | never tuned on | **1.000** | **0.541** | **1** | 14/15 · 12 |
 | holdout-ml | keras-io examples (Keras), setfit (Hugging Face) | **tuned on in D-3** (5 iterations read its numbers) — dev-class since then; fresh ML holdout is `holdout-ml2` | **1.000** | **0.432** | **0** | 10/10 · 10 |
 | **holdout-ml2** | peft (Hugging Face adapter library), keras-hub (Keras 3 model library) | never tuned on; first run after gold lock (session 12) | **1.000** | **0.632** | **0** | 10/10 · 7 |
-| **holdout-cfg** | lightning-hydra-template (Hydra YAML), detr (argparse) | D-4 gold; two hydra tasks probed for F55 (session 12) — dev-class for config questions | **0.924** | **0.690** | **0** | — |
+| **holdout-cfg** | lightning-hydra-template (Hydra YAML), detr (argparse) | D-4 gold; F55 (session 12) + F71/F72 (session 13) tuned on it — dev-class for config questions | **1.000** | **0.712** | **0** | — |
 | **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.587** | **0** | — |
 
 - **recall / precision** are file-level against a hand-written gold (`gold_files`) per question.
