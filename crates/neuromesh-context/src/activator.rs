@@ -698,6 +698,7 @@ impl ContextActivator {
                         | "path_hint"
                         | "client_keyword"
                         | "config_key"
+                        | "literal"
                 )
             })
             .filter_map(|s| s.resolved_id.as_ref())

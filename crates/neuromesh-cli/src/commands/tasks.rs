@@ -473,6 +473,7 @@ pub async fn execute(args: &[String]) -> Result<()> {
                     judge.as_ref().expect("judge set with model executor");
                 run_qa_judge_case(
                     case,
+                    &repo,
                     context_text,
                     provider.as_ref(),
                     model,
@@ -563,16 +564,22 @@ enough to answer confidently, say so plainly instead of guessing.";
 /// fluent but wrong answer that happens to name the right symbols. Treat a
 /// QA-judge task_success number as directional, not as strong as the
 /// verify-command path, until gold answers are authored.
+/// Enough for a handful of gold files; a judge does not need a whole module tree.
+const JUDGE_REFERENCE_MAX_BYTES: usize = 48_000;
+
 const QA_JUDGE_SYSTEM_PROMPT: &str = "You are grading whether a candidate answer correctly and \
-specifically explains a set of named code elements, based only on the question, the list of \
-elements, and your own knowledge of typical code at those names/locations. A vague answer that \
+specifically explains a set of named code elements. Grade against the reference source you are \
+given — what this code actually does — never against what code at such names typically does; if \
+the reference is a one-line function, an answer describing that one line is correct. A vague answer that \
 merely repeats the element names without describing what they actually do must fail. An answer \
 that gets the mechanism wrong must fail. An answer that plainly says the context was insufficient \
 must fail (it did not complete the task). Reply with exactly one line: PASS or FAIL, followed by a \
 dash and a one-sentence reason — nothing else.";
 
+#[allow(clippy::too_many_arguments)]
 async fn run_qa_judge_case(
     case: &TaskCase,
+    repo: &Path,
     context_text: String,
     provider: &dyn Provider,
     model: &str,
@@ -622,8 +629,22 @@ async fn run_qa_judge_case(
         .map(|n| format!("- {n}"))
         .collect::<Vec<_>>()
         .join("\n");
+    // The judge grades against the real code, not against "typical" code at
+    // those names: a fixture whose `extract_route` is a one-line trim was
+    // failed for describing exactly that (F77). The reference is the full
+    // content of the files `needs` name — independent of what the candidate
+    // was shown, so all three context modes are graded the same way.
+    let mut reference = whole_gold_files_context(case, repo);
+    if reference.len() > JUDGE_REFERENCE_MAX_BYTES {
+        let mut cut = JUDGE_REFERENCE_MAX_BYTES;
+        while !reference.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        reference.truncate(cut);
+        reference.push_str("\n... (reference truncated)\n");
+    }
     let judge_user = format!(
-        "## Question asked of the candidate\n{}\n\n## Code elements the answer must correctly explain\n{needs_list}\n\n## Candidate answer\n{answer}",
+        "## Question asked of the candidate\n{}\n\n## Code elements the answer must correctly explain\n{needs_list}\n\n## Reference source (ground truth; the candidate may not have seen all of it)\n{reference}\n## Candidate answer\n{answer}",
         case.prompt
     );
     let judge_request = ProviderRequest {

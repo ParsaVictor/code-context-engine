@@ -368,6 +368,11 @@ pub(crate) struct GraphData {
     pub parser_epoch: u32,
     pub applied_learning_episodes: HashSet<String>,
     pub concept_index: ConceptIndex,
+    /// String literals that look like names (`"neuromesh_record_feedback"`,
+    /// `"/api/v1/users"`) → the file nodes whose source contains them. A
+    /// question naming a tool, route, event or env var lands on the file that
+    /// spells it, though no symbol is called that (F75-A).
+    pub literal_index: HashMap<String, Vec<NodeId>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -394,6 +399,8 @@ pub(crate) struct GraphSnapshot {
     pub applied_learning_episodes: HashSet<String>,
     #[serde(default)]
     pub concept_index: ConceptIndex,
+    #[serde(default)]
+    pub literal_index: HashMap<String, Vec<NodeId>>,
 }
 
 #[derive(Deserialize)]
@@ -557,6 +564,9 @@ pub(crate) fn remove_file_nodes_locked(data: &mut GraphData, path: &Path) {
         }
     }
     for id in &ids {
+        for list in data.literal_index.values_mut() {
+            list.retain(|existing| existing != id);
+        }
         if let Some(node) = data.mesh.node(id).cloned() {
             unindex_name_keys(data, id, &node.name);
             if let Some(parent) = &node.parent {
@@ -629,4 +639,68 @@ pub(crate) fn index_tokens(data: &mut GraphData, id: &NodeId, name: &str) {
             ids.push(id.clone());
         }
     }
+}
+
+/// Name-like string literals in `content`: a quoted token with two or more
+/// `_`/`-`/`.` separators (`neuromesh_record_feedback`, `user-created-event`,
+/// `app.settings.debug`) or a path-like route (`/api/v1/users`). Short and
+/// plain words are skipped — those are prose, and the symbol index already
+/// covers names. At most `LITERALS_PER_FILE` per file.
+pub(crate) fn name_like_literals(content: &str) -> Vec<String> {
+    const LITERALS_PER_FILE: usize = 200;
+    let mut out: Vec<String> = Vec::new();
+    for line in content.lines() {
+        // A name in a comment or doc line is prose about the name, not the
+        // place that defines or dispatches it; backticks are markdown.
+        let t = line.trim_start();
+        if t.starts_with("//") || t.starts_with('#') || t.starts_with("/*") || t.starts_with('*') {
+            continue;
+        }
+        let bytes = line.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let q = bytes[i];
+            if q != b'"' && q != b'\'' {
+                i += 1;
+                continue;
+            }
+            let Some(rel_end) = line[i + 1..].find(q as char) else {
+                break;
+            };
+            let inner = &line[i + 1..i + 1 + rel_end];
+            i += rel_end + 2;
+            if is_name_like_literal(inner) && !out.iter().any(|o| o == inner) {
+                out.push(inner.to_string());
+                if out.len() >= LITERALS_PER_FILE {
+                    return out;
+                }
+            }
+        }
+    }
+    out
+}
+
+pub(crate) fn is_name_like_literal(s: &str) -> bool {
+    if !(8..=80).contains(&s.len()) || s.contains(char::is_whitespace) {
+        return false;
+    }
+    if let Some(rest) = s.strip_prefix('/') {
+        // A route: `/api/v1/users`, `/users/:id` — two or more segments.
+        return s.matches('/').count() >= 2
+            && rest.chars().all(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | ':' | '.' | '{' | '}')
+            });
+    }
+    let separators = s.chars().filter(|c| matches!(c, '_' | '-' | '.')).count();
+    separators >= 2
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        && s.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && !s.ends_with(".js")
+        && !s.ends_with(".ts")
+        && !s.ends_with(".py")
+        && !s.ends_with(".rs")
+        && !s.ends_with(".json")
+        && !s.ends_with(".yaml")
+        && !s.ends_with(".yml")
 }

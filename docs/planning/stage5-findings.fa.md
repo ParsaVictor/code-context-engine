@@ -1051,3 +1051,25 @@ finding روی large ‎+0.058 آورد — بیش از هر تیون امتیا
 
 **هزینه:** ۹ سلول + ۲ سلول ناتمام، اعتبار Baseten تمام شد — مدل reasoning (Pro) چند برابر Flash توکن خروجی می‌سوزاند؛
 برای اجراهای بعدی Flash کافی و ارزان‌تر است (نتایج ۱۵ سپتامبر با Flash هم گیت‌ها را پاس کرد).
+
+## F75 (فیکس) + F77 — batch «همه با هم» بعد از G2 (session 13، PR #108)
+
+Parsa: «همه‌ی اشکال‌ها را با هم و سریع». یک PR، شش تغییر، هر کدام با دلیل از dump:
+
+| # | تغییر | کجا |
+|---|---|---|
+| F77 | داور QA سورس واقعی فایل‌های `needs` را می‌بیند و «علیه کد واقعی، نه کد معمول» می‌سنجد. `rs_router_handle` در G2 خطای داور بود: `extract_route` واقعاً یک خط `trim` است | `cli/commands/tasks.rs` |
+| F75-B | seedهای حدسی (`token`، `fallback:*`، `concept`، `client_expansion`، `alias_gap_fill`) که به مسیر نویز/تست/fixture می‌رسند رد می‌شوند، مگر prompt درباره‌ی test/docs باشد. باگ جانبی: `is_noise_path` مسیر ریشه‌ای `docs/index.html` را نمی‌گرفت (`/docs/` بدون `/` اول) | `seed/sink.rs`، `selector.rs` |
+| F75-C | acronym (`CLI`، `MCP`) فقط به نام دقیق، stem فایل، یا *type* ای که با آن شروع می‌شود (`McpServer`، `SmsStore`) می‌رسد؛ نه به تابع با prefix (`cli_request_id`). نسخه‌ی اول type را هم رد می‌کرد و fixture kotlin (`SMS` → `SmsReceiver`) را شکست | `seed/sink.rs` |
+| F75-D | کلمه‌ی prose که با stem یک فایل غیرنویز شروع می‌شود (`skeletonizer` → `skeleton.rs`، یکتا، پسوند ≤۴ حرف) file seed می‌شود | `activator_seed.rs` |
+| F75-A | **ایندکس literal:** هر رشته‌ی داخل کوتیشن با ≥۲ جداکننده (`"neuromesh_record_feedback"`) یا route (`"/api/v1/users"`) → فایل؛ در `GraphData.literal_index`، در snapshot persist می‌شود، خطوط comment و backtick شمرده نمی‌شوند. identifier بدون symbol → فایل‌های غیرنویز (≤۸)، رتبه‌بندی با echo کلمات prompt در path/symbolها، ۴ تای اول seed (`literal:` = STRONG). نکته: cap کل seed = ۵ (`max_resolved_seeds`) بود که `tools.rs` را (آخرین در ترتیب ingest) می‌انداخت → رتبه‌بندی لازم شد | `graph/intern.rs`، `graph.rs`، `activator_seed.rs` |
+| — | compound symbol (`packet cap` → `packet_cap`) فقط در fallback و *کنار* حدس‌ها؛ `tests/fixtures/` = testdata | `seed/mod.rs`، `core/source_path.rs` |
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| self (۱۰ سؤال، dev-class) | recall 0.600 / precision 0.325 | **0.750 / 0.449** |
+| ۸ مجموعه‌ی گلد | — | بدون تغییر |
+
+باقی‌مانده‌ی self: `self_eval_judge` (هیچ نامی: «CLI eval command» → `commands/tasks.rs`؛ نام دستور CLI به فایل map نمی‌شود)،
+`self_negative_feedback` («learning loop» → `tests/learning_loop.rs` به‌جای activator — گلد قابل بحث)، `self_packet_cap`
+(fallback شلوغ). درس تازه: **cap کل seed (۵) با seedهای فایل‌محور (literal) می‌جنگد** — ترتیب ingest نباید سرنوشت را تعیین کند.

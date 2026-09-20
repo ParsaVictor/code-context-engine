@@ -1112,7 +1112,12 @@ pub fn is_noise_path(path: &Path) -> bool {
 /// Repository-relative: `examples/` is noise only when the repository has a
 /// non-example core (`NeuralProjectGraph::examples_are_core`).
 pub fn is_noise_path_in(path: &Path, examples_core: bool) -> bool {
-    let lower = path.to_string_lossy().replace('\\', "/").to_lowercase();
+    // Leading `/` so a root-level `docs/index.html` matches `/docs/` like a
+    // nested one does (it did not, and shipped as a seed file — F75-B).
+    let lower = format!(
+        "/{}",
+        path.to_string_lossy().replace('\\', "/").to_lowercase()
+    );
     lower.ends_with(".md")
         || lower.ends_with(".txt")
         || lower.ends_with(".rst")

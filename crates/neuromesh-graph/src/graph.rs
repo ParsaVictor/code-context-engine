@@ -601,11 +601,29 @@ impl NeuralProjectGraph {
             });
         }
         data.pending.extend(inbound);
-        data.file_hashes
-            .insert(rel.clone(), file.blake3_hash.clone());
+        let reingested = data
+            .file_hashes
+            .insert(rel.clone(), file.blake3_hash.clone())
+            .is_some();
         data.file_fingerprints
             .insert(rel.clone(), file.fingerprint());
         data.indexed_at = Some(chrono::Utc::now());
+        if let Some(src) = content {
+            let file_id = NodeId::from_file_path(&rel);
+            // Only a re-ingested file needs its old literals dropped; on a
+            // fresh index the scan over every list would be quadratic.
+            if reingested {
+                for list in data.literal_index.values_mut() {
+                    list.retain(|existing| *existing != file_id);
+                }
+            }
+            for literal in crate::intern::name_like_literals(src) {
+                let ids = data.literal_index.entry(literal).or_default();
+                if !ids.contains(&file_id) {
+                    ids.push(file_id.clone());
+                }
+            }
+        }
         if keep_source {
             if let Some(src) = content {
                 data.source_overlay.insert(rel, src.to_string());
@@ -613,6 +631,14 @@ impl NeuralProjectGraph {
         } else {
             data.source_overlay.remove(&rel);
         }
+    }
+
+    /// Files whose source spells `literal` inside quotes — a tool name, a
+    /// route, an event or env-var name that is no symbol (F75-A). Empty when
+    /// the literal is not name-like or nobody has it.
+    pub fn files_with_literal(&self, literal: &str) -> Vec<NodeId> {
+        let data = self.inner.read();
+        data.literal_index.get(literal).cloned().unwrap_or_default()
     }
 
     /// Resolve queued import/call edges after symbols exist. Safe to call after every file
@@ -2439,6 +2465,7 @@ impl NeuralProjectGraph {
                 parser_epoch: data.parser_epoch.max(GRAPH_PARSER_EPOCH),
                 applied_learning_episodes: data.applied_learning_episodes.clone(),
                 concept_index: data.concept_index.clone(),
+                literal_index: data.literal_index.clone(),
             }
         };
         if snapshot_structurally_unchanged(path, &snapshot) {
@@ -2485,6 +2512,7 @@ impl NeuralProjectGraph {
                 parser_epoch: 0,
                 applied_learning_episodes: HashSet::new(),
                 concept_index: ConceptIndex::default(),
+                literal_index: HashMap::new(),
             });
             return Ok(true);
         }
@@ -2505,6 +2533,7 @@ impl NeuralProjectGraph {
         data.stale_files = snapshot.stale_files;
         data.applied_learning_episodes = snapshot.applied_learning_episodes;
         data.parser_epoch = snapshot.parser_epoch;
+        data.literal_index = snapshot.literal_index;
         if snapshot.workspace_root.is_some() {
             data.workspace_root = snapshot.workspace_root;
         }

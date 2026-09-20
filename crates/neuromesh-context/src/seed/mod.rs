@@ -127,6 +127,12 @@ pub fn run_seed_resolution(
                 engine
             );
             fallback::lexical_fallback(graph, prompt, config, &mut sink);
+            // With nothing named, a snake_case symbol spelled by two prompt
+            // words ("packet cap" → `packet_cap`) is the best guess there
+            // is. It joins the token guesses rather than replacing them: as a
+            // regular seed it silenced a fallback that happened to be right
+            // (F75, "python docstring" → `python_docstring()`).
+            crate::activator_seed::push_compound_symbol_seeds(graph, prompt, &mut sink);
         }
         (scaffold, embedding)
     };
