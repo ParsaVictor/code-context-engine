@@ -19,6 +19,7 @@ const STRONG: &[&str] = &[
     "entity",
     "file",
     "client_keyword",
+    "config_key",
     "path_hint",
 ];
 const WEAK: &[&str] = &[

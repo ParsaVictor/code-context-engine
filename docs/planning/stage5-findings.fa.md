@@ -846,3 +846,30 @@ landed in a style asset?» → علاوه بر فایل درست، `docs/assets/
 
 recall/forbidden/strict همه‌جا ثابت. ratchet: dev 0.92، large 0.55. **درس:** مسیر MCP/CLI (tiered) و مسیر harness
 (`activate`) یکی نیستند — یک باگ فقط-MCP از هیچ بنچمارکی دیده نمی‌شد؛ dogfooding آن را در اولین سؤال داد.
+
+## F55 — کلید config بی‌hint: «the X key/flag» و `_target_` (session 12، PR #93)
+
+`hydra_compile_flag` (recall 0.5): «How does the compile key in the model config make MNISTLitModule.setup call
+torch.compile?» — `configs/model/mnist.yaml` نمی‌آمد. سه لایه با trace روی همین تسک (اعتراف: probe روی holdout-cfg؛
+از این‌جا به بعد این مجموعه برای سؤال‌های config dev-class است، مثل holdout-ml):
+
+1. یال `Parameterizes` برای `self.hparams.compile` به `configs/experiment/example.yaml` (override) می‌رفت نه `model/mnist.yaml`:
+   `resolve_config_key` بین دو فایل هم‌کلید dominant را می‌گرفت. رفع: `resolve_config_key_for_reader` — فایلی که
+   مقادیرش نام owner/ماژول reader را می‌برد (`_target_: src.models.mnist_module.MNISTLitModule`) برنده است؛ فقط
+   وقتی دقیقاً یک فایل چنین باشد. reader فقط نود کد (نه Config/File).
+2. حتی با یال درست، فایل config وارد packet نمی‌شد: `spread_energies` یال Parameterizes را فقط کلید→خواننده می‌پیماید
+   (تصمیم D-۴ برای جلوگیری از hub). پس *کلید* باید seed شود. «the compile key» → `config_key_mentions`: کلمه‌ی قبل از
+   key/flag/option/setting/parameter/argument یا بعد از `--` → seed با reason `config_key` (STRONG) فقط روی نودهای
+   Config/Hyperparameter، با همان resolver reader-محور.
+3. extractor از «torch.compile» identifier برهنه‌ی `compile` می‌ساخت که *به فایل درست* resolve می‌شد ولی `bare_owner`
+   (F28) آن را به‌عنوان member ی seed نقطه‌دار حذف می‌کرد. رفع: وقتی prompt همان کلمه را «X key» گفته، seed موجود به
+   `config_key:` retag می‌شود تا F28 آن را نگیرد.
+
+| set | قبل | بعد |
+|---|---|---|
+| holdout-cfg | recall 0.879 / 0.690 | recall **0.924** / 0.690 (گیت ≥0.90 پاس) |
+| ۷ مجموعه‌ی دیگر | — | بدون تغییر |
+
+باقی‌مانده‌ی cfg: `hydra_early_stopping` (کلید در دو فایل: `early_stopping.yaml` تعریف با `_target_`، `default.yaml`
+مقداردهی؛ گلد دومی را می‌خواهد — نیازمند فهم ترکیب `defaults:` هایدرا) و `detr_masks_flag` (`datasets/coco.py` که
+`args.masks` را می‌خواند؛ seed `masks` هست ولی خواننده‌ی دوم وارد نمی‌شود).
