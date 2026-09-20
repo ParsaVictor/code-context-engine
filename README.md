@@ -17,7 +17,7 @@
 > Local-first MCP context engine that cuts AI coding-agent token cost by ~90% —
 > a per-project code graph + folding for **Cursor**, **Claude Code**, **Codex**,
 > and every MCP client. Built for **web *and* ML** codebases.
-> **Status:** measured on repositories it was never tuned on — recall 1.00, precision 0.36–0.66, no forbidden file shipped in Go/Python and C/C++ holdouts; model-executed task success not yet measured. Numbers, caveats and the one-command benchmark: [docs/measured.md](docs/measured.md). Roadmap: [ROADMAP.md](ROADMAP.md).
+> **Status (2026-09-20):** measured on repositories it was never tuned on — recall 1.00, precision 0.54–0.63, no forbidden file shipped in the Go/Python, C/C++ and Hugging Face/Keras-library holdouts; model-executed task success measured (packet 1.00 / 0.80 on two fresh holdouts vs 0.90 / 0.70 for whole gold files, at fewer tokens). Numbers, caveats and the one-command benchmark: [docs/measured.md](docs/measured.md). Roadmap: [ROADMAP.md](ROADMAP.md).
 
 <sub>Derivative of **[NeuroMesh](https://github.com/pinoox/neuromesh)** by yoosef alipour (MIT). See [NOTICE](NOTICE) · [ATTRIBUTION.md](ATTRIBUTION.md) · [ROADMAP.md](ROADMAP.md).</sub>
 
@@ -252,12 +252,12 @@ On repositories the engine was **never tuned on** (gold written from the source 
 
 | holdout | recall | precision | forbidden files | needed symbols reachable |
 | :--- | ---: | ---: | ---: | ---: |
-| gin + torchvision (Go, Python) | 1.000 | 0.496 | 0 | 20/20 |
-| libuv + fmt (C, C++) | 1.000 | 0.656 | 0 | 16/16 |
-| os-lib + cli + Flux.jl (Scala, R, Julia) | 1.000 | 0.502 | 1 | 14/15 |
-| keras-io + setfit (Keras, Hugging Face) | 1.000 | 0.360 | 0 | 10/10 |
+| gin + torchvision (Go, Python) | 1.000 | 0.554 | 0 | 20/20 |
+| libuv + fmt (C, C++) | 1.000 | 0.573 | 0 | 16/16 |
+| os-lib + cli + Flux.jl (Scala, R, Julia) | 1.000 | 0.541 | 1 | 14/15 |
+| peft + keras-hub (Hugging Face, Keras 3 libraries) | 1.000 | 0.632 | 0 | 10/10 |
 
-The right file is almost always in the packet; the packet usually also carries 1–4 neighbours that a single-file gold does not want. Model-executed task success is **not measured yet**. Full table, caveats and what is still unmeasured: [docs/measured.md](docs/measured.md).
+The right file is almost always in the packet; the packet usually also carries 1–3 neighbours that a single-file gold does not want. With a real model (DeepSeek-V4-Flash answering, GLM-5.3 judging, real `verify` for patch tasks) the packet reached task success **1.00** on the Go holdout and **0.80** on the vision holdout, against 0.90 / 0.70 for the whole gold files — at fewer tokens. keras-io + setfit (the earlier Keras/HF holdout) was tuned on during phase D-3 and is no longer counted as unseen. Full table, caveats and what is still unmeasured: [docs/measured.md](docs/measured.md).
 
 Savings are **per task**, after folding — not a marketing average. Run `neuromesh eval` on your own repo to see your numbers.
 
