@@ -26,6 +26,7 @@ declare -A MANIFEST=(
   [holdout-ml]="tests/third_party/holdout-ml/repos.toml"
   [holdout-ml2]="tests/third_party/holdout-ml2/repos.toml"
   [holdout-cfg]="tests/third_party/holdout-cfg/repos.toml"
+  [holdout-web]="tests/third_party/holdout-web/repos.toml"
 )
 declare -A TEST=(
   [dev]="third_party_gold"
@@ -36,10 +37,11 @@ declare -A TEST=(
   [holdout-ml]="third_party_ml_holdout_gold"
   [holdout-ml2]="third_party_ml2_holdout_gold"
   [holdout-cfg]="third_party_cfg_holdout_gold"
+  [holdout-web]="third_party_web_holdout_gold"
   [private]="third_party_private_gold"
 )
 sets=("$@")
-if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml holdout-ml2 holdout-cfg); fi
+if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml holdout-ml2 holdout-cfg holdout-web); fi
 for set in "${sets[@]}"; do
   if [ "$set" = private ]; then
     [ -n "${NM_PRIVATE_SET_DIR:-}" ] || { echo "private: NM_PRIVATE_SET_DIR unset; skipping" >&2; }

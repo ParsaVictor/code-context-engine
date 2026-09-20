@@ -111,7 +111,31 @@ impl<'res, 'eng, 'rsn> SeedSink<'res, 'eng, 'rsn> {
                             .and_then(|s| s.to_str())
                             .is_some_and(|s| s.eq_ignore_ascii_case(&query))
                 });
+            // A guess that lands on a *file* whose stem several files share
+            // (`routing` → one of seven `route.ts`) picked one at random.
+            let ambiguous_file = is_guess_reason(reason)
+                && graph.get_node(&id).is_some_and(|n| {
+                    n.node_type == neuromesh_core::NodeType::File && {
+                        let stem = n
+                            .file_path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_lowercase())
+                            .unwrap_or_default();
+                        graph
+                            .file_node_paths()
+                            .iter()
+                            .filter(|(_, p)| {
+                                p.file_stem()
+                                    .and_then(|s| s.to_str())
+                                    .is_some_and(|s| s.eq_ignore_ascii_case(&stem))
+                            })
+                            .count()
+                            >= 2
+                    }
+                });
             if acronym_fragment
+                || ambiguous_file
                 || (is_guess_reason(reason)
                     && !prompt_names_low_priority(prompt)
                     && graph

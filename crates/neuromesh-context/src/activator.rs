@@ -1831,8 +1831,57 @@ fn resolve_seed_query_once(
     }
     let hits = graph.search_symbols(query, 12);
     let q = query.to_lowercase();
+    // A code file named exactly like the word (`stripe` → `lib/stripe.ts`)
+    // outranks a symbol that merely starts with it (`STRIPE_API_KEY` in
+    // `.env.example`, holdout-web): the word names the module.
+    let stem_file: Option<NodeId> = if query.contains(['.', '/', '\\', ':']) || q.len() < 4 {
+        None
+    } else {
+        let mut matches = graph
+            .file_node_paths()
+            .into_iter()
+            .filter(|(_, p)| {
+                p.file_stem()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|s| s.eq_ignore_ascii_case(&q))
+                    && !crate::selector::is_noise_path_in(p, graph.examples_are_core())
+                    && p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                        !matches!(
+                            e.to_ascii_lowercase().as_str(),
+                            "md" | "txt"
+                                | "rst"
+                                | "json"
+                                | "yaml"
+                                | "yml"
+                                | "toml"
+                                | "env"
+                                | "html"
+                                | "css"
+                                | "svg"
+                                | "lock"
+                        )
+                    })
+            })
+            .map(|(id, _)| id);
+        match (matches.next(), matches.next()) {
+            (Some(id), None) => Some(id),
+            _ => None,
+        }
+    };
+    let config_prefix_only = stem_file.is_some()
+        && !hits.is_empty()
+        && hits.iter().all(|h| {
+            !h.name.eq_ignore_ascii_case(query)
+                && matches!(h.node_type, NodeType::Config | NodeType::Hyperparameter)
+        });
     let hit = hits.into_iter().find(|hit| {
         if !seed_path_allowed(graph, &hit.id, prompt) {
+            return false;
+        }
+        if stem_file.is_some()
+            && !hit.name.eq_ignore_ascii_case(query)
+            && matches!(hit.node_type, NodeType::Config | NodeType::Hyperparameter)
+        {
             return false;
         }
         // A bare word is a symbol query. A *file* in a docs/markdown path
@@ -1854,6 +1903,11 @@ fn resolve_seed_query_once(
     });
     if let Some(hit) = hit {
         return Some((hit.id, (hit.score / 100.0).clamp(0.2, 0.75)));
+    }
+    if let (Some(id), true) = (stem_file, config_prefix_only) {
+        if seed_path_allowed(graph, &id, prompt) {
+            return Some((id, 0.8));
+        }
     }
     // Nothing by name: a bare word that is exactly a source file's stem
     // (`image_classification_from_scratch`) names that file, whatever symbols

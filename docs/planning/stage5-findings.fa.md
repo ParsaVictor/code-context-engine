@@ -1113,3 +1113,31 @@ embedding به شکل فعلی اهرم بزرگ نیست — سرمایه‌گ�
 فقط به‌عنوان *fallback برای سؤال بدون هیچ seed* و با گیت روی همین self set. تله: `NEUROMESH_ENGINE=hybrid` بدون ایندکس
 embedding خطا نمی‌دهد و بی‌صدا بدتر می‌شود — در MCP هم همین است (کاربری که hybrid را روشن کند و index را با embed نساخته
 باشد، packet بدتری می‌گیرد).
+
+## F80 — holdout-web: شکل stack B2B (Fastify + Next.js app router)، ۲۰ سؤال (session 13، PR #111)
+
+Parsa سؤال ندارد؛ به‌جای انتظار، دو ریپوی عمومی هم‌شکل با stack تیم (fastify/demo، shadcn-ui/taxonomy) با گلد کور (از خواندن
+کد، قبل از هر اجرا) اضافه شد: `tests/third_party/holdout-web/`. **untuned: recall 0.542 / precision 0.402 / forbidden 1** —
+بدترین recall بین همه‌ی مجموعه‌ها؛ یعنی روی همین نوع ریپو engine فایل گم می‌کند. چون روی آن فیکس شد، از همین لحظه
+dev-class برای دامنه‌ی web است (گلد خصوصی تیم همچنان holdout واقعی).
+
+خوشه‌ها و فیکس‌ها:
+| عیب | فیکس |
+|---|---|
+| `route.ts` های هم‌نام (`PATCH` در `posts/[postId]` و `users/[userId]`): `concept:routing` به یکی از هفت `route.ts` تصادفی می‌رسید و به‌عنوان anchor، `PATCH` را به route غلط می‌کشید | anchor فقط از seed قوی یا مسیر نام‌برده؛ guess ای که به فایلی با stem مشترک (≥۲ فایل) برسد unresolved |
+| «user route» ↔ `users/`، «webhook» ↔ `webhooks/` | twin_cohere: token های prompt/مسیر/بدنه با `strip_plural` |
+| `stripe` → `STRIPE_API_KEY` در `.env.example` به‌جای `lib/stripe.ts` | فایل کد با stem == کلمه بر prefix Config-key مقدم (فقط وقتی همه‌ی hitها config-prefix اند؛ نسخه‌ی گسترده‌تر `physarum_usage` فیکسچر را شکست) |
+| `onRequest`، `update-password`، `/login` در literal index نبودند | literal camelCase، kebab، route تک‌بخشی؛ kebab token ی که فایل نیست به‌عنوان route (`/update-password`) جست‌وجو می‌شود |
+| «Stripe webhook» / «dashboard layout» بدون هیچ symbol | `push_path_word_seeds`: فایلی که ≥۲ کلمه‌ی prompt را در مسیرش دارد، با یک کلمه‌ی کم‌تکرار (≤۴ فایل). **فقط وقتی هیچ seed قوی نیست**: نسخه‌ی بدون این شرط web را به 0.742 می‌برد ولی holdout-c را 0.573→0.494 و cfg را 0.712→0.682 می‌انداخت (`loop-watcher.c` کنار `loop.c`)؛ guard «کلمه‌ی تازه» هم کافی نبود |
+| نیمه‌ی bare یک identifier نقطه‌دار (`segmentsFromString`) به‌عنوان literal فقط فایل تست را می‌آورد | نیمه‌ی dotted از literal lookup مستثنا (holdout-lang 0.508→0.541 برگشت) |
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| holdout-web | 0.542 / 0.402 | **0.642 / 0.502** (سقف با path-words بدون guard: 0.742 / 0.539) |
+| self (۲۰) | 0.675 / 0.406 | 0.675 / 0.406 |
+| ۸ مجموعه‌ی دیگر | — | بدون تغییر |
+
+باقی‌مانده‌ی web: `fd_login_flow` (سه فایل گلد، packet یکی)، `tx_create_post_limit` (`lib/subscription.ts` از `getUserSubscriptionPlan`
+callee نمی‌آید + forbidden `webhooks/stripe/route.ts` از twin `POST`)، `tx_stripe_checkout`/`webhook` (route های stripe بدون
+نام symbol؛ path-words با anchor `lib/stripe.ts` خاموش است). درس: **قاعده‌ی «کلمات مسیر» با anchor نمی‌سازد** — راه درست
+احتمالاً امتیازدهی کلمات مسیر *داخل* selection است نه seed جدید.

@@ -686,7 +686,9 @@ pub(crate) fn is_name_like_literal(s: &str) -> bool {
     }
     if let Some(rest) = s.strip_prefix('/') {
         // A route: `/api/v1/users`, `/users/:id` — two or more segments.
-        return s.matches('/').count() >= 2
+        // One segment is enough when it is a real word (`/update-password`,
+        // `/login` is too short and too common).
+        return (s.matches('/').count() >= 2 || rest.len() >= 8)
             && rest.chars().all(|c| {
                 c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | ':' | '.' | '{' | '}')
             });
@@ -698,7 +700,17 @@ pub(crate) fn is_name_like_literal(s: &str) -> bool {
         && s.contains('_')
         && s.chars()
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
-    (separators >= 2 || env_var)
+    // `update-password`, `rate-limit`: a kebab name with one dash; `onRequest`,
+    // `preHandler`: a camelCase hook or event name. Both are names, not prose.
+    let kebab = separators >= 1
+        && s.contains('-')
+        && s.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    let camel = separators == 0
+        && s.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+        && s.chars().any(|c| c.is_ascii_uppercase())
+        && s.chars().all(|c| c.is_ascii_alphanumeric());
+    (separators >= 2 || env_var || kebab || camel)
         && s.chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
         && s.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
