@@ -2818,3 +2818,2408 @@ fn shared_stem_without_dir_focus(
     });
     !dir_focus
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use neuromesh_core::ProjectId;
+    use neuromesh_index::{IndexedFile, SourceLanguage};
+    use neuromesh_parser::CodeIntelligenceEngine;
+    use neuromesh_task::TaskSignatureExtractor;
+    use std::path::PathBuf;
+
+    fn indexed(rel: &str) -> IndexedFile {
+        IndexedFile {
+            project_id: ProjectId::new("neuromesh"),
+            relative_path: PathBuf::from(rel),
+            full_path: PathBuf::from(rel),
+            blake3_hash: "test".into(),
+            byte_size: 200,
+            token_count: 120,
+            language: SourceLanguage::Rust,
+            last_modified: chrono::Utc::now(),
+        }
+    }
+
+    #[test]
+    fn activates_identifier_neighborhood_not_whole_graph() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("neuromesh"));
+        let tools = r#"
+use neuromesh_task::TaskSignatureExtractor;
+pub fn handle_tool_call() {
+    let signature = TaskSignatureExtractor::extract("demo");
+    activate(&signature);
+}
+pub fn unused_helper() { let x = 1; let y = 2; let z = 3; let w = 4; }
+"#;
+        let sig = r#"
+pub struct TaskSignatureExtractor;
+impl TaskSignatureExtractor {
+    pub fn extract(prompt: &str) -> String { prompt.into() }
+}
+"#;
+        graph.ingest_file(
+            &indexed("crates/neuromesh-mcp/src/tools.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("tools.rs"),
+                tools,
+                SourceLanguage::Rust,
+            ),
+            Some(tools),
+        );
+        graph.ingest_file(
+            &indexed("crates/neuromesh-task/src/signature.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("signature.rs"),
+                sig,
+                SourceLanguage::Rust,
+            ),
+            Some(sig),
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let signature =
+            TaskSignatureExtractor::extract("How does handle_tool_call extract task intent?");
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+
+        assert!(view
+            .active_nodes
+            .iter()
+            .any(|n| n.node.name == "handle_tool_call"));
+        assert!(view.coverage.is_some());
+        assert!(view.budget_cap > 0);
+        assert!(view.seeds.iter().any(|s| s.resolved_id.is_some()));
+    }
+
+    #[test]
+    fn expand_fold_restores_body_without_disk() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("neuromesh"));
+        let tools = r#"
+use neuromesh_task::TaskSignatureExtractor;
+pub fn handle_tool_call() {
+    let signature = TaskSignatureExtractor::extract("demo");
+    activate(&signature);
+}
+pub fn unused_helper() {
+    let x = 1;
+    let y = 2;
+    let z = 3;
+    let w = 4;
+    let q = 5;
+    x + y + z + w + q
+}
+"#;
+        graph.ingest_file(
+            &indexed("crates/neuromesh-mcp/src/tools.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("tools.rs"),
+                tools,
+                SourceLanguage::Rust,
+            ),
+            Some(tools),
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry.clone());
+        let signature = TaskSignatureExtractor::extract("How does handle_tool_call work?");
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        assert!(
+            !view.fold_ids.is_empty(),
+            "expected unused_helper to fold: {:?}",
+            view.active_nodes
+                .iter()
+                .map(|n| n.node.content.clone())
+                .collect::<Vec<_>>()
+        );
+        let fold_id = view.fold_ids[0].clone();
+        let engine = crate::expansion::ExpansionEngine::new(registry);
+        let expanded = engine
+            .expand_fold(&fold_id)
+            .expect("fold must be in registry");
+        assert!(expanded.original_body.contains("let q = 5"));
+        assert_eq!(expanded.fold_id, fold_id);
+    }
+
+    #[test]
+    fn null_safe_write_stays_open_and_fold_query_roundtrips() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("gson"));
+        let adapter = r#"
+package com.google.gson;
+public class TypeAdapter<T> {
+    public void write(JsonWriter out, T value) throws IOException {
+        out.value("outer-write");
+        out.value(String.valueOf(value));
+    }
+    public TypeAdapter<T> nullSafe() {
+        return new NullSafeTypeAdapter();
+    }
+    public void unusedHelper() {
+        int a = 1;
+        int b = 2;
+        int c = 3;
+        int d = 4;
+        int e = a + b + c + d;
+    }
+    public void writeValue(JsonWriter out, T value) throws IOException {
+        out.value(String.valueOf(value));
+    }
+    private final class NullSafeTypeAdapter extends TypeAdapter<T> {
+        @Override
+        public void write(JsonWriter out, T value) throws IOException {
+            if (value != null) {
+                out.nullValue();
+            } else {
+                TypeAdapter.this.writeValue(out, value);
+            }
+        }
+        @Override
+        public T read(JsonReader in) throws IOException {
+            if (in.peek() == null) {
+                in.nextNull();
+                return null;
+            }
+            return TypeAdapter.this.read(in);
+        }
+    }
+}
+"#;
+        let array = r#"
+package com.google.gson;
+public final class JsonArray {
+    public JsonArray deepCopy() {
+        JsonArray result = new JsonArray();
+        result.add("a");
+        result.add("b");
+        result.add("c");
+        result.add("d");
+        return result;
+    }
+    public void set(int index, JsonElement element) {
+        int a = index;
+        int b = a + 1;
+        int c = b + 1;
+        elements.set(c, element);
+    }
+}
+"#;
+        let mut adapter_file = indexed("gson/src/main/java/com/google/gson/TypeAdapter.java");
+        adapter_file.language = SourceLanguage::Java;
+        adapter_file.blake3_hash = "adapter".into();
+        let mut array_file = indexed("gson/src/main/java/com/google/gson/JsonArray.java");
+        array_file.language = SourceLanguage::Java;
+        array_file.blake3_hash = "array".into();
+        graph.ingest_file(
+            &adapter_file,
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("TypeAdapter.java"),
+                adapter,
+                SourceLanguage::Java,
+            ),
+            Some(adapter),
+        );
+        graph.ingest_file(
+            &array_file,
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("JsonArray.java"),
+                array,
+                SourceLanguage::Java,
+            ),
+            Some(array),
+        );
+        graph.finalize_links();
+
+        let writes: Vec<_> = graph
+            .find_nodes_by_name("write")
+            .into_iter()
+            .filter(|n| {
+                n.node_type == NodeType::Function
+                    && n.name == "write"
+                    && n.file_path
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                        .ends_with("TypeAdapter.java")
+            })
+            .collect();
+        assert_eq!(
+            writes.len(),
+            2,
+            "TypeAdapter.write and NullSafeTypeAdapter.write must be distinct: {:?}",
+            writes
+                .iter()
+                .map(|n| (n.id.as_str().to_string(), n.parent.clone()))
+                .collect::<Vec<_>>()
+        );
+        assert_ne!(writes[0].id, writes[1].id);
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry.clone());
+        let signature = TaskSignatureExtractor::extract(
+            "I registered a custom TypeAdapter for my Point class using builder.registerTypeAdapter(Point.class, new PointAdapter().nullSafe()) exactly like the Gson javadoc example, but now every non-null Point field in my objects is being serialized as if it were null and dropped entirely from the JSON output. This started after I added .nullSafe(). Where does nullSafe() wrapping live and what could cause non-null values to be treated as null during serialization?",
+        );
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        let adapter_node = view
+            .active_nodes
+            .iter()
+            .find(|n| {
+                n.node.node_type == NodeType::File
+                    && n.node
+                        .file_path
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                        .ends_with("TypeAdapter.java")
+            })
+            .expect("TypeAdapter.java in packet");
+        let skeleton = adapter_node.node.content.as_deref().unwrap_or("");
+        assert!(
+            skeleton.contains("out.nullValue()"),
+            "buggy NullSafeTypeAdapter.write body must be visible: {skeleton}"
+        );
+        assert!(
+            !skeleton.contains("int e = a + b + c + d"),
+            "unrelated helper body must not ship: {skeleton}"
+        );
+        assert!(
+            skeleton.len() < adapter.len(),
+            "windowed skeleton {} should be thinner than the raw file {}",
+            skeleton.len(),
+            adapter.len()
+        );
+        if !view.fold_ids.is_empty() {
+            let engine = crate::expansion::ExpansionEngine::new(registry);
+            let printed = view.fold_ids[0].clone();
+            let prefix = printed
+                .rsplit_once('_')
+                .map(|(head, _)| head.to_string())
+                .unwrap_or_else(|| printed.clone());
+            let expanded = engine
+                .expand_fold(&printed)
+                .expect("exact fold_id from the packet must resolve");
+            assert!(!expanded.original_body.is_empty());
+            let via_prefix = engine
+                .expand_fold(&prefix)
+                .expect("prefix of the printed fold_id must still resolve");
+            assert_eq!(via_prefix.fold_id, expanded.fold_id);
+            let via_query = engine.expand_fold(&format!(
+                "/* [neuromesh:fold:{printed} | 6 lines folded | @Override] */"
+            ));
+            assert!(
+                via_query.is_some(),
+                "marker text from the packet must resolve"
+            );
+        }
+    }
+
+    fn bulky_fn(name: &str, marker: &str, lines: usize) -> String {
+        let mut src = format!("pub fn {name}() {{\n    let {marker} = 1;\n");
+        for _ in 0..lines {
+            src.push_str("    let x = 1;\n");
+        }
+        src.push_str(&format!("    {marker}\n}}\n"));
+        src
+    }
+
+    #[test]
+    fn packet_cap_shrinks_seed_exons_not_the_top_method() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("cap"));
+        let src = format!(
+            "{}\n{}\n{}\n{}",
+            bulky_fn("keepHot", "marker_keep_hot", 800),
+            bulky_fn("otherA", "marker_other_a", 800),
+            bulky_fn("otherB", "marker_other_b", 800),
+            bulky_fn("otherC", "marker_other_c", 800),
+        );
+        graph.ingest_file(
+            &indexed("src/keep_hot.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("keep_hot.rs"),
+                &src,
+                SourceLanguage::Rust,
+            ),
+            Some(&src),
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let signature = TaskSignatureExtractor::extract(
+            "How do keepHot, otherA, otherB, and otherC compute their values?",
+        );
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        let packet = view
+            .active_nodes
+            .iter()
+            .find(|n| n.node.node_type == NodeType::File)
+            .expect("seed file stays in the packet");
+        let skeleton = packet.node.content.as_deref().unwrap_or("");
+        assert!(
+            skeleton.contains("marker_keep_hot"),
+            "top-scored keepHot must stay open: {skeleton}"
+        );
+        assert!(
+            !skeleton.contains("marker_other_c"),
+            "reducing K must fold the lowest seed exon, not the top method: {skeleton}"
+        );
+        assert!(
+            view.active_tokens <= packet_cap(OptimizationMode::Balanced),
+            "packet {} exceeded balanced cap {}",
+            view.active_tokens,
+            packet_cap(OptimizationMode::Balanced)
+        );
+        assert!(!packet.folded_symbols.iter().any(|s| s == "keepHot"));
+        assert!(packet.folded_symbols.iter().any(|s| s == "otherC"));
+    }
+
+    #[test]
+    fn real_tools_rs_folds_siblings_and_roundtrips() {
+        let tools_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("neuromesh-mcp")
+            .join("src")
+            .join("tools.rs");
+        let tools = std::fs::read_to_string(&tools_path).expect("read tools.rs");
+        let graph = NeuralProjectGraph::new(ProjectId::new("neuromesh"));
+        graph.ingest_file(
+            &indexed("crates/neuromesh-mcp/src/tools.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("tools.rs"),
+                &tools,
+                SourceLanguage::Rust,
+            ),
+            Some(&tools),
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry.clone());
+        let signature =
+            TaskSignatureExtractor::extract("How does handle_tool_call extract intent?");
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        let packet = view
+            .active_nodes
+            .iter()
+            .find(|n| {
+                n.node.node_type == NodeType::File
+                    && n.node
+                        .file_path
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                        .ends_with("tools.rs")
+            })
+            .expect("tools.rs in packet");
+        let skeleton = packet.node.content.as_deref().unwrap_or("");
+        assert!(
+            !packet
+                .folded_symbols
+                .iter()
+                .any(|s| s == "handle_tool_call"),
+            "handle_tool_call must remain an exon, folded={:?}",
+            packet.folded_symbols
+        );
+        assert!(
+            skeleton.contains("handle_tool_call") || skeleton.contains("TaskSignatureExtractor"),
+            "handle_tool_call exon must stay open; skeleton starts: {:?}",
+            skeleton.chars().take(400).collect::<String>()
+        );
+        assert!(
+            !packet.folded_symbols.is_empty() || !view.fold_ids.is_empty(),
+            "sibling methods in tools.rs should fold"
+        );
+        let fold_id = view.fold_ids.first().cloned().expect("fold id");
+        let engine = crate::expansion::ExpansionEngine::new(registry);
+        let expanded = engine.expand_fold(&fold_id).expect("expand from registry");
+        assert!(!expanded.original_body.is_empty());
+        assert!(!expanded.original_body.contains("[neuromesh:fold:"));
+    }
+
+    #[test]
+    fn physarum_tubes_connect_two_seeds() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("neuromesh"));
+        let a = r#"
+pub fn start_job() {
+    enqueue_job();
+}
+"#;
+        let b = r#"
+pub fn enqueue_job() {
+    let x = 1;
+    x
+}
+"#;
+        graph.ingest_file(
+            &indexed("src/worker.rs"),
+            &CodeIntelligenceEngine::analyze(&PathBuf::from("worker.rs"), a, SourceLanguage::Rust),
+            Some(a),
+        );
+        graph.ingest_file(
+            &indexed("src/queue.rs"),
+            &CodeIntelligenceEngine::analyze(&PathBuf::from("queue.rs"), b, SourceLanguage::Rust),
+            Some(b),
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let signature = TaskSignatureExtractor::extract("How does start_job enqueue_job?");
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        let seeds: Vec<_> = view
+            .seeds
+            .iter()
+            .filter(|s| s.resolved_id.is_some())
+            .collect();
+        assert!(
+            seeds.len() >= 2,
+            "need two seeds for Physarum: {:?}",
+            view.seeds
+        );
+        assert!(
+            view.physarum_used,
+            "neighborhood Physarum must run for two seeds: method={}",
+            view.selection_method
+        );
+        let tel = activator.last_physarum();
+        assert!(tel.used);
+    }
+
+    #[test]
+    fn folds_survive_second_activate_in_same_session() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("neuromesh"));
+        let tools = r#"
+pub fn handle_tool_call() {
+    let signature = 1;
+    signature
+}
+pub fn unused_helper() {
+    let x = 1;
+    let y = 2;
+    let z = 3;
+    let w = 4;
+    x + y + z + w
+}
+"#;
+        graph.ingest_file(
+            &indexed("crates/neuromesh-mcp/src/tools.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("tools.rs"),
+                tools,
+                SourceLanguage::Rust,
+            ),
+            Some(tools),
+        );
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry.clone());
+        let first = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("How does handle_tool_call work?"),
+            OptimizationMode::Balanced,
+        );
+        let fold_id = first.fold_ids.first().cloned().expect("fold");
+        let second = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("How does handle_tool_call work?"),
+            OptimizationMode::Balanced,
+        );
+        assert!(
+            registry.get_fold(&fold_id).is_some()
+                || second
+                    .fold_ids
+                    .iter()
+                    .any(|id| registry.get_fold(id).is_some()),
+            "folds must persist across get_context in one session"
+        );
+        assert!(registry.fold_count() > 0);
+    }
+
+    #[test]
+    fn synaptic_feedback_pulls_coedited_file_into_second_packet() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("neuromesh"));
+        let worker = r#"
+pub fn process_job() {
+    let n = 1;
+    n
+}
+"#;
+        let sig = r#"
+pub fn extract(prompt: &str) -> String {
+    prompt.to_string()
+}
+"#;
+        graph.ingest_file(
+            &indexed("src/worker.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("worker.rs"),
+                worker,
+                SourceLanguage::Rust,
+            ),
+            Some(worker),
+        );
+        graph.ingest_file(
+            &indexed("src/signature.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("signature.rs"),
+                sig,
+                SourceLanguage::Rust,
+            ),
+            Some(sig),
+        );
+        graph.finalize_links();
+        let worker_file = graph
+            .file_id_for_path(&PathBuf::from("src/worker.rs"))
+            .expect("worker file");
+        let sig_file = graph
+            .file_id_for_path(&PathBuf::from("src/signature.rs"))
+            .expect("signature file");
+        graph.add_edge(
+            worker_file.clone(),
+            sig_file.clone(),
+            neuromesh_core::EdgeType::ModifiedWith,
+        );
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let signature = TaskSignatureExtractor::extract("How does process_job work?");
+        let first = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        let first_has_sig = first.active_nodes.iter().any(|n| {
+            n.node
+                .file_path
+                .to_string_lossy()
+                .replace('\\', "/")
+                .contains("signature.rs")
+        });
+        graph.record_neural_spike(worker_file.clone(), true, true);
+        graph.record_neural_spike(sig_file.clone(), true, true);
+        graph.apply_stdp_on_path(&[worker_file.clone(), sig_file.clone()]);
+        graph.reinforce_path(&[worker_file, sig_file], true);
+        graph.reinforce_path(
+            &[
+                graph
+                    .file_id_for_path(&PathBuf::from("src/worker.rs"))
+                    .unwrap(),
+                graph
+                    .file_id_for_path(&PathBuf::from("src/signature.rs"))
+                    .unwrap(),
+            ],
+            true,
+        );
+
+        let second = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        let second_has_sig = second.active_nodes.iter().any(|n| {
+            n.node
+                .file_path
+                .to_string_lossy()
+                .replace('\\', "/")
+                .contains("signature.rs")
+        });
+        assert!(
+            second_has_sig,
+            "pheromone fill should pull signature.rs after feedback; first={first_has_sig}"
+        );
+    }
+
+    #[test]
+    fn next_actions_expand_folds_and_grep_only_when_partial() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("neuromesh"));
+        let tools = r#"
+pub fn handle_tool_call() {
+    let signature = 1;
+    signature
+}
+pub fn unused_helper() {
+    let x = 1;
+    let y = 2;
+    let z = 3;
+    x + y + z
+}
+"#;
+        graph.ingest_file(
+            &indexed("src/tools.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("tools.rs"),
+                tools,
+                SourceLanguage::Rust,
+            ),
+            Some(tools),
+        );
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let hit = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("How does handle_tool_call work?"),
+            OptimizationMode::Balanced,
+        );
+        assert!(
+            hit.next_actions
+                .iter()
+                .any(|a| a.tool == "neuromesh_expand_fold")
+                || hit.fold_ids.is_empty(),
+            "expand_fold should be offered when folds exist: {:?}",
+            hit.next_actions
+        );
+        assert!(
+            !hit.next_actions
+                .iter()
+                .any(|a| a.tool == "neuromesh_search_symbols"),
+            "Grep is not next when coverage is complete: {:?}",
+            hit.next_actions
+        );
+        let miss = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("What does __no_such_symbol_xyz__ do?"),
+            OptimizationMode::Balanced,
+        );
+        assert_eq!(
+            miss.coverage.as_ref().map(|c| c.claim.as_str()),
+            Some("no_seed_resolved")
+        );
+        assert!(
+            !miss
+                .active_nodes
+                .iter()
+                .any(|n| n.node.node_type == neuromesh_core::NodeType::File),
+            "missed seed must not ship a utility file: {:?}",
+            miss.active_nodes
+                .iter()
+                .map(|n| n.node.file_path.clone())
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            miss.next_actions
+                .iter()
+                .any(|a| a.tool == "neuromesh_search_symbols"),
+            "Grep only when partial: {:?}",
+            miss.next_actions
+        );
+    }
+
+    /// F74: two prose words that spell a file stem name that file, and the
+    /// bare halves stop being symbols of their own — `identifier:index` no
+    /// longer lands on an unrelated `index()` action. An identifier the
+    /// prompt already wrote as one token (`roi_heads`) is not a pair.
+    #[test]
+    fn compound_stem_names_the_file_and_drops_the_bare_halves() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("nm"));
+        let files: [(&str, &str); 3] = [
+            (
+                "crates/ctx/tests/support/index_cache.rs",
+                "pub fn graph_for_checkout(rev: &str) -> bool {\n    invalidate_when(rev)\n}\nfn invalidate_when(rev: &str) -> bool {\n    rev.is_empty()\n}\n",
+            ),
+            (
+                "fixtures/app/controller.rs",
+                "pub struct MainController;\nimpl MainController {\n    pub fn index(&self) -> String {\n        String::from(\"home\")\n    }\n}\n",
+            ),
+            (
+                "crates/ctx/src/roi_heads.rs",
+                "pub fn roi_heads() -> u32 {\n    1\n}\n",
+            ),
+        ];
+        for (path, src) in files {
+            let mut file = indexed(path);
+            file.language = SourceLanguage::Rust;
+            graph.ingest_file(
+                &file,
+                &CodeIntelligenceEngine::analyze(&PathBuf::from(path), src, SourceLanguage::Rust),
+                Some(src),
+            );
+        }
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let shipped = |prompt: &str| -> HashSet<String> {
+            activator
+                .activate(
+                    &graph,
+                    &TaskSignatureExtractor::extract(prompt),
+                    OptimizationMode::Balanced,
+                )
+                .active_nodes
+                .iter()
+                .map(|n| n.node.file_path.to_string_lossy().replace('\\', "/"))
+                .collect()
+        };
+        let got = shipped("How does the index cache decide when to invalidate?");
+        assert!(
+            got.contains("crates/ctx/tests/support/index_cache.rs"),
+            "the pair 'index cache' names index_cache.rs, got {got:?}"
+        );
+        assert!(
+            !got.contains("fixtures/app/controller.rs"),
+            "bare `index` must not ship the controller, got {got:?}"
+        );
+        // `roi_heads` is one token: no pair, so no file seed from "roi"+"heads".
+        let got = shipped("How does MainController.index handle roi_heads?");
+        assert!(
+            got.contains("fixtures/app/controller.rs"),
+            "dotted identifier still resolves, got {got:?}"
+        );
+    }
+
+    /// F68: `@nm:seeds` used to be written before the seed pipeline pruned
+    /// bare owners, off-family and weak substring seeds, so the header named
+    /// files the packet then did not ship. Seeds always ship, so every path
+    /// the header announces must be a packet file.
+    #[test]
+    fn micro_header_lists_only_seeds_that_survived_pruning() {
+        // "token" has no exact symbol; prefix search lands on `Tokenizer` in
+        // a file the question never named. Next to the strong `Trainer` seed
+        // that guess is pruned (weak_symbol_seed) — and must leave the header.
+        let graph = NeuralProjectGraph::new(ProjectId::new("nanogpt"));
+        let files: [(&str, &str); 2] = [
+            (
+                "train.py",
+                "class Trainer:\n    def run(self, batch):\n        loss = self.model(batch)\n        return loss\n",
+            ),
+            (
+                "data/tokenizer.py",
+                "class Tokenizer:\n    def encode(self, text):\n        return [ord(c) for c in text]\n",
+            ),
+        ];
+        for (path, src) in files {
+            let mut file = indexed(path);
+            file.language = SourceLanguage::Python;
+            graph.ingest_file(
+                &file,
+                &CodeIntelligenceEngine::analyze(&PathBuf::from(path), src, SourceLanguage::Python),
+                Some(src),
+            );
+        }
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("How does Trainer.run compute the loss for a token?"),
+            OptimizationMode::Balanced,
+        );
+        let header = view.packet_header.clone().unwrap_or_default();
+        let shipped: HashSet<String> = view
+            .active_nodes
+            .iter()
+            .map(|n| n.node.file_path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        assert!(
+            shipped.contains("train.py"),
+            "packet must ship train.py, got {shipped:?}"
+        );
+        let seeds_line = header
+            .lines()
+            .find(|l| l.starts_with("@nm:seeds:"))
+            .expect("header has a seeds line");
+        for entry in seeds_line["@nm:seeds:".len()..].split(',') {
+            let path = entry.trim().rsplit_once(':').map(|(p, _)| p).unwrap_or("");
+            assert!(
+                shipped.contains(path),
+                "header announces {path} but the packet does not ship it: {header}"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_class_seed_beats_handle_utility_noise() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("symfony"));
+        for i in 0..24 {
+            let src = format!(
+                "<?php\ninterface AccessDeniedHandlerInterface{i} {{\n    public function handle($request);\n}}\n"
+            );
+            let path = format!("src/AccessDeniedHandlerInterface{i}.php");
+            graph.ingest_file(
+                &indexed(&path),
+                &CodeIntelligenceEngine::analyze(&PathBuf::from(&path), &src, SourceLanguage::PHP),
+                Some(&src),
+            );
+        }
+        let kernel = "<?php\nclass HttpKernel {\n    public function handle($request) { return $request; }\n}\n";
+        graph.ingest_file(
+            &indexed("src/HttpKernel.php"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("src/HttpKernel.php"),
+                kernel,
+                SourceLanguage::PHP,
+            ),
+            Some(kernel),
+        );
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "how does HttpKernel handle a request and produce a response",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let coverage = view.coverage.as_ref().expect("coverage");
+        assert!(
+            coverage.seeds_hit.iter().any(|s| s.contains("HttpKernel")),
+            "HttpKernel must resolve, got {coverage:?}"
+        );
+        assert_ne!(coverage.claim, "no_seed_resolved");
+        assert!(
+            view.active_nodes.iter().any(|n| {
+                n.node.file_path.to_string_lossy().replace('\\', "/") == "src/HttpKernel.php"
+            }),
+            "packet must include HttpKernel.php, got {:?}",
+            view.active_nodes
+                .iter()
+                .map(|n| n.node.file_path.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    fn indexed_ts(rel: &str) -> IndexedFile {
+        IndexedFile {
+            project_id: ProjectId::new("shop"),
+            relative_path: PathBuf::from(rel),
+            full_path: PathBuf::from(rel),
+            blake3_hash: rel.to_string(),
+            byte_size: 400,
+            token_count: 80,
+            language: SourceLanguage::TypeScript,
+            last_modified: chrono::Utc::now(),
+        }
+    }
+
+    fn ingest_ts(graph: &NeuralProjectGraph, rel: &str, src: &str) {
+        graph.ingest_file(
+            &indexed_ts(rel),
+            &CodeIntelligenceEngine::analyze(&PathBuf::from(rel), src, SourceLanguage::TypeScript),
+            Some(src),
+        );
+    }
+
+    #[test]
+    fn seed_callees_stay_open_siblings_still_fold() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        ingest_ts(
+            &graph,
+            "src/orders/checkout.ts",
+            r#"
+import { applyLoyaltyDiscount } from "./loyalty.ts";
+import { authorizePaymentIntent } from "../payments/stripe.ts";
+
+export function calculateCheckoutTotal(amount: number): number {
+  const discounted = applyLoyaltyDiscount(amount);
+  authorizePaymentIntent(discounted);
+  return discounted;
+}
+
+export function unusedCheckoutDebugDump(amount: number): string {
+  const a = amount;
+  const b = a + 1;
+  const c = b + 2;
+  const d = c + 3;
+  const e = d + 4;
+  return String(a + b + c + d + e);
+}
+"#,
+        );
+        ingest_ts(
+            &graph,
+            "src/orders/loyalty.ts",
+            r#"
+export function applyLoyaltyDiscount(amount: number): number {
+  const points = Math.floor(amount / 100);
+  const boost = points * 5;
+  return Math.max(0, amount - boost);
+}
+
+export function unusedExpireStalePoints(points: number): number {
+  const a = points;
+  const b = a / 2;
+  const c = b / 2;
+  const d = c / 2;
+  return Math.floor(a + b + c + d);
+}
+"#,
+        );
+        ingest_ts(
+            &graph,
+            "src/payments/stripe.ts",
+            r#"
+export function authorizePaymentIntent(amount: number): string {
+  if (amount <= 0) {
+    throw new Error("invalid");
+  }
+  return "pi_" + String(amount);
+}
+
+export function unusedListTestCards(): string[] {
+  const a = "4242";
+  const b = "4000";
+  const c = a + b;
+  const d = c + "12";
+  return [a, b, c, d];
+}
+"#,
+        );
+        ingest_ts(
+            &graph,
+            "src/lib/logger.ts",
+            r#"
+export function writeShopLog(event: string): void {
+  console.log(event);
+}
+
+export function unusedRotateBuffers(rows: string[]): string[] {
+  const out: string[] = [];
+  for (const row of rows) {
+    if (row.length > 0) {
+      out.push(row);
+    }
+  }
+  return out.slice(0, 10);
+}
+"#,
+        );
+        ingest_ts(
+            &graph,
+            "src/inventory/warehouse.ts",
+            r#"
+export function unusedRebalanceBins(): number {
+  const a = 1;
+  const b = 2;
+  const c = 3;
+  const d = 4;
+  return a + b + c + d;
+}
+"#,
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "How does calculateCheckoutTotal apply loyalty before authorizePaymentIntent?",
+            ),
+            OptimizationMode::Balanced,
+        );
+
+        let files: Vec<String> = view
+            .active_nodes
+            .iter()
+            .filter(|n| n.node.node_type == NodeType::File)
+            .map(|n| n.node.file_path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        assert!(
+            files.iter().any(|p| p.ends_with("loyalty.ts")),
+            "callee file loyalty.ts must be in the packet: {files:?}"
+        );
+        let loyalty = view
+            .active_nodes
+            .iter()
+            .find(|n| {
+                n.node.node_type == NodeType::File
+                    && n.node
+                        .file_path
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                        .ends_with("loyalty.ts")
+            })
+            .expect("loyalty.ts");
+        assert!(
+            !loyalty
+                .folded_symbols
+                .iter()
+                .any(|s| s == "applyLoyaltyDiscount"),
+            "applyLoyaltyDiscount is a seed callee and must stay an exon, folded={:?}",
+            loyalty.folded_symbols
+        );
+        let checkout = view
+            .active_nodes
+            .iter()
+            .find(|n| {
+                n.node.node_type == NodeType::File
+                    && n.node
+                        .file_path
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                        .ends_with("checkout.ts")
+            })
+            .expect("checkout.ts");
+        assert!(
+            checkout
+                .folded_symbols
+                .iter()
+                .any(|s| s == "unusedCheckoutDebugDump"),
+            "unused sibling must still fold, folded={:?}",
+            checkout.folded_symbols
+        );
+    }
+
+    #[test]
+    fn searcher_seed_ships_module_file() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        let searcher_mod = r#"
+pub struct Searcher {
+    needle: String,
+}
+
+impl Searcher {
+    pub fn search(&self, haystack: &str) -> bool {
+        let extra = haystack.len();
+        haystack.contains(&self.needle) && extra > 0
+    }
+}
+"#;
+        let query_fn = r#"
+pub fn searcher(haystack: &str, needle: &str) -> bool {
+    let a = haystack.len();
+    let b = needle.len();
+    let c = a.saturating_sub(b);
+    haystack.contains(needle) && c < 10_000
+}
+"#;
+        graph.ingest_file(
+            &indexed("src/searcher/mod.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("src/searcher/mod.rs"),
+                searcher_mod,
+                SourceLanguage::Rust,
+            ),
+            Some(searcher_mod),
+        );
+        graph.ingest_file(
+            &indexed("src/query.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("src/query.rs"),
+                query_fn,
+                SourceLanguage::Rust,
+            ),
+            Some(query_fn),
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("How does Searcher scan a haystack?"),
+            OptimizationMode::Balanced,
+        );
+        let files: Vec<String> = view
+            .active_nodes
+            .iter()
+            .filter(|n| n.node.node_type == NodeType::File)
+            .map(|n| n.node.file_path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        assert!(
+            files.iter().any(|p| p.ends_with("searcher/mod.rs")),
+            "packet must include searcher/mod.rs, files={files:?}"
+        );
+        assert!(
+            view.seeds.iter().any(|s| {
+                s.query.contains("Searcher")
+                    && s.resolved_id
+                        .as_ref()
+                        .and_then(|id| {
+                            graph.get_node(id).map(|n| {
+                                n.name == "Searcher"
+                                    && n.file_path
+                                        .to_string_lossy()
+                                        .replace('\\', "/")
+                                        .ends_with("searcher/mod.rs")
+                            })
+                        })
+                        .unwrap_or(false)
+            }),
+            "seed Searcher must resolve to searcher/mod.rs, seeds={:?}",
+            view.seeds
+        );
+    }
+
+    fn ingest_js(graph: &NeuralProjectGraph, rel: &str, src: &str) {
+        ingest_lang(graph, rel, src, SourceLanguage::JavaScript);
+    }
+
+    fn ingest_vue(graph: &NeuralProjectGraph, rel: &str, src: &str) {
+        ingest_lang(graph, rel, src, SourceLanguage::Vue);
+    }
+
+    fn ingest_lang(graph: &NeuralProjectGraph, rel: &str, src: &str, language: SourceLanguage) {
+        graph.ingest_file(
+            &IndexedFile {
+                project_id: ProjectId::new("admin"),
+                relative_path: PathBuf::from(rel),
+                full_path: PathBuf::from(rel),
+                blake3_hash: rel.to_string(),
+                byte_size: src.len() as u64,
+                token_count: 80,
+                language,
+                last_modified: chrono::Utc::now(),
+            },
+            &CodeIntelligenceEngine::analyze(&PathBuf::from(rel), src, language),
+            Some(src),
+        );
+    }
+
+    fn packet_paths(view: &ContextView) -> Vec<String> {
+        view.active_nodes
+            .iter()
+            .filter(|n| n.node.node_type == NodeType::File)
+            .map(|n| n.node.file_path.to_string_lossy().replace('\\', "/"))
+            .collect()
+    }
+
+    #[test]
+    fn compound_task_seeds_each_cluster_not_just_the_strongest() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("admin"));
+        ingest_js(
+            &graph,
+            "src/store/user.js",
+            r#"
+export function login(userInfo) {
+  return request({ url: "/login", method: "post", data: userInfo });
+}
+export function getInfo() {
+  return request({ url: "/info", method: "get" });
+}
+export function logout() {
+  return request({ url: "/logout", method: "post" });
+}
+"#,
+        );
+        ingest_js(
+            &graph,
+            "src/permission.js",
+            r#"
+export function registerPermissionGuard(router) {
+  router.beforeEach(async (to, from, next) => {
+    const roles = store.getters.roles;
+    if (hasPermission(roles, to.meta.roles)) {
+      next();
+    }
+  });
+}
+"#,
+        );
+        ingest_js(
+            &graph,
+            "src/store/modules/permission.js",
+            r#"
+export function hasPermission(roles, routeRoles) {
+  if (!routeRoles || routeRoles.length === 0) {
+    return true;
+  }
+  return roles.some((role) => routeRoles.includes(role));
+}
+export function generateRoutes(roles) {
+  return filterAsyncRoutes(asyncRoutes, roles);
+}
+"#,
+        );
+        ingest_js(
+            &graph,
+            "src/directive/permission/permission.js",
+            r#"
+export default {
+  inserted(el, binding) {
+    checkPermission(el, binding);
+  }
+}
+function checkPermission(el, binding) {
+  const roles = store.getters.roles;
+  const value = binding.value;
+  return roles.some((role) => value.includes(role));
+}
+"#,
+        );
+        ingest_js(
+            &graph,
+            "src/directive/clipboard.js",
+            r#"
+export function clipboard(el, binding) {
+  const text = String(binding.value);
+  el.setAttribute("data-clipboard", text);
+  return text;
+}
+"#,
+        );
+        ingest_vue(
+            &graph,
+            "src/views/profile/components/UserCard.vue",
+            r#"
+<template>
+  <div class="user-card">{{ name }}</div>
+</template>
+<script>
+export default {
+  name: "UserCard",
+  props: { name: { type: String, default: "" } }
+}
+</script>
+"#,
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "how does the user login and logout flow work, including the login action, getInfo action, and how the router permission guard checks roles before each route",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let files = packet_paths(&view);
+        assert!(
+            files.iter().any(|p| p.ends_with("src/store/user.js")),
+            "login cluster must seed user.js, files={files:?} seeds={:?}",
+            view.seeds
+        );
+        assert!(
+            files.iter().any(|p| p.ends_with("src/permission.js")),
+            "guard cluster must seed the router guard, files={files:?} seeds={:?}",
+            view.seeds
+        );
+        assert!(
+            files
+                .iter()
+                .any(|p| p.ends_with("src/store/modules/permission.js")),
+            "guard cluster must seed hasPermission/generateRoutes, files={files:?} seeds={:?}",
+            view.seeds
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("clipboard")),
+            "clipboard decoy must stay out, files={files:?}"
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("UserCard")),
+            "profile decoy must stay out, files={files:?}"
+        );
+        let coverage = view.coverage.as_ref().expect("coverage");
+        assert!(
+            coverage
+                .seeds_hit
+                .iter()
+                .any(|s| s.trim_start_matches("identifier:") == "getInfo" || s == "user"),
+            "login half must still hit, coverage={coverage:?}"
+        );
+        assert!(
+            coverage.seeds_hit.iter().any(|s| {
+                s.eq_ignore_ascii_case("permission")
+                    || s.eq_ignore_ascii_case("guard")
+                    || s.to_lowercase().contains("permission")
+            }),
+            "guard half must be a seed hit, coverage={coverage:?}"
+        );
+        assert_ne!(coverage.claim, "no_seed_resolved");
+    }
+
+    fn ingest_schema_collision(graph: &NeuralProjectGraph) {
+        ingest_ts(
+            graph,
+            "packages/schema/src/core/parse.ts",
+            r#"
+export type Issue = { path: (string | number)[]; message: string };
+
+export function parse(schema: object, data: unknown) {
+  const result = _parse(schema, data, []);
+  if (result.issues.length > 0) {
+    throw result;
+  }
+  return result.value;
+}
+
+export function safeParse(schema: object, data: unknown) {
+  return _parse(schema, data, []);
+}
+
+function _parse(schema: object, data: unknown, path: (string | number)[]) {
+  const issues: Issue[] = [];
+  if (typeof data !== "object" || data === null) {
+    issues.push({ path, message: "invalid_type" });
+  }
+  return { value: data, issues };
+}
+"#,
+        );
+        ingest_ts(
+            graph,
+            "packages/schema/src/core/core.ts",
+            r#"
+export type ZodType<T = unknown> = { _output: T; _input: T };
+export type output<T> = T extends { _output: infer Out } ? Out : T;
+export type input<T> = T extends { _input: infer In } ? In : T;
+"#,
+        );
+        ingest_ts(
+            graph,
+            "packages/schema/src/classic/schemas.ts",
+            r#"
+export function object(shape: Record<string, unknown>) {
+  return { type: "object", shape };
+}
+"#,
+        );
+        ingest_ts(
+            graph,
+            "packages/bench/safeparse.ts",
+            r#"
+export function safeParse(schema: object, data: unknown) {
+  return { success: true, data };
+}
+export function parseSimpleObject(data: unknown) {
+  return typeof data === "object";
+}
+export function parseNestedObject(data: unknown) {
+  return parseSimpleObject(data);
+}
+export function parseObjectArray(data: unknown) {
+  return Array.isArray(data);
+}
+"#,
+        );
+        ingest_ts(
+            graph,
+            "packages/schema/src/locales/fa.ts",
+            r#"
+export function localeError(issue: { path: unknown[]; code: string }) {
+  if (issue.code === "invalid_type") {
+    return "validation error at path";
+  }
+  return "invalid";
+}
+export function invalidTypeError() {
+  return "invalid type";
+}
+"#,
+        );
+        ingest_ts(
+            graph,
+            "packages/schema/src/v3/types.ts",
+            r#"
+export class ZodError extends Error {
+  path: (string | number)[] = [];
+}
+export function parse(schema: object, data: unknown) {
+  return data;
+}
+export function safeParse(schema: object, data: unknown) {
+  return { success: true, data };
+}
+"#,
+        );
+        ingest_ts(
+            graph,
+            "packages/schema/src/v4/core/to-json-schema.ts",
+            r#"
+export function toJsonSchema(schema: object) {
+  return { type: "object", schema };
+}
+export function parseJsonSchema(schema: object) {
+  return toJsonSchema(schema);
+}
+"#,
+        );
+        graph.finalize_links();
+    }
+
+    #[test]
+    fn seed_prefers_core_parse_over_bench_and_locale_decoys() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        ingest_schema_collision(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+
+        let natural = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "how does z.object schema validate an object and how does parse() report validation errors with a path to the invalid field",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let files = packet_paths(&natural);
+        assert!(
+            files
+                .iter()
+                .any(|p| p.ends_with("packages/schema/src/core/parse.ts")),
+            "natural parse question must seed core/parse.ts, files={files:?} seeds={:?}",
+            natural.seeds
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("/bench/")),
+            "bench decoys must stay out, files={files:?}"
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("/locales/")),
+            "locale catalogs must stay out, files={files:?}"
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("/v3/")),
+            "v3 legacy must stay out, files={files:?}"
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("to-json-schema")),
+            "json-schema conversion must stay out, files={files:?}"
+        );
+
+        let gerund = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("how does parsing work in zod"),
+            OptimizationMode::Balanced,
+        );
+        let gerund_files = packet_paths(&gerund);
+        assert!(
+            !gerund_files.is_empty(),
+            "gerund phrasing must not return an empty packet, seeds={:?}",
+            gerund.seeds
+        );
+        assert!(
+            gerund_files
+                .iter()
+                .any(|p| p.ends_with("packages/schema/src/core/parse.ts")),
+            "parsing → parse must seed core/parse.ts, files={gerund_files:?} seeds={:?}",
+            gerund.seeds
+        );
+
+        let named = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("where is the safeParse function implemented"),
+            OptimizationMode::Balanced,
+        );
+        let named_files = packet_paths(&named);
+        assert!(
+            named_files
+                .iter()
+                .any(|p| p.ends_with("packages/schema/src/core/parse.ts")),
+            "safeParse must resolve to core/parse.ts, files={named_files:?} seeds={:?}",
+            named.seeds
+        );
+        assert!(
+            !named_files
+                .iter()
+                .any(|p| p.ends_with("packages/bench/safeparse.ts")),
+            "bench/safeparse.ts must not steal the safeParse seed, files={named_files:?}"
+        );
+    }
+
+    #[test]
+    fn seed_prefers_core_type_alias_for_z_infer() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        ingest_schema_collision(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract("how do ZodType generics flow through z.infer"),
+            OptimizationMode::Balanced,
+        );
+        let files = packet_paths(&view);
+        assert!(
+            files
+                .iter()
+                .any(|p| p.ends_with("packages/schema/src/core/core.ts")),
+            "z.infer must seed core.ts type aliases, files={files:?} seeds={:?}",
+            view.seeds
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("classic/schemas")),
+            "classic schemas must not steal the infer seed, files={files:?}"
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("/bench/")),
+            "bench decoys must stay out, files={files:?}"
+        );
+    }
+
+    #[test]
+    fn uncovered_compound_cluster_is_partial_not_no_recorded_gap() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("admin"));
+        ingest_js(
+            &graph,
+            "src/store/user.js",
+            r#"
+export function login(userInfo) {
+  return request({ url: "/login", method: "post", data: userInfo });
+}
+export function getInfo() {
+  return request({ url: "/info", method: "get" });
+}
+"#,
+        );
+        ingest_js(
+            &graph,
+            "src/directive/clipboard.js",
+            r#"
+export function clipboard(el, binding) {
+  return String(binding.value);
+}
+"#,
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "how does the user login work, including getInfo, and how the router permission guard checks roles before each route",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let coverage = view.coverage.as_ref().expect("coverage");
+        assert!(
+            !coverage.seeds_hit.is_empty(),
+            "login half must still resolve, coverage={coverage:?}"
+        );
+        assert!(
+            !coverage.seeds_missed.is_empty(),
+            "named guard cluster with zero hits must be a miss, coverage={coverage:?}"
+        );
+        assert_eq!(
+            coverage.claim, "partial",
+            "half-resolved compound task must not claim no_recorded_gap, coverage={coverage:?}"
+        );
+        assert!(
+            view.next_actions
+                .iter()
+                .any(|a| a.tool == "neuromesh_search_symbols"),
+            "partial coverage must offer Grep, next={:?}",
+            view.next_actions
+        );
+    }
+
+    #[test]
+    fn style_task_seeds_tokens_and_product_card() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        ingest_lang(
+            &graph,
+            "src/styles/_tokens.scss",
+            "$radius-sm: 8px;\n$shadow-lift: 0 4px 12px rgba(0,0,0,.12);\n",
+            SourceLanguage::SCSS,
+        );
+        ingest_lang(
+            &graph,
+            "src/styles/_mixins.scss",
+            "@mixin card-base { border-radius: $radius-sm; }\n",
+            SourceLanguage::SCSS,
+        );
+        ingest_vue(
+            &graph,
+            "src/components/ProductCard.vue",
+            r#"<script setup>
+defineProps({ product: Object })
+</script>
+<template><article class="product-card">{{ product.name }}</article></template>
+<style lang="scss" scoped>
+@use '../styles/tokens.scss' as *;
+.product-card { border-radius: $radius-sm; }
+</style>
+"#,
+        );
+        ingest_js(
+            &graph,
+            "src/stores/cart.js",
+            "export function applyPromo(code) { return code }\n",
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "Apply hover-lift and focus-within styles to ProductCard using SCSS tokens and mixins",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let files = packet_paths(&view);
+        assert!(
+            files.iter().any(|p| p.contains("ProductCard")),
+            "ProductCard must be in packet, files={files:?}"
+        );
+        assert!(
+            files
+                .iter()
+                .any(|p| p.contains("tokens") || p.contains("mixins")),
+            "style task must include tokens/mixins, files={files:?}"
+        );
+    }
+
+    #[test]
+    fn dead_code_task_flags_missing_callers_as_packet_gap() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        ingest_js(
+            &graph,
+            "src/stores/ui.js",
+            r#"
+export function goCart() { return 'cart' }
+export function goCheckout() { return 'checkout' }
+"#,
+        );
+        ingest_vue(
+            &graph,
+            "src/App.vue",
+            r#"<script setup>
+import { goCart } from './stores/ui.js'
+goCart()
+</script>
+<template><div /></template>
+"#,
+        );
+        graph.finalize_links();
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "Find unused goCart in ui store and list all references across the project",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let coverage = view.coverage.as_ref().expect("coverage");
+        assert!(
+            view.structural_evidence
+                .iter()
+                .any(|e| e.symbol == "goCart"),
+            "structural evidence must include goCart, evidence={:?}",
+            view.structural_evidence
+        );
+        if !coverage.packet_gaps.is_empty() {
+            assert_eq!(
+                coverage.claim, "partial",
+                "missing caller files must downgrade coverage, coverage={coverage:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn feedback_increases_node_learning_bonus() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("learn"));
+        ingest_vue(
+            &graph,
+            "src/views/CheckoutView.vue",
+            r#"<script setup>
+import { useCartStore } from '../stores/cart'
+const cart = useCartStore()
+function setQty(id, q) { cart.setQty(id, q) }
+</script>
+<template><div /></template>
+"#,
+        );
+        ingest_js(&graph, "src/stores/cart.js", "export function setQty() {}");
+        graph.finalize_links();
+
+        let before = graph
+            .node_learning_profile("CheckoutView")
+            .map(|p| p.learning_bonus)
+            .unwrap_or(0.0);
+        for _ in 0..60 {
+            if let Some(node) = graph.resolve_feedback_node("CheckoutView") {
+                graph.reinforce_node_access(&node.id, true);
+            }
+        }
+        let after = graph
+            .node_learning_profile("CheckoutView")
+            .expect("profile")
+            .learning_bonus;
+        assert!(
+            after > before,
+            "learning_bonus should increase after feedback: before={before} after={after}"
+        );
+    }
+
+    #[test]
+    fn coverage_claim_matches_sidecar_state() {
+        use neuromesh_index::ProjectWalker;
+        use std::path::PathBuf;
+
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mini-shop");
+        if !root.exists() {
+            return;
+        }
+        let graph = NeuralProjectGraph::new(ProjectId::new("mini-shop-coverage"));
+        let walker = ProjectWalker::new(root, ProjectId::new("mini-shop-coverage"));
+        let scanned = walker.scan().expect("scan mini-shop");
+        graph.ingest_workspace(&scanned);
+
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "introduce a price-card promo tile using design tokens, mixins, and component styling conventions",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let coverage = view.coverage.as_ref().expect("coverage");
+        if !coverage.sidecar_files.is_empty() {
+            assert_eq!(
+                coverage.claim, "bounded",
+                "sidecar fill must downgrade claim, coverage={coverage:?}"
+            );
+        }
+        for node in &view.active_nodes {
+            if node.sidecar {
+                let path = node.node.file_path.to_string_lossy().replace('\\', "/");
+                assert!(
+                    coverage.sidecar_files.iter().any(|p| p == &path),
+                    "sidecar node {path} missing from coverage.sidecar_files"
+                );
+            }
+        }
+    }
+
+    fn ingest_learning_causal_fixture(graph: &NeuralProjectGraph) {
+        ingest_vue(
+            graph,
+            "src/components/PromoCodeInput.vue",
+            r#"<script setup>
+export default { name: 'PromoCodeInput' }
+</script>
+<template><input /></template>
+"#,
+        );
+        ingest_vue(
+            graph,
+            "src/App.vue",
+            r#"<script setup>
+import PromoCodeInput from './components/PromoCodeInput.vue'
+</script>
+<template><PromoCodeInput /></template>
+"#,
+        );
+        ingest_vue(
+            graph,
+            "src/views/CheckoutView.vue",
+            r#"<script setup>
+import { useCartStore } from '../stores/cart.js'
+</script>
+<template><div /></template>
+"#,
+        );
+        ingest_js(
+            graph,
+            "src/stores/cart.js",
+            "export function useCartStore() { return {} }",
+        );
+        ingest_js(graph, "src/stores/ui.js", "export const ui = {}");
+        graph.finalize_links();
+    }
+
+    #[test]
+    fn learning_to_emission_causal_promo_enters_app_leaves() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("learning-causal"));
+        ingest_learning_causal_fixture(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let sig =
+            TaskSignatureExtractor::extract("how does promocodeinput component work in checkout");
+        let before = activator.activate(&graph, &sig, OptimizationMode::Balanced);
+        let before_files: HashSet<String> = packet_paths(&before).into_iter().collect();
+        for _ in 0..8 {
+            if let Some(node) = graph.resolve_feedback_node("PromoCodeInput") {
+                graph.reinforce_node_access(&node.id, true);
+            }
+        }
+        if let Some(app_file) = graph.file_id_for_path(&PathBuf::from("src/App.vue")) {
+            for _ in 0..8 {
+                graph.reinforce_node_access(&app_file, false);
+            }
+        }
+        let after = activator.activate(&graph, &sig, OptimizationMode::Balanced);
+        let after_files: HashSet<String> = packet_paths(&after).into_iter().collect();
+        assert!(
+            after_files.iter().any(|p| p.contains("PromoCodeInput")),
+            "reinforced PromoCodeInput must be emitted; files={after_files:?}"
+        );
+        assert!(
+            !after_files.iter().any(|p| p.ends_with("App.vue")),
+            "penalized App.vue should leave emitted packet; before={before_files:?} after={after_files:?}"
+        );
+        let promo = after
+            .rank_candidates
+            .iter()
+            .find(|c| c.path.contains("PromoCodeInput"))
+            .expect("promo candidate");
+        assert!(
+            promo.emitted,
+            "PromoCodeInput candidate must show emitted=true"
+        );
+    }
+
+    #[test]
+    fn learning_to_emission_kosha_routes_emitted() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("kosha"));
+        graph.ingest_file(
+            &indexed("school/routes.py"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("routes.py"),
+                "def list_routes():\n    return []\n",
+                SourceLanguage::Python,
+            ),
+            Some("def list_routes():\n    return []\n"),
+        );
+        graph.ingest_file(
+            &indexed("school/schema.py"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("schema.py"),
+                "class Schema:\n    pass\n",
+                SourceLanguage::Python,
+            ),
+            Some("class Schema:\n    pass\n"),
+        );
+        graph.ingest_file(
+            &indexed("api/school.ts"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("school.ts"),
+                "export const scores = 1",
+                SourceLanguage::TypeScript,
+            ),
+            Some("export const scores = 1"),
+        );
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let sig = TaskSignatureExtractor::extract("where are school scores handled");
+        for _ in 0..50 {
+            if let Some(node) = graph.resolve_feedback_node("school/routes.py") {
+                graph.reinforce_node_access(&node.id, true);
+            }
+        }
+        let view = activator.activate(&graph, &sig, OptimizationMode::Balanced);
+        let files = packet_paths(&view);
+        assert!(
+            files.iter().any(|p| p.contains("routes.py")),
+            "heavily reinforced routes.py must be emitted; files={files:?}"
+        );
+        let routes = view
+            .rank_candidates
+            .iter()
+            .find(|c| c.path.contains("routes.py"))
+            .expect("routes candidate");
+        assert!(routes.emitted, "routes.py must show emitted=true");
+    }
+
+    #[test]
+    fn reinforced_file_promotes_only_on_focus_matched_query() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("kosha-gap"));
+        graph.ingest_file(
+            &indexed("api/school.ts"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("school.ts"),
+                "export const scores = 1",
+                SourceLanguage::TypeScript,
+            ),
+            Some("export const scores = 1"),
+        );
+        graph.ingest_file(
+            &indexed("school/routes.py"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("routes.py"),
+                "def list_routes():\n    return []\n",
+                SourceLanguage::Python,
+            ),
+            Some("def list_routes():\n    return []\n"),
+        );
+        graph.ingest_file(
+            &indexed("school/scores_repo.py"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("scores_repo.py"),
+                "def load_scores():\n    return []\n",
+                SourceLanguage::Python,
+            ),
+            Some("def load_scores():\n    return []\n"),
+        );
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let related = TaskSignatureExtractor::extract("where are school scores handled");
+        for _ in 0..80 {
+            if let Some(node) = graph.resolve_feedback_node("school/routes.py") {
+                graph.reinforce_node_access(&node.id, true);
+            }
+        }
+        let related_view = activator.activate(&graph, &related, OptimizationMode::Balanced);
+        let related_files = packet_paths(&related_view);
+        assert!(
+            related_files.iter().any(|p| p.contains("routes.py")),
+            "focus-matched query should emit reinforced routes.py; files={related_files:?}"
+        );
+        let unrelated = TaskSignatureExtractor::extract(
+            "how does database migration create users table schema",
+        );
+        let unrelated_view = activator.activate(&graph, &unrelated, OptimizationMode::Balanced);
+        let unrelated_files = packet_paths(&unrelated_view);
+        assert!(
+            !unrelated_files.iter().any(|p| p.contains("routes.py")),
+            "reinforced routes.py must not leak into unrelated query; files={unrelated_files:?}"
+        );
+    }
+
+    #[test]
+    fn learning_does_not_leak_parse_into_unrelated_zod_query() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("zod-learn"));
+        ingest_ts(
+            &graph,
+            "packages/zod/src/v4/core/parse.ts",
+            r#"
+export function safeParse(schema: unknown, input: unknown) {
+  return { success: true, data: input };
+}
+"#,
+        );
+        ingest_ts(
+            &graph,
+            "packages/zod/src/v4/core/schemas.ts",
+            r#"
+export function optionalModifier<T>(inner: T) {
+  return { type: "optional", inner };
+}
+"#,
+        );
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        for _ in 0..12 {
+            if let Some(node) = graph.resolve_feedback_node("safeParse") {
+                graph.reinforce_node_access(&node.id, true);
+            }
+        }
+        let related = TaskSignatureExtractor::extract("how does parsing work in zod");
+        let related_view = activator.activate(&graph, &related, OptimizationMode::Balanced);
+        let related_files = packet_paths(&related_view);
+        assert!(
+            related_files
+                .iter()
+                .any(|p| p.contains("core/parse.ts")),
+            "related parsing query should include parse.ts after reinforcement; files={related_files:?}"
+        );
+        let unrelated = TaskSignatureExtractor::extract("how does the optional modifier work");
+        let unrelated_view = activator.activate(&graph, &unrelated, OptimizationMode::Balanced);
+        let unrelated_files = packet_paths(&unrelated_view);
+        assert!(
+            !unrelated_files.iter().any(|p| p.contains("core/parse.ts")),
+            "parse.ts must not leak into optional-modifier query; files={unrelated_files:?}"
+        );
+        assert!(
+            unrelated_files.iter().any(|p| p.contains("schemas.ts")),
+            "optional-modifier query should still reach schemas.ts; files={unrelated_files:?}"
+        );
+    }
+
+    #[test]
+    fn deterministic_packet_same_state() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("determinism"));
+        ingest_learning_causal_fixture(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let sig = TaskSignatureExtractor::extract("how does checkout cart quantity work");
+        let mut paths: Vec<Vec<String>> = Vec::new();
+        for _ in 0..4 {
+            let view = activator.activate(&graph, &sig, OptimizationMode::Balanced);
+            let mut files = packet_paths(&view);
+            files.sort();
+            paths.push(files);
+        }
+        for i in 1..paths.len() {
+            assert_eq!(
+                paths[0], paths[i],
+                "packet file set must be identical across runs"
+            );
+        }
+    }
+
+    #[test]
+    fn catastrophic_learning_does_not_emit_on_unrelated_query() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("overfit"));
+        ingest_learning_causal_fixture(&graph);
+        if let Some(node) = graph.resolve_feedback_node("PromoCodeInput") {
+            for _ in 0..200 {
+                graph.reinforce_node_access(&node.id, true);
+            }
+        }
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let unrelated = TaskSignatureExtractor::extract(
+            "how does database migration create users table schema",
+        );
+        let view = activator.activate(&graph, &unrelated, OptimizationMode::Balanced);
+        let files = packet_paths(&view);
+        assert!(
+            !files.iter().any(|p| p.contains("PromoCodeInput")),
+            "unrelated query must not always emit over-reinforced PromoCodeInput; files={files:?}"
+        );
+    }
+
+    #[test]
+    fn generalization_related_query_benefits_from_learning() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("generalize"));
+        ingest_learning_causal_fixture(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let related = TaskSignatureExtractor::extract("where is cart quantity updated in checkout");
+        let before = activator.activate(&graph, &related, OptimizationMode::Balanced);
+        for _ in 0..20 {
+            if let Some(file) = graph.file_id_for_path(&PathBuf::from("src/stores/cart.js")) {
+                graph.reinforce_node_access(&file, true);
+            }
+        }
+        let after = activator.activate(&graph, &related, OptimizationMode::Balanced);
+        let before_has_cart = packet_paths(&before).iter().any(|p| p.contains("cart.js"));
+        let after_has_cart = packet_paths(&after).iter().any(|p| p.contains("cart.js"));
+        assert!(
+            after_has_cart || !before_has_cart,
+            "related query should retain or improve cart.js emission after reinforcement"
+        );
+    }
+
+    #[test]
+    fn learning_persists_across_graph_reload() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("persist"));
+        ingest_learning_causal_fixture(&graph);
+        if let Some(node) = graph.resolve_feedback_node("PromoCodeInput") {
+            for _ in 0..10 {
+                graph.reinforce_node_access(&node.id, true);
+            }
+        }
+        let bonus_before = graph
+            .node_learning_profile("PromoCodeInput")
+            .map(|p| p.learning_bonus)
+            .unwrap_or(0.0);
+        let tmp = std::env::temp_dir().join("neuromesh_learning_persist_test");
+        let _ = std::fs::create_dir_all(&tmp);
+        graph.set_workspace(&tmp);
+        graph.save_persisted(&tmp).expect("save");
+
+        let graph2 = NeuralProjectGraph::new(ProjectId::new("persist"));
+        graph2.set_workspace(&tmp);
+        assert!(graph2.load_persisted(&tmp), "reload graph");
+        let bonus_after = graph2
+            .node_learning_profile("PromoCodeInput")
+            .map(|p| p.learning_bonus)
+            .unwrap_or(0.0);
+        assert!(
+            bonus_after >= bonus_before * 0.9,
+            "learning should persist: before={bonus_before} after={bonus_after}"
+        );
+        let _ = std::fs::remove_dir_all(tmp);
+    }
+
+    fn ingest_mini_express_app(graph: &NeuralProjectGraph) {
+        ingest_js(
+            graph,
+            "lib/application.js",
+            r#"
+var app = module.exports = {};
+app.init = function init() { this.cache = {}; };
+app.handle = function handle(req, res, next) { return this.router.handle(req, res, next); };
+app.listen = function listen(port, cb) { return require('http').createServer(this).listen(port, cb); };
+function logerror(err) { console.error(err); }
+function tryRender(view, options, callback) { callback(null, view); }
+"#,
+        );
+        ingest_js(
+            graph,
+            "lib/middleware/init.js",
+            r#"
+module.exports = function middlewareInit(app) {
+  return function init(req, res, next) { next(); };
+};
+"#,
+        );
+        graph.finalize_links();
+    }
+
+    #[test]
+    fn express_app_handle_listen_resolves_application_js() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("express-app"));
+        ingest_mini_express_app(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "how does app.handle process middleware and how does app.listen start the server, including init",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let coverage = view.coverage.as_ref().expect("coverage");
+        assert_ne!(
+            coverage.claim, "no_seed_resolved",
+            "must resolve express seeds, coverage={coverage:?}"
+        );
+        let files = packet_paths(&view);
+        assert!(
+            files.iter().any(|p| p.contains("application.js")),
+            "expected application.js, files={files:?}"
+        );
+        let app_node = view
+            .active_nodes
+            .iter()
+            .find(|n| {
+                n.node
+                    .file_path
+                    .to_string_lossy()
+                    .contains("application.js")
+            })
+            .expect("application.js node");
+        let skeleton = app_node.node.content.as_deref().unwrap_or("");
+        assert!(
+            skeleton.contains("function handle") || skeleton.contains("app.handle"),
+            "handle must stay open, skeleton={skeleton}"
+        );
+        assert!(
+            skeleton.contains("function listen") || skeleton.contains("app.listen"),
+            "listen must stay open, skeleton={skeleton}"
+        );
+    }
+
+    #[test]
+    fn express_middleware_next_prompt_resolves() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("express-mw"));
+        ingest_mini_express_app(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "Explain the middleware pipeline and how next() works",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let coverage = view.coverage.as_ref().expect("coverage");
+        assert_ne!(
+            coverage.claim, "no_seed_resolved",
+            "middleware prompt must not fail completely, coverage={coverage:?}"
+        );
+        assert!(
+            !view.active_nodes.is_empty(),
+            "expected at least one file for middleware task"
+        );
+    }
+
+    #[test]
+    fn fa_middleware_nl_resolves_without_client_keywords() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("express-fa-mw"));
+        ingest_mini_express_app(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "لوله‌ی میان‌افزارها را توضیح بده و اینکه next() چطور کار می‌کند.",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let coverage = view.coverage.as_ref().expect("coverage");
+        assert_ne!(
+            coverage.claim, "no_seed_resolved",
+            "FA middleware NL must seed via alias bridge, coverage={coverage:?}"
+        );
+        assert!(
+            !view.active_nodes.is_empty(),
+            "expected files for FA middleware without client keywords"
+        );
+    }
+
+    #[test]
+    fn call_graph_task_caps_optional_files() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("loader-trace"));
+        ingest_js(
+            &graph,
+            "Component/Kernel/Loader.js",
+            r#"
+export class Loader {
+  init() { this.manageRegisters(); }
+  manageRegisters() { return true; }
+}
+"#,
+        );
+        ingest_js(
+            &graph,
+            "Component/Router/Router.js",
+            r#"
+import { Loader } from '../Kernel/Loader.js';
+export function boot() { const l = new Loader(); l.init(); }
+"#,
+        );
+        for i in 0..12 {
+            ingest_js(
+                &graph,
+                &format!("Terminal/Wizard/WizardListCommand{i}.js"),
+                &format!("export function run{i}() {{ return {i}; }}\n"),
+            );
+        }
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let view = activator.activate(
+            &graph,
+            &TaskSignatureExtractor::extract(
+                "callers and callees of Loader.init and manageRegisters",
+            ),
+            OptimizationMode::Balanced,
+        );
+        let files = packet_paths(&view);
+        assert!(
+            files.len() <= 8,
+            "call-graph task must stay focused, got {} files: {files:?}",
+            files.len()
+        );
+        assert!(
+            files.iter().any(|p| p.contains("Loader")),
+            "Loader must be present, files={files:?}"
+        );
+        assert!(
+            !files.iter().any(|p| p.contains("WizardListCommand")),
+            "unrelated wizard files must not leak, files={files:?}"
+        );
+    }
+
+    fn ingest_php(graph: &NeuralProjectGraph, rel: &str, src: &str) {
+        ingest_lang(graph, rel, src, SourceLanguage::PHP);
+    }
+
+    fn ingest_laravel_skeleton(graph: &NeuralProjectGraph) {
+        ingest_php(
+            graph,
+            "routes/web.php",
+            "<?php\nuse Illuminate\\Support\\Facades\\Route;\nRoute::get('/', fn () => view('welcome'));\n",
+        );
+        ingest_php(
+            graph,
+            "bootstrap/app.php",
+            "<?php\nuse Illuminate\\Foundation\\Application;\nreturn Application::configure(basePath: dirname(__DIR__))->create();\n",
+        );
+        ingest_php(
+            graph,
+            "app/Models/User.php",
+            "<?php\nnamespace App\\Models;\nuse Illuminate\\Foundation\\Auth\\User as Authenticatable;\nclass User extends Authenticatable {}\n",
+        );
+        ingest_php(
+            graph,
+            "app/Http/Controllers/Controller.php",
+            "<?php\nnamespace App\\Http\\Controllers;\nabstract class Controller {}\n",
+        );
+        ingest_lang(
+            graph,
+            "composer.json",
+            r#"{"name":"laravel/laravel","keywords":["laravel","framework"]}"#,
+            SourceLanguage::JSON,
+        );
+        graph.finalize_links();
+    }
+
+    #[test]
+    fn no_keywords_identical_on_brownfield_prompt() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("neuromesh"));
+        let tools = r#"
+use neuromesh_task::TaskSignatureExtractor;
+pub fn handle_tool_call() {
+    let signature = TaskSignatureExtractor::extract("demo");
+}
+"#;
+        let sig = r#"
+pub struct TaskSignatureExtractor;
+impl TaskSignatureExtractor {
+    pub fn extract(prompt: &str) -> String { prompt.into() }
+}
+"#;
+        graph.ingest_file(
+            &indexed("crates/neuromesh-mcp/src/tools.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("tools.rs"),
+                tools,
+                SourceLanguage::Rust,
+            ),
+            Some(tools),
+        );
+        graph.ingest_file(
+            &indexed("crates/neuromesh-task/src/signature.rs"),
+            &CodeIntelligenceEngine::analyze(
+                &PathBuf::from("signature.rs"),
+                sig,
+                SourceLanguage::Rust,
+            ),
+            Some(sig),
+        );
+        graph.finalize_links();
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let signature =
+            TaskSignatureExtractor::extract("How does handle_tool_call extract task intent?");
+        assert!(signature.client_keywords.is_empty());
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        assert!(view.active_tokens > 0);
+        assert_eq!(view.task_scenario, "brownfield");
+        assert_ne!(
+            view.coverage.as_ref().map(|c| c.claim.as_str()),
+            Some("no_seed_resolved")
+        );
+    }
+
+    #[test]
+    fn client_keywords_seed_non_english_prompt() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        ingest_laravel_skeleton(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let mut signature = TaskSignatureExtractor::extract("مدل کاربر را به migration وصل کن");
+        signature.client_keywords = vec!["User".into(), "migration".into()];
+        signature.technology = "Laravel".into();
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        assert!(view.active_tokens > 0);
+        assert!(
+            view.seeds.iter().any(|s| {
+                (s.query.eq_ignore_ascii_case("User")
+                    || s.query.eq_ignore_ascii_case("client_keyword:User"))
+                    && s.resolved_id.is_some()
+            }),
+            "seeds = {:?}",
+            view.seeds
+        );
+        assert_eq!(view.task_scenario, "brownfield");
+    }
+
+    #[test]
+    fn scaffold_greenfield_laravel_design_without_keywords() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        ingest_laravel_skeleton(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let mut signature = TaskSignatureExtractor::extract(
+            "Design the product catalog domain for products, categories, and Laravel models.",
+        );
+        signature.retrieval_engine_override = Some(neuromesh_core::RetrievalEngine::Hybrid);
+        assert!(signature.client_keywords.is_empty());
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        assert!(view.active_tokens > 0);
+        assert_eq!(view.task_scenario, "greenfield");
+        let files = packet_paths(&view);
+        assert!(
+            files.iter().any(|p| p.contains("web.php")),
+            "scaffold should emit routes entry point, files={files:?}"
+        );
+        assert!(
+            files.iter().any(|p| p.contains("composer.json")),
+            "scaffold should emit stack manifest, files={files:?}"
+        );
+    }
+
+    #[test]
+    fn noisy_client_keywords_do_not_force_low_quality_seeds() {
+        let graph = NeuralProjectGraph::new(ProjectId::new("shop"));
+        ingest_laravel_skeleton(&graph);
+        let registry = Arc::new(ReversibleContextRegistry::new());
+        let activator = ContextActivator::new(registry);
+        let mut signature =
+            TaskSignatureExtractor::extract("Design something completely unrelated.");
+        signature.client_keywords = vec!["xyzzy_not_a_symbol".into(), "qwerty_not_a_symbol".into()];
+        signature.technology = "Laravel".into();
+        let view = activator.activate(&graph, &signature, OptimizationMode::Balanced);
+        assert!(
+            view.seeds
+                .iter()
+                .all(|s| s.resolved_id.is_none() || !s.query.contains("xyzzy")),
+            "noise must not resolve, seeds={:?}",
+            view.seeds
+        );
+    }
+}
