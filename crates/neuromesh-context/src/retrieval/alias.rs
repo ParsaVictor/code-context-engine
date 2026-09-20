@@ -350,15 +350,34 @@ pub fn canonical_concepts() -> &'static [&'static str] {
     ]
 }
 
+/// An alias term is in the prompt when it starts a word there. Inflections
+/// still match (`validates`, `sessions`, `authentication` for `auth`); a
+/// term buried inside another word does not: "invalidate" is not a
+/// validation question, and "index cache ... invalidate" used to pull the
+/// whole validation/schema cluster into a harness question (F73).
+fn term_in_prompt(lower: &str, term: &str) -> bool {
+    let term = term.to_lowercase();
+    let mut from = 0;
+    while let Some(pos) = lower[from..].find(&term) {
+        let at = from + pos;
+        let starts_word = lower[..at]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        if starts_word {
+            return true;
+        }
+        from = at + term.len();
+    }
+    false
+}
+
 /// True when any static alias cluster term matches the prompt (NL bridge active).
 pub fn prompt_has_alias_cluster_match(prompt: &str) -> bool {
     let lower = prompt.to_lowercase();
-    ALIAS_CLUSTERS.iter().any(|cluster| {
-        cluster
-            .terms
-            .iter()
-            .any(|t| lower.contains(&t.to_lowercase()))
-    })
+    ALIAS_CLUSTERS
+        .iter()
+        .any(|cluster| cluster.terms.iter().any(|t| term_in_prompt(&lower, t)))
 }
 
 /// Expand prompt tokens with English code terms from minimal alias clusters.
@@ -366,11 +385,7 @@ pub fn expand_aliases(prompt: &str) -> Vec<String> {
     let lower = prompt.to_lowercase();
     let mut out: Vec<String> = Vec::new();
     for cluster in ALIAS_CLUSTERS {
-        if cluster
-            .terms
-            .iter()
-            .any(|t| lower.contains(&t.to_lowercase()))
-        {
+        if cluster.terms.iter().any(|t| term_in_prompt(&lower, t)) {
             out.push(cluster.concept.to_string());
             for term in cluster.terms {
                 if term.is_ascii() && term.len() >= 4 {
@@ -401,10 +416,7 @@ fn alias_code_seeds_inner(prompt: &str, middleware_routing_only: bool) -> Vec<St
     let lower = prompt.to_lowercase();
     let mut out: Vec<String> = Vec::new();
     for cluster in ALIAS_CLUSTERS {
-        let matched = cluster
-            .terms
-            .iter()
-            .any(|t| lower.contains(&t.to_lowercase()));
+        let matched = cluster.terms.iter().any(|t| term_in_prompt(&lower, t));
         if !matched {
             continue;
         }
@@ -443,6 +455,24 @@ pub fn inject_alias_expansion(related: &mut Vec<String>, prompt: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn alias_term_must_start_a_word() {
+        // F73: "invalidate" is not "validate".
+        let none = expand_aliases("How does the index cache decide when to invalidate?");
+        assert!(
+            !none.iter().any(|s| s == "validation" || s == "schema"),
+            "no validation cluster for 'invalidate', got {none:?}"
+        );
+        let some = expand_aliases("How does the API validate a payload?");
+        assert!(some.iter().any(|s| s == "validation"), "got {some:?}");
+        let inflected = expand_aliases("Where are request payloads validated?");
+        assert!(
+            inflected.iter().any(|s| s == "validation"),
+            "got {inflected:?}"
+        );
+        assert!(!prompt_has_alias_cluster_match("cache invalidation only"));
+    }
 
     #[test]
     fn fa_routing_expands() {
