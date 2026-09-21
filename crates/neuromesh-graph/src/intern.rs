@@ -373,6 +373,13 @@ pub(crate) struct GraphData {
     /// question naming a tool, route, event or env var lands on the file that
     /// spells it, though no symbol is called that (F75-A).
     pub literal_index: HashMap<String, Vec<NodeId>>,
+    /// Body words → the files whose source spells them (identifier parts,
+    /// comments, strings; 4+ letters, lowercased). The lexical fallback a
+    /// question with no named symbol needs ("where is the ratchet defined",
+    /// "argparse add_argument flags") — BM25-lite over this, W3.
+    pub word_index: HashMap<String, Vec<NodeId>>,
+    /// Distinct body words per file — the document length BM25 normalises by.
+    pub body_lengths: HashMap<NodeId, u32>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -401,6 +408,10 @@ pub(crate) struct GraphSnapshot {
     pub concept_index: ConceptIndex,
     #[serde(default)]
     pub literal_index: HashMap<String, Vec<NodeId>>,
+    #[serde(default)]
+    pub word_index: HashMap<String, Vec<NodeId>>,
+    #[serde(default)]
+    pub body_lengths: HashMap<NodeId, u32>,
 }
 
 #[derive(Deserialize)]
@@ -567,6 +578,10 @@ pub(crate) fn remove_file_nodes_locked(data: &mut GraphData, path: &Path) {
         for list in data.literal_index.values_mut() {
             list.retain(|existing| existing != id);
         }
+        for list in data.word_index.values_mut() {
+            list.retain(|existing| existing != id);
+        }
+        data.body_lengths.remove(id);
         if let Some(node) = data.mesh.node(id).cloned() {
             unindex_name_keys(data, id, &node.name);
             if let Some(parent) = &node.parent {
@@ -721,4 +736,29 @@ pub(crate) fn is_name_like_literal(s: &str) -> bool {
         && !s.ends_with(".json")
         && !s.ends_with(".yaml")
         && !s.ends_with(".yml")
+}
+
+/// The distinct words a source file spells: identifiers split into their
+/// parts, prose in comments and strings, 4+ ASCII letters, lowercased. What
+/// a grep for a prompt word would hit, minus the noise of two-letter tokens.
+pub(crate) fn body_words(content: &str) -> Vec<String> {
+    let mut seen: HashSet<String> = HashSet::new();
+    for raw in content.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {
+        if raw.len() < 4 {
+            continue;
+        }
+        // The identifier itself too (`add_argument`): a prompt that spells it
+        // whole is asking about exactly that.
+        if raw.contains('_') && raw.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            seen.insert(raw.trim_matches('_').to_lowercase());
+        }
+        for part in neuromesh_parser::tokenize_ident(raw) {
+            if part.len() >= 4 && part.chars().all(|c| c.is_ascii_alphabetic()) {
+                seen.insert(part.to_lowercase());
+            }
+        }
+    }
+    let mut words: Vec<String> = seen.into_iter().collect();
+    words.sort();
+    words
 }

@@ -14,9 +14,11 @@ use neuromesh_graph::NeuralProjectGraph;
 use std::collections::{HashMap, HashSet};
 
 pub(crate) const STRONG: &[&str] = &[
+    "body",
     "identifier",
     "entity",
     "file",
+    "stem",
     "client_keyword",
     "config_key",
     "literal",

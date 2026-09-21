@@ -699,6 +699,7 @@ impl ContextActivator {
                     "identifier"
                         | "entity"
                         | "file"
+                        | "stem"
                         | "path_hint"
                         | "client_keyword"
                         | "config_key"

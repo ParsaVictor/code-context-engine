@@ -3,7 +3,7 @@
 use crate::activator::prune_weak_greenfield_seeds_inner;
 use crate::seed::ranker::{signal_weight, SignalKind};
 use crate::seed::sink::SeedSink;
-use neuromesh_core::{SeedResolutionConfig, TaskIntent, TaskSignature};
+use neuromesh_core::{NodeId, SeedResolutionConfig, TaskIntent, TaskSignature};
 use neuromesh_graph::NeuralProjectGraph;
 use neuromesh_task::{is_prompt_stopword, normalize_prompt_tokens};
 
@@ -358,6 +358,7 @@ pub(crate) fn push_path_hint_seeds(
     push_compound_stem_seeds(graph, prompt, config, sink);
     push_word_stem_seeds(graph, prompt, config, sink);
     push_path_word_seeds(graph, prompt, config, sink);
+    push_body_word_seeds(graph, prompt, config, sink);
 }
 
 /// Route-shaped trees (Next.js app router, `feature/handler.ts`) name a
@@ -481,7 +482,7 @@ pub(crate) fn push_path_word_seeds(
     }
     for (pos, path) in top.into_iter().enumerate() {
         let energy = signal_weight(config, SignalKind::PathHint, pos + 1);
-        sink.push(graph, prompt, path.clone(), energy, "file");
+        sink.push(graph, prompt, path.clone(), energy, "stem");
     }
 }
 
@@ -524,7 +525,7 @@ pub(crate) fn push_word_stem_seeds(
             continue;
         };
         let energy = signal_weight(config, SignalKind::PathHint, pushed + 1);
-        sink.push(graph, prompt, path.clone(), energy, "file");
+        sink.push(graph, prompt, path.clone(), energy, "stem");
         pushed += 1;
         if pushed >= 2 {
             break;
@@ -814,6 +815,261 @@ pub(crate) fn push_compound_symbol_seeds(
         }
     }
 }
+/// The lexical fallback (W3): when nothing strong was named, the file whose
+/// *body* spells the most prompt words — what a grep would find — is the
+/// seed. A question about a threshold constant in a test names no symbol;
+/// the test that spells its words is the answer.
+/// Competes only with guess seeds (token/concept/fallback tiers), never
+/// with a symbol, file or key the prompt named: a guess that landed
+/// elsewhere on one prefix-matched word (`token:pheromone` →
+/// `PheromoneConfig` in edge.rs) is dropped when the body hit spells two
+/// or more words and the guess's file spells fewer.
+pub(crate) fn push_body_word_seeds(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    config: &SeedResolutionConfig,
+    sink: &mut SeedSink<'_, '_, '_>,
+) {
+    use crate::seed::weak_file_seed::{prefix, STRONG, WEAK};
+    // A named symbol anchors the question — unless it resolved into a test
+    // or fixture the prompt never asked about (`identifier:packet` → the
+    // `packet()` helper of a test): that is a prose word that happened to
+    // be a function name, not an anchor.
+    let names_low = crate::seed::sink::prompt_names_low_priority(prompt);
+    // A file inferred from prose ("python parser" → `python_lang.rs`, tagged
+    // `stem`) is a guess of the same kind and competes like one.
+    let anchored = sink.resolutions().iter().any(|s| {
+        STRONG.contains(&prefix(&s.query))
+            && prefix(&s.query) != "stem"
+            && s.resolved_id.as_ref().is_some_and(|id| {
+                names_low
+                    || graph
+                        .get_node(id)
+                        .is_some_and(|n| !crate::selector::is_noise_path(&n.file_path))
+            })
+    });
+    if anchored {
+        return;
+    }
+    let words: Vec<String> = {
+        let mut seen = std::collections::HashSet::new();
+        prompt
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .flat_map(|tok| {
+                // `add_argument` counts whole and by its parts.
+                let mut out = vec![tok.to_string()];
+                if tok.contains('_') {
+                    out.extend(tok.split('_').map(str::to_string));
+                }
+                out
+            })
+            .filter(|w| w.len() >= 4)
+            .map(|w| w.to_lowercase())
+            .filter(|w| !is_prompt_stopword(w) && !BODY_GENERIC.contains(&w.as_str()))
+            .filter(|w| seen.insert(w.clone()))
+            .collect()
+    };
+    if words.len() < 2 {
+        return;
+    }
+    // Product code first; a test or script only when it spells strictly
+    // more of the prompt than any product file ("the threshold for the
+    // large gold set" is a test's constant).
+    let all = graph.body_word_ranking(&words, 12);
+    let is_noise = |id: &NodeId| {
+        graph
+            .get_node(id)
+            .is_some_and(|n| crate::selector::is_noise_path(&n.file_path))
+    };
+    // Prose (README, docs, planning notes) spells every word of every
+    // question and answers none of them.
+    let is_prose = |id: &NodeId| {
+        graph.get_node(id).is_some_and(|n| {
+            let p = n
+                .file_path
+                .to_string_lossy()
+                .replace('\\', "/")
+                .to_lowercase();
+            p.ends_with(".md")
+                || p.ends_with(".txt")
+                || p.ends_with(".rst")
+                || p.contains("/docs/")
+                || p.starts_with("docs/")
+        })
+    };
+    let all: Vec<(NodeId, usize, f32)> =
+        all.into_iter().filter(|(id, _, _)| !is_prose(id)).collect();
+    let best_product = all
+        .iter()
+        .filter(|(id, _, _)| !is_noise(id))
+        .map(|(_, c, _)| *c)
+        .max()
+        .unwrap_or(0);
+    let ranked: Vec<(NodeId, usize, f32)> = all
+        .into_iter()
+        .filter(|(id, c, _)| !is_noise(id) || (*c > best_product && !names_low) || names_low)
+        .collect();
+    let Some((_, covered, _)) = ranked.first().cloned() else {
+        return;
+    };
+    if covered < 2 {
+        return;
+    }
+    // The files that spell the most: one, or two on a tie (both ship —
+    // recall over precision here, as with path-word seeds). Three or more
+    // tied is a word every module uses, not an address.
+    // Among files spelling the same number of words, the one whose *path*
+    // spells more of the prompt is the address ("large gold set" →
+    // `third_party_large_gold.rs`, not `third_party_holdout_gold.rs`); then
+    // a much denser file (BM25 score well above the rest) stands alone.
+    let best_score = ranked.first().map(|(_, _, s)| *s).unwrap_or(0.0);
+    let path_hits = |id: &NodeId| -> usize {
+        graph
+            .get_node(id)
+            .map(|n| {
+                let p = n
+                    .file_path
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .to_lowercase();
+                words.iter().filter(|w| p.contains(w.as_str())).count()
+            })
+            .unwrap_or(0)
+    };
+    let mut tied: Vec<(NodeId, usize, f32)> = ranked
+        .iter()
+        .filter(|(_, c, _)| *c == covered)
+        .cloned()
+        .collect();
+    let best_score = tied.iter().map(|(_, _, s)| *s).fold(best_score, f32::max);
+    let max_path = tied
+        .iter()
+        .map(|(id, _, _)| path_hits(id))
+        .max()
+        .unwrap_or(0);
+    if max_path > 0 {
+        tied.retain(|(id, _, _)| path_hits(id) == max_path);
+    } else {
+        tied.retain(|(_, _, s)| *s >= best_score * 0.6);
+    }
+    let top: Vec<(NodeId, usize)> = tied.into_iter().map(|(id, c, _)| (id, c)).collect();
+    if top.len() > 2 {
+        return;
+    }
+    let top_paths: Vec<std::path::PathBuf> = top
+        .iter()
+        .filter_map(|(id, _)| graph.get_node(id).map(|n| n.file_path))
+        .collect();
+    // Guess seeds that spelled fewer words than the body hit give way.
+    let weaker: Vec<NodeId> = sink
+        .resolutions()
+        .iter()
+        .filter(|s| WEAK.contains(&prefix(&s.query)) || prefix(&s.query) == "stem")
+        .filter_map(|s| s.resolved_id.clone())
+        .filter(|id| {
+            graph.get_node(id).is_some_and(|n| {
+                !top_paths.contains(&n.file_path)
+                    && graph.body_word_hits(&n.file_path, &words) < covered
+            })
+        })
+        .collect();
+    if !weaker.is_empty() {
+        let buffers = sink.buffers_mut();
+        for s in buffers.resolutions.iter_mut() {
+            if s.resolved_id.as_ref().is_some_and(|id| weaker.contains(id)) {
+                s.resolved_id = None;
+                s.confidence = 0.0;
+                s.resolution_tier = None;
+            }
+        }
+        for id in &weaker {
+            buffers.energies.remove(id);
+            buffers.reasons.remove(id);
+        }
+    }
+    for (pos, path) in top_paths.iter().enumerate() {
+        let energy = signal_weight(config, SignalKind::PathHint, pos + 1);
+        let rel = path.to_string_lossy().replace('\\', "/");
+        sink.push(graph, prompt, rel, energy, "body");
+    }
+}
+
+/// Prompt words that spell nothing about *which* file: every file has them.
+const BODY_GENERIC: &[&str] = &[
+    "does",
+    "where",
+    "when",
+    "which",
+    "what",
+    "with",
+    "from",
+    "into",
+    "this",
+    "that",
+    "than",
+    "then",
+    "them",
+    "they",
+    "have",
+    "been",
+    "being",
+    "after",
+    "before",
+    "about",
+    "also",
+    "only",
+    "each",
+    "some",
+    "such",
+    "used",
+    "uses",
+    "using",
+    "make",
+    "makes",
+    "made",
+    "code",
+    "file",
+    "files",
+    "function",
+    "functions",
+    "method",
+    "methods",
+    "class",
+    "value",
+    "values",
+    "call",
+    "calls",
+    "called",
+    "return",
+    "returns",
+    "true",
+    "false",
+    "none",
+    "null",
+    "self",
+    "read",
+    "reads",
+    "write",
+    "writes",
+    "handle",
+    "handles",
+    "check",
+    "checks",
+    "set",
+    "sets",
+    "get",
+    "gets",
+    "define",
+    "defined",
+    "defines",
+    "pick",
+    "picks",
+    "decide",
+    "decides",
+    "apply",
+    "applies",
+    "applied",
+];
 #[cfg(test)]
 mod config_key_tests {
     use super::config_key_mentions;

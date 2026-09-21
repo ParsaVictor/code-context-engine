@@ -48,7 +48,7 @@ Gold sets are written from reading the source **before** the engine runs. Recall
 | os-lib + cli + Flux.jl | Scala, R, Julia | 1.000 | 0.589 | 1 |
 | peft + keras-hub | Hugging Face / Keras 3 libraries | 1.000 | 0.632 | 0 |
 
-**Sets that have been tuned on** (dev-class): nanoGPT / express / vit-pytorch / fastapi-template 1.000 / 0.938 · django + ultralytics 1.000 / 0.675 · Hydra + argparse configs 1.000 / 0.767 · Fastify + Next.js app router 0.817 / 0.618 · this repository (20 real questions) 0.675 / 0.428.
+**Sets that have been tuned on** (dev-class): nanoGPT / express / vit-pytorch / fastapi-template 1.000 / 0.938 · django + ultralytics 1.000 / 0.675 · Hydra + argparse configs 1.000 / 0.767 · Fastify + Next.js app router 0.817 / 0.667 · this repository (20 real questions) 0.925 / 0.607.
 
 **Task success with a real model** (DeepSeek-V4-Pro answering, GLM-5.3 judging against the real source, real `verify` for patch tasks):
 
