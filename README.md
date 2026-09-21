@@ -62,6 +62,51 @@ The packet matches or beats "just open the right files" at 1.4–2.1× the succe
 
 ---
 
+## Against the baseline it was forked from
+
+Same 112 gold tasks on 15 third-party repositories, same machine, same day (2026-09-21); NeuroMesh v0.9.0 built from the `baseline-v0.9.0` tag, this fork from `main`. Scored per task by file name from each engine's own `optimize` output — raw results in [`docs/baseline-vs-fork-2026-09-21.txt`](docs/baseline-vs-fork-2026-09-21.txt), script in [`scripts/compare-baseline.sh`](scripts/compare-baseline.sh).
+
+| | NeuroMesh v0.9.0 (baseline) | this fork |
+|---|---:|---:|
+| gold files found (recall, 112 tasks) | 0.735 | **0.938** |
+| share of packet files that were wanted (precision) | 0.206 | **0.633** |
+| forbidden files shipped | 12 | 7 |
+| Scala / R / Julia repositories | 0.000 recall (not parsed) | 1.000 |
+| Hydra + argparse config questions | 0.500–0.750 recall | 1.000 |
+| C / C++ (libuv, fmt) | 0.688–0.875 recall | 1.000 |
+| shell scripts, notebooks, `.ps1` | skipped at index time | indexed |
+| cross-project leakage | one live graph per process | `ProjectId` invariant + CI leakage gate |
+
+Same recall where the baseline already worked (Go, Python, Django, ultralytics); three times the precision everywhere — the baseline ships four to six files for every one that is wanted. The web-stack front (Fastify + Next.js) is the one place both are weak (0.65 recall), which is why it is the current focus.
+
+### What this fork adds
+
+| Capability | What it does | Measured by |
+|---|---|---|
+| **Project isolation** | deterministic `ProjectId`, single-project invariant on the live graph, a CI test that indexes two projects sharing a file and asserts zero leakage | P0 gate in CI |
+| **Config → code** | YAML / JSON / `.env` keys and argparse flags become nodes; `cfg.x`, `args.x`, `self.hparams.x` become `Parameterizes` edges; Hydra `defaults:` composition is an import; a key's named reader takes a seat | holdout-cfg 1.000 / 0.712 (F55, F71, F72) |
+| **ML artifact graph** | Dataset · Model · Layer · TrainLoop · EvalLoop · Checkpoint · Metric nodes from a PyTorch / Keras overlay; notebooks parsed cell by cell | holdout-ml2 1.000 / 0.632 untuned (F26, F58) |
+| **String-literal index** | quoted names — routes, MCP tool names, event names, env vars, camelCase hooks — resolve to the files that spell them | F75, F78, F80 |
+| **Twin resolution** | same-named definitions settled by directory words, body words and prompt anchors, plural-tolerant; framework-convention stems (`route.ts`, `index`, `layout`) are not "named" | F64, F70, F80, F82 |
+| **Noise discipline** | guesses never land in docs / tests / fixtures / examples unless asked; alias terms must start a word; acronyms resolve exactly | F61, F73, F75 |
+| **Deterministic packets** | every tie has a total order; the same question gives the same packet | F17, F63, F70 |
+| **A learning loop that learns the path** | positive feedback reinforces only the edges a successful task walked; negative feedback reaches required files | F57, F69 |
+| **Task-success harness** | packet vs whole gold files vs grep with a real model, a separate judge that reads the real source, real `verify` for patch tasks | phase C, F76, F77 |
+| **12 languages + shell, PowerShell, notebooks** | tree-sitter grammars plus light parsers for YAML, JSON, SQL, shell, `.ipynb` | F78 |
+
+### In a Claude Code session
+
+Same task, same model (Sonnet), `claude -p` with and without the MCP server, cost from the CLI's own usage report:
+
+| Repository | plain (Read / Grep) | with this engine | context tokens | cost |
+|---|---|---|---:|---:|
+| Django, 3,516 files | 8 turns · 233k context tokens · $0.239 | 5 turns · 129k · $0.204 | **−45%** | −15% |
+| fastify/demo, 68 files | 8 turns · 244k · $0.408 | 7 turns · 194k · $0.391 | −20% | −4% |
+
+The system prompt and tool definitions are re-read every turn and dominate small repositories; the engine only shrinks the code-context share. "99% reduction" figures compare a packet with the *whole repository*, which no agent sends; the numbers above are what a session actually pays.
+
+---
+
 ## Install
 
 Pre-built binaries come from upstream's installer; this fork is built from source until its first release.
