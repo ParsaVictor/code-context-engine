@@ -3,6 +3,8 @@
 این سند تنها چیزی است که چت بعدی باید بخواند تا بدون خطا و سریع ادامه دهد. هر چیزی که این‌جا نیست، در فایل‌های
 ارجاع‌شده هست. ترتیب خواندن: همین سند → `stage5-findings.fa.md` فقط برای finding ای که به آن می‌رسی.
 
+> **2026-09-21 بعد از #118:** §۱۱ انجام شد (W1/W2). فازبندی جدید و بازبینی در **§۱۲**؛ از W3 (بازتعریف‌شده) شروع کن.
+
 ## ۰. پروژه در یک پاراگراف
 
 fork از NeuroMesh v0.9.0 (Rust، MCP context engine محلی). هدف: **بیشترین task-success به ازای هر توکن روی هر
@@ -23,7 +25,7 @@ Parsa (فارسی‌زبان، تیم B2B با stack Fastify + Drizzle + Next.js
 | holdout-ml2 (peft, keras-hub) | **تیون‌نشده** | 1.000 / 0.632 / 0 | گیت |
 | holdout-ml (keras-io, setfit) | dev-class | 1.000 / 0.437 / 0 | — |
 | holdout-cfg (hydra, detr) | dev-class | 1.000 / 0.712 / 0 | recall ≥0.95 / precision ≥0.69 |
-| **holdout-web** (fastify/demo, shadcn taxonomy) | dev-class برای web | **0.642 / 0.602 / 0** | recall ≥0.90 / precision ≥0.60 (target-only، غیر ratchet) |
+| **holdout-web** (fastify/demo, shadcn taxonomy) | dev-class برای web | **0.817 / 0.618 / 0** | recall ≥0.90 / precision ≥0.60 (target-only، غیر ratchet) |
 | self (۲۰ سؤال واقعی روی خود ریپو) | dev-class | 0.675 / 0.406 / 0 | — |
 
 فاز C (task-success با مدل واقعی، DeepSeek-V4-Pro + داور GLM-5.3 از Baseten): هر ۹ سلول هر ۳ گیت پاس؛ packet 1.00/1.00
@@ -200,3 +202,32 @@ recall ما 0.938 در برابر 0.735 نسخه‌ی اصلی است؛ web تن
 ابزار مقایسه با نسخه‌ی اصلی: `scripts/compare-baseline.sh` (نتایج `docs/baseline-vs-fork-2026-09-21.txt`؛ باینری baseline
 از worktree روی tag `baseline-v0.9.0` با `CARGO_TARGET_DIR` جدا، ~۲۵ دقیقه build). A/B ی Claude Code: `claude -p "<task>"
 --output-format json --model sonnet --mcp-config <json> --strict-mcp-config --allowedTools …` (مسیر exe در JSON با `/`).
+
+## ۱۲. افزوده‌ی 2026-09-21 (بعد از #118) — بازبینی و فازبندی دوباره
+
+**وضعیت:** W1 (#117، F83) و W2 (#118، F84) مرج شدند. web 0.642→**0.817 / 0.618**، holdout-2 0.554→**0.700**، large 0.675
+(ratchet 0.655)، cfg 0.767 (ratchet 0.745)، holdout-c 0.589، lang 0.589، ml2 0.632، self 0.675/0.428. سه نسخه‌ی «صندلی
+بی‌شاهد» اندازه‌گیری و رد شد (F83) — درس: هیچ فایلی بدون کلمه‌ای از prompt نباید صندلی بگیرد؛ هر بار large/holdout-2 −0.1.
+
+**بازبینی self (۷ تسک گم‌شده):** همه «مفهوم بی‌نام» اند و ۴ تای‌شان seed *غلط* دارند (`token:pheromone → PheromoneConfig`،
+`concept:database → DatabaseError`)، یعنی «BM25 فقط وقتی هیچ seed ای نیست» (W3 قدیمی) ۴ تا از ۷ را نمی‌گیرد. جواب همه در بدنه/کامنت
+فایل گلد است (`argparse`، `add_argument`، `ratchet`، `judge`، `exon budget`، `pheromone`) — grep ساده پیدایشان می‌کند.
+**W3 بازتعریف:** BM25 (tantivy، روی بدنه‌ی فایل‌های غیر‌noise) به‌عنوان *منبع کاندید* که فقط با seedهای حدسی (tier ی
+token/concept/fallback) رقابت می‌کند، هرگز با seed قوی (identifier/file/config). وقتی بهترین hit ی BM25 ≥۲ کلمه‌ی prompt را در بدنه
+دارد و seed حدسی فقط یک کلمه را با prefix گرفته، BM25 جایگزین می‌شود. گیت: self recall ≥0.85، ۹ مجموعه بدون افت.
+
+**بازبینی web (۴ تسک باقی):** `env.ts` («env variable» سه‌حرفی؛ کلید `RATE_LIMIT_MAX` در prompt نیست)، `lib/subscription.ts` و
+`password-manager` ی login (callee بی‌نام) — همان مرز «بی‌شاهد». با BM25 ی بازتعریف‌شده ممکن است ۱–۲ تا بیاید؛ تیون جدا نمی‌کنیم.
+
+**بازبینی precision:** روی گلدهای تک‌فایلی، هر فایل اضافه precision را 0.5 می‌کند؛ 0.6–0.7 یعنی به‌طور میانگین یک فایل اضافه.
+فاز C نشان داد task-success با همین packet ها ۱.۰ است. بنابراین precision-tuning تمام است (session 10 هم همین را گفت)؛ فقط
+ratchet نگه می‌داریم.
+
+| فاز | چه | انتظار | گیت |
+|---|---|---|---|
+| **W3** | BM25 رقیب seed حدسی (tantivy) | self 0.675→≥0.85؛ web شاید +0.02 | ۹ مجموعه بدون افت |
+| **G3** | ۳۰ سؤال تیم روی ریپوی خصوصی (هر وقت رسید) — یک دور probe، fix خوشه‌ها | private recall ≥0.90 | holdout واقعی؛ گلد قفل قبل از اجرا |
+| **G4** | dogfood: ۱۰ سؤال واقعی جدید روی خود ریپو + ۱۰ روی web | ۱–۲ finding ساختاری | هر ۱۰ سؤال = یک probe |
+| **G5** | release v1.0: measured.md مرجع، باینری، PR های upstream | — | همه سبز |
+
+زمان خالص: W3 یک روز، G4 نصف روز، G3 وابسته به تیم، G5 یک روز.
