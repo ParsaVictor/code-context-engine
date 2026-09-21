@@ -227,11 +227,25 @@ pub fn select_with_named(
         let Some(seed_node) = graph.get_node(seed) else {
             continue;
         };
-        if seed_node.node_type == NodeType::File {
-            continue;
-        }
-        for (neighbor, edge) in graph.get_connected_neighbors(seed) {
-            if edge.edge_type != EdgeType::Calls || edge.source != *seed {
+        // A file seed (a route file found by its route literal, a file the
+        // prompt named) is the whole file: the callees of every symbol it
+        // contains are its callees. The same prompt evidence gates them.
+        let callers: Vec<NodeId> = if seed_node.node_type == NodeType::File {
+            graph
+                .nodes_in_file(&seed_node.file_path)
+                .into_iter()
+                .map(|n| n.id)
+                .collect()
+        } else {
+            vec![seed.clone()]
+        };
+        for (caller, neighbor, edge) in callers.iter().flat_map(|c| {
+            graph
+                .get_connected_neighbors(c)
+                .into_iter()
+                .map(move |(n, e)| (c.clone(), n, e))
+        }) {
+            if edge.edge_type != EdgeType::Calls || edge.source != caller {
                 continue;
             }
             let Some(node) = graph.get_node(&neighbor) else {
@@ -485,6 +499,7 @@ pub fn select_with_named(
                     if !outbound_call
                         && !consumers_wanted
                         && !consumer_named_in_focus(&node.name, &node.file_path, focus_terms)
+                        && !path_spells_prompt(graph, &node.file_path, &prompt_words.prose)
                     {
                         continue;
                     }
@@ -1200,7 +1215,7 @@ pub fn is_noise_path_in(path: &Path, examples_core: bool) -> bool {
         || neuromesh_core::is_low_priority_source_path_in(path, examples_core)
 }
 
-/// Words the seed already owns: its name and its file's stem, split into
+/// Words the seed already owns: its name, its file's stem and its parent directory, split into
 /// identifier words. A prompt word among these names the seed, not a callee.
 fn seed_own_words(seed: &neuromesh_core::ContextNode) -> HashSet<String> {
     let stem = seed
@@ -1208,9 +1223,18 @@ fn seed_own_words(seed: &neuromesh_core::ContextNode) -> HashSet<String> {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("");
+    // Its parent directory too: "layers" names the seed's own place, not a
+    // sibling in `layers/` (flux, holdout-lang).
+    let parent = seed
+        .file_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
     neuromesh_parser::tokenize_ident(&seed.name)
         .into_iter()
         .chain(neuromesh_parser::tokenize_ident(stem))
+        .chain(neuromesh_parser::tokenize_ident(parent))
         .flat_map(|w| w.split(['-', '_']).map(str::to_string).collect::<Vec<_>>())
         .map(|w| w.to_lowercase())
         .collect()
@@ -1286,6 +1310,122 @@ fn file_imports_file(graph: &NeuralProjectGraph, from: &Path, to: &Path) -> bool
         })
 }
 
+/// Directories a framework stamps on every project: they name nothing.
+const CONVENTION_DIRS: &[&str] = &[
+    "src",
+    "lib",
+    "app",
+    "apps",
+    "api",
+    "pkg",
+    "internal",
+    "plugins",
+    "plugin",
+    "routes",
+    "route",
+    "components",
+    "component",
+    "utils",
+    "util",
+    "core",
+    "common",
+    "shared",
+    "helpers",
+    "services",
+    "service",
+    "models",
+    "model",
+    "views",
+    "view",
+    "controllers",
+    "handlers",
+    "middleware",
+    "config",
+    "server",
+    "client",
+    "packages",
+    "modules",
+    "module",
+    "engine",
+    "external",
+    "tests",
+    "test",
+    "types",
+    "hooks",
+];
+
+/// Whether a file's path spells the prompt: two or more distinct prose words
+/// of the prompt among its stem words and non-convention directories
+/// ("Stripe webhook" → `app/api/webhooks/stripe/route.ts`, "dashboard
+/// layout" → `app/(dashboard)/dashboard/layout.tsx`), plural-tolerant, and
+/// at least one of them carried by few files. One word is a coincidence
+/// (`loop-watcher.c` next to `loop.c`); two words a whole subtree shares
+/// (`management/commands/*.py` ← "management command") name a place; two
+/// words with one that few files carry are an address (W2).
+pub(crate) fn path_spells_prompt(
+    graph: &NeuralProjectGraph,
+    path: &Path,
+    prose: &HashSet<String>,
+) -> bool {
+    const RARE: usize = 8;
+    if prose.len() < 2 {
+        return false;
+    }
+    let words = path_words(path);
+    let covered: Vec<&String> = prose
+        .iter()
+        .filter(|term| {
+            term.len() >= 4 && words.iter().any(|w| w == *term || same_word_stem(w, term))
+        })
+        .collect();
+    if covered.len() < 2 {
+        return false;
+    }
+    let all = graph.file_node_paths();
+    covered.iter().any(|term| {
+        all.iter()
+            .filter(|(_, p)| {
+                path_words(p)
+                    .iter()
+                    .any(|w| w == *term || same_word_stem(w, term))
+            })
+            .take(RARE + 1)
+            .count()
+            <= RARE
+    })
+}
+
+/// Words of a path that can name it: stem words plus non-convention
+/// directories, 4+ letters, lowercased.
+fn path_words(path: &Path) -> Vec<String> {
+    let rel = path.to_string_lossy().replace('\\', "/");
+    let mut words: Vec<String> = Vec::new();
+    let comps: Vec<&str> = rel.split('/').collect();
+    for (i, comp) in comps.iter().enumerate() {
+        let last = i + 1 == comps.len();
+        let comp = if last {
+            Path::new(comp)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(comp)
+        } else {
+            comp
+        };
+        let comp = comp.trim_matches(['(', ')', '[', ']']);
+        if !last && CONVENTION_DIRS.contains(&comp.to_lowercase().as_str()) {
+            continue;
+        }
+        words.extend(
+            neuromesh_parser::tokenize_ident(comp)
+                .into_iter()
+                .flat_map(|w| w.split(['-', '_']).map(str::to_string).collect::<Vec<_>>())
+                .map(|w| w.to_lowercase())
+                .filter(|w| w.len() >= 4),
+        );
+    }
+    words
+}
+
 /// Prompt evidence for a callee's file beyond its exact stem: a prose word of
 /// the stem (`password-manager` ← "password") or of its parent directory
 /// (`plugins/app/tasks/` ← "tasks"). Directories a framework stamps on every
@@ -1295,48 +1435,6 @@ fn callee_path_named_in_prompt(
     prompt_words: &HashSet<String>,
     seed_words: &HashSet<String>,
 ) -> bool {
-    const CONVENTION_DIRS: &[&str] = &[
-        "src",
-        "lib",
-        "app",
-        "apps",
-        "api",
-        "pkg",
-        "internal",
-        "plugins",
-        "plugin",
-        "routes",
-        "route",
-        "components",
-        "component",
-        "utils",
-        "util",
-        "core",
-        "common",
-        "shared",
-        "helpers",
-        "services",
-        "service",
-        "models",
-        "model",
-        "views",
-        "view",
-        "controllers",
-        "handlers",
-        "middleware",
-        "config",
-        "server",
-        "client",
-        "packages",
-        "modules",
-        "module",
-        "engine",
-        "external",
-        "tests",
-        "test",
-        "types",
-        "hooks",
-    ];
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     let parent = path
         .parent()

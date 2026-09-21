@@ -12,8 +12,8 @@ use crate::seed::{
 };
 use crate::selector::{
     budget_mode_name, consumer_named_in_focus, fill_budget, focus_terms_ask_for_consumers,
-    is_noise_path, packet_cap, path_sort_keys, seed_callee_exon_names, select_with_named, sort_key,
-    PromptWords,
+    is_noise_path, packet_cap, path_sort_keys, path_spells_prompt, seed_callee_exon_names,
+    select_with_named, sort_key, PromptWords,
 };
 use crate::skeleton::{CodeSkeletonizer, FoldedIntron, FunctionSpan};
 use crate::style_routing::{
@@ -931,6 +931,7 @@ impl ContextActivator {
                 && !focus_terms_ask_for_consumers(&focus_terms)
                 && !(consumer_named_in_focus(&node.name, &node.file_path, &focus_terms)
                     && !shared_stem_without_dir_focus(graph, &node.file_path, &focus_terms))
+                && !path_spells_prompt(graph, &node.file_path, &prompt_words.prose)
             {
                 return None;
             }

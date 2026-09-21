@@ -82,6 +82,9 @@ impl<'res, 'eng, 'rsn> SeedSink<'res, 'eng, 'rsn> {
             return;
         }
         if let Some((mut id, conf)) = (self.resolve)(graph, &query, prompt) {
+            if let Some(file) = dir_word_retarget(graph, prompt, &query, &id) {
+                id = file;
+            }
             // A prompt word matched against every symbol in the graph (the
             // token fallbacks) is a guess; a guess that lands in docs, tests
             // or fixtures is noise unless the question is about those
@@ -255,4 +258,81 @@ fn prompt_names_low_priority(prompt: &str) -> bool {
 /// `CLI`, `MCP`, `API`, `RPN`: two to four upper-case letters.
 fn is_acronym(query: &str) -> bool {
     (2..=4).contains(&query.len()) && query.chars().all(|c| c.is_ascii_uppercase())
+}
+
+/// A prompt word that is the name of a directory ("dashboard") and reached
+/// a symbol only by prefix (`DashboardLoading` in `dashboard/loading.tsx`)
+/// named the *place*, not that symbol. If a sibling under that directory
+/// spells a second prompt word in its own name (`dashboard/layout.tsx` ←
+/// "dashboard layout"), that file is what was meant; return its id. With
+/// no such sibling the prefix hit stands (kosha: "school scores" →
+/// `school/routes.py`).
+fn dir_word_retarget(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    query: &str,
+    id: &NodeId,
+) -> Option<NodeId> {
+    let word = query.rsplit(':').next().unwrap_or(query).to_lowercase();
+    if word.len() < 4 || !word.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    let node = graph.get_node(id)?;
+    let name = node.name.to_lowercase();
+    if name == word || !name.starts_with(&word) {
+        return None;
+    }
+    let strip = |w: &str| crate::seed::weak_file_seed::strip_plural(w).to_string();
+    let prose: std::collections::HashSet<String> = prompt
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 4)
+        .map(|w| strip(&w.to_lowercase()))
+        .filter(|w| *w != strip(&word))
+        .collect();
+    let dir_seg = |p: &std::path::Path| -> bool {
+        p.parent().is_some_and(|d| {
+            d.components().any(|c| {
+                c.as_os_str()
+                    .to_str()
+                    .is_some_and(|s| s.trim_matches(['(', ')']).eq_ignore_ascii_case(&word))
+            })
+        })
+    };
+    if !dir_seg(&node.file_path) {
+        return None;
+    }
+    let mut best: Option<(usize, String, NodeId)> = None;
+    for (fid, path) in graph.file_node_paths() {
+        if !dir_seg(&path) || crate::selector::is_noise_path(&path) {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let hits = prose
+            .iter()
+            .filter(|w| {
+                stem.split(['-', '_', '.'])
+                    .any(|s| s.len() >= 4 && strip(s) == **w)
+            })
+            .count();
+        if hits == 0 {
+            continue;
+        }
+        let rel = path.to_string_lossy().replace('\\', "/");
+        let better = match &best {
+            None => true,
+            Some((h, p, _)) => hits > *h || (hits == *h && rel < *p),
+        };
+        if better {
+            best = Some((hits, rel, fid));
+        }
+    }
+    best.map(|(_, _, fid)| fid).filter(|fid| {
+        graph
+            .get_node(fid)
+            .is_some_and(|n| n.file_path != node.file_path)
+    })
 }
