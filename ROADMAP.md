@@ -1,95 +1,45 @@
 # Roadmap
 
-> Full design docs (Persian): [`docs/planning/`](docs/planning/)
-> مستندات کامل طراحی و تحلیل به فارسی در پوشه‌ی `docs/planning/`.
+> Full design docs, findings and session handoffs (Persian): [`docs/planning/`](docs/planning/).
+> Numbers and what is not measured: [`docs/measured.md`](docs/measured.md).
 
-## Why this fork exists
+## Goal
 
-The baseline (NeuroMesh v0.9.0) is a strong local-first MCP context engine, but two
-gaps block it from being a *general* project context engine:
+**Maximum task success per token, on any codebase, with zero cross-project leakage.**
+Concretely: recall ≥ 0.95 and precision ≥ 0.75 on repositories the engine was never tuned on, with a real-model task-success benchmark that stays above "open the right files by hand".
 
-1. **Project isolation is coarse.** One live in-RAM graph per MCP process; a
-   mis-detected workspace or an un-indexed second project can contaminate the
-   graph. `NodeId`/`EdgeId` carry no project namespace, and queries do not filter
-   by `project_id`.
-2. **It is web-centric.** No `.ipynb` parsing, no config→code layer, no ML node
-   types (Dataset / Model / Checkpoint / Experiment / Metric), no ML framework
-   overlays. It cannot properly reason about a PyTorch / HuggingFace codebase.
+## Where the project stands (2026-09-21)
 
-Goal: **Maximum task success per token**, with **cross-project leakage = 0**, on
-**web + ML** codebases alike.
-
-## P0 — Isolation first (stop the bug) — **done**
-
-- [x] Deterministic `ProjectId`, derived from the canonical project root (sha256, matching the managed-store slot naming — nothing written into the user's repo)
-- [ ] Central `registry.sqlite` (id ↔ path ↔ slot ↔ lang profile) — deferred; not needed to close the bug, it is P1 infrastructure
-- [x] Single-project invariant enforced on the live graph (`assert_single_project` / `evict_foreign_nodes`), rather than namespacing every derived index key
-- [x] `graph.clear()` before every hot-swap; the `same_workspace_path` early-return now also requires the same `project_id`; workspace root locked once per index
-- [ ] Monorepo / multi-root detection + `sub_projects` config — one repo is still one project
-- [x] **Leakage gate in CI** — two projects sharing a byte-identical file, assert zero cross-project files in the packet
-- [x] Ignore rules scoped to the project root, and a guessed workspace with no project marker is refused
-- [ ] (optional) `LruCache<ProjectId, ProjectContext>` for concurrent multi-project serving
-
-**Definition of done — met:** open project A (Rust web) then project B (Python CV) in one
-MCP process; every B query returns zero A files; CI proves it.
-Offered upstream as [pinoox/neuromesh#34](https://github.com/pinoox/neuromesh/pull/34).
-
-## P1 — Universal Artifact Graph (grow the knowledge)
-
-- [x] Add generic + ML `NodeType` / `EdgeType` (Artifact IR)
-- [ ] tree-sitter grammars: C, C++, R, Julia, Scala, Lua, Bash, TOML
-- [ ] `tree-sitter-stack-graphs` name resolution (Python / JS / TS first)
-- [ ] SCIP index ingestion when present
-- [x] **`.ipynb` parser (ordered cells + cross-cell DEF-USE)** — a notebook is
-      normalized once, at every point the engine reads a file, into a jupytext
-      "percent" Python view: cells in document order, magics and shell escapes
-      commented, markdown reduced to its headings, outputs dropped except a
-      one-line echo of the exception a cell died on. Cross-cell DEF-USE is then
-      ordinary Python name resolution, and the PyTorch overlay types artifacts
-      inside notebooks without knowing what a notebook is. Code cells also
-      become `NotebookCell` nodes joined by `Precedes`, so a packet can quote
-      one cell instead of the whole file.
-- [ ] Config→Code layer (YAML / Hydra / argparse → `Hyperparameter` / `Parameterizes`)
-- [x] **ML framework overlays — PyTorch object detection first** (`nn.Module`, `forward`, `DataLoader`, train loop, checkpoint, mAP metric)
-- [ ] `tantivy` BM25 replaces hand-rolled lexical retrieval
-- [ ] Reranker + query-conditioned pruning
-- [ ] Gold dataset: 1 web + 1 NLP + 1 CV project; extend `neuromesh eval`
-
-**Killer demo — the walk exists,** gated in CI by
-`crates/neuromesh-context/tests/ml_artifact_graph.rs` over artifact edges only:
-
-```
-val/mAP <-Produces- evaluate -Evaluates-> Detector <-CheckpointOf- runs/last.pt
-        <-Produces- main -Consumes-> CocoDetection <-Transforms- build_transforms
-```
-
-Still to measure: the token saving against opening the repo, once the gold
-dataset and `neuromesh eval` cover a CV project.
-
-**Notebooks, measured on a checkout we did not write** — `visual-intelligence-engine`,
-5 notebooks, indexed at `main` and again on the notebook branch:
-
-| | before | after |
+| Phase | Scope | State |
 |---|---|---|
-| files indexed | 47 | 52 |
-| symbols inside notebooks | 0 | 185 |
-| artifact nodes | 5 | 9 |
-| packet for *"how does the animal recognition notebook score crops with CLIP?"* | 7 files, no notebook | 9 files, led by the two notebooks named |
+| **P0 — Isolation** | deterministic `ProjectId`, single-project invariant, leakage gate in CI | ✅ done, [offered upstream](https://github.com/pinoox/neuromesh/pull/34) |
+| **P1 — Universal graph** | notebooks, config→code (YAML / Hydra / argparse), ML artifact overlay, shell scripts, string-literal index | ✅ done for Python / JS / TS / Go / C / C++ / Rust / Scala / R / Julia / Kotlin / PHP; `tantivy` BM25 and stack-graphs not started |
+| **Holdout proof** | gold sets on repositories never tuned on (Go, Python, C, C++, Scala, R, Julia, HF / Keras libraries) | ✅ recall 1.00 on all four; precision 0.54–0.63 |
+| **Task success with a real model** | packet vs whole gold files vs grep, separate judge, real `verify` | ✅ all nine cells pass all three gates (packet 1.00 / 1.00 on the two holdouts) |
+| **Web-stack coverage** | Fastify + Next.js app-router holdout (the shape of a typical B2B product) | 🟡 recall 0.64 → the open front; see below |
+| **Private B2B holdout** | the team's own repository, gold written by the team before the engine runs | ⏸ waiting for the gold |
+| **Release** | v1.0 binary, docs, upstream PRs | ⏳ after the web front closes |
 
-The packet comparison is the one that counts: before, a question about a
-notebook could not return one. Re-run it with
-`crates/neuromesh-context/tests/artifact_audit.rs` (`audit_a_real_repository`
-and `packet_probe`, both `--ignored`).
+## What is next, in order
 
-## P2 — Deeper compression & knowledge
+1. **Recall on web / route-shaped repositories.** Untuned recall on Fastify + Next.js was 0.54. Known, measured causes with fixes recorded but not yet shipped: call edges from same-named handlers hang off the file node (F81 — needs stricter callee seating first); prompt words that are directory names; path-word seeds next to an anchor. Each is in `docs/planning/stage5-findings.fa.md` with the number it moved.
+2. **Callee seating by prompt evidence.** The selector gives up to three required seats to a seed's callees; with a correct call graph that floods. Seats should require the prompt to name the callee or its file.
+3. **Private holdout (5b).** Thirty real questions from the team on their repository; the engine never sees a packet before the gold is frozen. This is the only true holdout for the product's own domain.
+4. **Precision on unseen repositories.** Every holdout carries 1–3 neighbour files too many. Score-tuning has never moved this; structural findings (F61, F73, F82) have. Continue by probe, not by thresholds.
+5. **Release.** Binary via the upstream installer path, `docs/measured.md` as the source of truth, upstream PRs for the isolation and config→code layers.
 
-- [ ] Optional LLMLingua-2 post-fold compression
-- [ ] Knowledge layer (community detection + module summaries, GraphRAG-style)
-- [ ] Federated multi-project retrieval (explicit scope)
-- [ ] Independent benchmark on SWE-bench Verified subset; publish methodology
+## Measured dead ends (do not re-try without a new idea)
+
+- **Embedding retrieval (MiniLM, `hybrid` engine)** on the self set: recall 0.50 / precision 0.12 vs 0.68 / 0.41 for the lexical engine; none of the concept-only misses gained (F79).
+- **Score and threshold tuning** across two sessions: no holdout moved; every gain came from a structural bug found by reading the explain dump.
+- **Path-word file seeds next to an anchor**: +0.10 recall on the web set, −0.08 precision on C and config sets (F80).
+
+## Later
+
+- `tantivy` BM25 for the lexical layer; `tree-sitter-stack-graphs` name resolution (Python / JS / TS first); SCIP ingestion when present.
+- Knowledge layer (module summaries, GraphRAG-style communities) and optional post-fold compression.
+- Independent benchmark on a SWE-bench Verified subset with the same three-way (packet / whole files / grep) protocol.
 
 ## Relationship to upstream
 
-We keep `upstream/main` as a remote and merge fixes. P0 work is designed to be
-offerable as clean PRs to `pinoox/neuromesh`. The ML / universal layer (P1+) is
-this project's own direction.
+`upstream/main` stays a remote; fixes are merged. Isolation and config→code work is designed to be offerable as clean PRs to `pinoox/neuromesh`. The universal / ML layer and the benchmark discipline are this project's own direction.

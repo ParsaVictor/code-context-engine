@@ -1,292 +1,136 @@
-<!-- ═══════════════════════════════════════════════════════════════════════
-     code-context-engine — independent derivative of NeuroMesh
-     ─────────────────────────────────────────────────────────────────────
-     This repository continues and extends NeuroMesh (https://github.com/pinoox/neuromesh,
-     MIT © 2026 yoosef alipour). Baseline: NeuroMesh v0.9.0 (tag `baseline-v0.9.0`).
+<!-- code-context-engine — an independent derivative of NeuroMesh v0.9.0 (MIT, © 2026 yoosef alipour).
+     Upstream: https://github.com/pinoox/neuromesh · baseline tag: baseline-v0.9.0 · see NOTICE and ATTRIBUTION.md -->
 
-     Why the fork:  (1) real per-project isolation — no cross-project graph
-     contamination;  (2) universal support — not just web, but ML / PyTorch /
-     notebooks / configs.  See ROADMAP.md and docs/planning/ (Persian).
-
-     Full credit to the upstream author. P0 (isolation) work is intended to be
-     offered back upstream as pull requests.  See NOTICE and ATTRIBUTION.md.
-     ═══════════════════════════════════════════════════════════════════════ -->
+<div align="center">
 
 # code-context-engine
 
-> Local-first MCP context engine that cuts AI coding-agent token cost by ~90% —
-> a per-project code graph + folding for **Cursor**, **Claude Code**, **Codex**,
-> and every MCP client. Built for **web *and* ML** codebases.
-> **Status (2026-09-20):** measured on repositories it was never tuned on — recall 1.00, precision 0.54–0.63, no forbidden file shipped in the Go/Python, C/C++ and Hugging Face/Keras-library holdouts; model-executed task success measured (packet 1.00 / 0.80 on two fresh holdouts vs 0.90 / 0.70 for whole gold files, at fewer tokens). Numbers, caveats and the one-command benchmark: [docs/measured.md](docs/measured.md). Roadmap: [ROADMAP.md](ROADMAP.md).
+**Ship the right code, not the whole repo.**
+A local-first MCP context engine for AI coding agents: a per-project code graph, seed resolution from the task as written, and a folded evidence packet — measured on repositories it was never tuned on.
 
-<sub>Derivative of **[NeuroMesh](https://github.com/pinoox/neuromesh)** by yoosef alipour (MIT). See [NOTICE](NOTICE) · [ATTRIBUTION.md](ATTRIBUTION.md) · [ROADMAP.md](ROADMAP.md).</sub>
-
----
-
-<details>
-<summary>Upstream NeuroMesh README (baseline v0.9.0)</summary>
-
-# NeuroMesh
-
-### Ship less context. Ship the right code.
-
-Local-first [MCP](https://modelcontextprotocol.io/) context engine for **Cursor**, **VS Code**, **Claude**, **Codex**, and every MCP client. NeuroMesh indexes your repo into a graph, routes your prompt to the right symbols, and sends a **folded evidence packet** — not thousand-line file dumps.
-
-![Release](https://img.shields.io/github/v/release/pinoox/neuromesh?style=flat-square&color=22c55e)
 ![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg?style=flat-square&logo=rust)
-![CI](https://github.com/pinoox/neuromesh/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/ParsaVictor/code-context-engine/actions/workflows/ci.yml/badge.svg)
 ![MCP](https://img.shields.io/badge/MCP-stdio-5b21b6.svg?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)
 
-Cursor · VS Code · Claude · Codex · OpenCode · MiMo CLI · Antigravity · Kilo · Trae · Windsurf · Zed
+Cursor · Claude Code · Codex · VS Code · Zed · any MCP client
 
-[The pain](#the-pain) · [Fold](#dont-delete-fold) · [Galaxy](#3d-neural-galaxy) · [Measured](#what-we-actually-measured) · [Install](#install) · [Connect](#connect) · [Docs](docs/README.md) · [Site](https://pinoox.github.io/neuromesh/)
+[Why](#why-this-fork) · [Measured](#what-is-measured) · [Install](#install) · [How it works](#how-it-works) · [Benchmarks](#run-the-benchmarks) · [Roadmap](ROADMAP.md) · [Docs](docs/README.md)
 
-
-
----
-
-## The pain
-
-You ask a simple question in a large project. The editor copies two or three **thousand-line files** and ships them to the model.
-
-What you pay for:
-
-1. **Tokens you never needed** — dollar cost on every turn
-2. **Seconds of fake loading** while the window fills with helpers you will not touch
-3. **Lost in the middle** — the model drowns in unrelated bodies and invents bugs
-
-Today’s workarounds all leak in a different place:
-
-
-| Approach                | What goes wrong                                                     |
-| ----------------------- | ------------------------------------------------------------------- |
-| Vector RAG              | Chunks smash functions. The shape of the code disappears.           |
-| “Just attach the files” | The model sees everything and understands nothing.                  |
-| A static code graph     | Better *map* — then it still pastes **full files** into the prompt. |
-
-
-NeuroMesh is the missing step: **route first, then fold.** The graph is for finding the path. The packet is what the model actually reads.
+</div>
 
 ---
 
-## Don’t delete. Fold.
+## Why this fork
 
-### Don’t delete the extra code. Fold it.
+[NeuroMesh](https://github.com/pinoox/neuromesh) is a strong local-first context engine for web codebases. This repository continues it with two goals that the baseline did not meet:
 
-How does nature pack two metres of DNA into a nucleus without deleting a single letter?  
-Not by throwing genes away — by **folding**.
+| Goal | Baseline v0.9.0 | This project |
+|---|---|---|
+| **Project isolation** — zero cross-project files in a packet | one live graph per process; a mis-detected workspace could contaminate it | deterministic `ProjectId`, single-project invariant on the live graph, leakage gate in CI ([offered upstream](https://github.com/pinoox/neuromesh/pull/34)) |
+| **Universal codebases** — not only web | no notebooks, no config→code layer, no ML node types | `.ipynb`, YAML/JSON/argparse/Hydra config→code edges, ML artifact graph (Dataset · Model · Checkpoint · Metric · TrainLoop), shell scripts, string-literal index (routes, tool names, env vars) |
+| **Honest numbers** | one-repo demo table | gold sets on 10 third-party repositories, four of them never tuned on; a model-executed task-success benchmark with a separate judge |
 
-Nature does not delete DNA to fit a nucleus. It **supercoils**.
-
-NeuroMesh treats the syntax tree like a genetic strand in RAM:
-
-- Functions you need stay **expressed** (exons) — real body, real lines  
-- The rest collapse to a **one-line reversible intron**:
-
-```c
-/* [neuromesh:fold:fold_unused_helper_1 | 12 lines folded | fn unused_helper()] */
-```
-
-The agent still sees the *shape* of the file — signatures, imports, neighbors — without paying for every private helper. When a folded body is required, `neuromesh_expand_fold` unsplices it from a registry in memory. Nothing was deleted. Nothing needs a second grep of the disk.
-
-> Structure stays. Tokens sleep. Wake a fold when you need it.
+Everything the engine claims is in [docs/measured.md](docs/measured.md), with what is *not* measured listed next to it.
 
 ---
 
-## Why it feels different
+## What is measured
 
+Gold sets are written from reading the source **before** the engine runs. Recall = the gold files the packet contains; precision = share of packet files that are gold; forbidden = a file the task must not ship.
 
-| What you get | What it means for you |
-| ------------ | --------------------- |
-| **Smart folding** | Relevant functions stay open; everything else collapses to one-line markers you can expand on demand. |
-| **Shortest path routing** | Only the files your task needs — not the whole repo neighborhood. |
-| **Learns from your edits** | Call `record_feedback` after a good fix; similar tasks route faster next time. |
-| **Safety modes** | Balanced by default; auth and payment tasks automatically get more context. |
-| **Live code graph** | Your repo indexed in RAM — functions, imports, and calls, not shredded text chunks. |
+**Repositories the engine was never tuned on** (2026-09-21, `main`):
 
-Curious about the biology metaphor? **[docs/nature.md](docs/nature.md)**
+| Holdout | Languages / stack | Recall | Precision | Forbidden |
+|---|---|---:|---:|---:|
+| gin + torchvision | Go, Python | 1.000 | 0.554 | 0 |
+| libuv + fmt | C, C++ | 1.000 | 0.573 | 0 |
+| os-lib + cli + Flux.jl | Scala, R, Julia | 1.000 | 0.541 | 1 |
+| peft + keras-hub | Hugging Face / Keras 3 libraries | 1.000 | 0.632 | 0 |
+
+**Sets that have been tuned on** (dev-class): nanoGPT / express / vit-pytorch / fastapi-template 1.000 / 0.938 · django + ultralytics 1.000 / 0.666 · Hydra + argparse configs 1.000 / 0.712 · Fastify + Next.js app router 0.642 / 0.602 · this repository (20 real questions) 0.675 / 0.406.
+
+**Task success with a real model** (DeepSeek-V4-Pro answering, GLM-5.3 judging against the real source, real `verify` for patch tasks):
+
+| Set | packet | whole gold files | naive grep |
+|---|---:|---:|---:|
+| fixtures (26 tasks) | 0.808 · 4.2k tokens | 0.808 · 8.7k tokens | 0.577 |
+| gin holdout (10) | **1.000** · 8.1k | 1.000 · 11.1k | 0.800 |
+| torchvision holdout (10) | **1.000** · 7.8k | 0.800 · 8.7k | 0.600 |
+
+The packet matches or beats "just open the right files" at 1.4–2.1× the success per token, and beats grep everywhere. Recall is the strength; precision (1–3 neighbour files too many) is the open front — see [ROADMAP.md](ROADMAP.md).
 
 ---
 
 ## Install
 
-**Pre-built binary** (no Rust required). v0.9.0 defaults to **`engine: fast`** — instant graph index, no ONNX warm at startup.
-
-**macOS / Linux**
+Pre-built binaries come from upstream's installer; this fork is built from source until its first release.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pinoox/neuromesh/main/install.sh | bash
+git clone https://github.com/ParsaVictor/code-context-engine
+cd code-context-engine
+CARGO_BUILD_JOBS=2 cargo build --release -p neuromesh-cli      # target/release/neuromesh
 ```
 
-**Windows (PowerShell)**
-
-```powershell
-irm https://raw.githubusercontent.com/pinoox/neuromesh/main/install.ps1 | iex
-```
-
-Then from your **project root**:
+Then, from the root of the project you want to index:
 
 ```bash
-neuromesh doctor          # verify binary and workspace
-neuromesh connect         # write MCP configs (Cursor, VS Code, Claude, …)
-neuromesh index           # build the graph (<30s typical)
+neuromesh doctor                          # binary + workspace check
+neuromesh connect --global --agent-rules  # write MCP config + agent rule (Cursor, Claude, VS Code, …)
+neuromesh index                           # build the graph (seconds on most repos)
 ```
 
-Restart your IDE so MCP picks up the new server. Re-run the installer to **update** — then `neuromesh -V` should show **v0.9.0**.
-
-
-| Platform      | Binary                                            |
-| ------------- | ------------------------------------------------- |
-| macOS / Linux | `~/.local/bin/neuromesh`                          |
-| Windows       | `%LOCALAPPDATA%\Programs\neuromesh\neuromesh.exe` |
-
-
-Hybrid/deep embeddings (`neuromesh install embed minilm`), CBM proxy, monitor port: [docs/configuration.md](docs/configuration.md).
-
----
-
-## Connect
-
-NeuroMesh speaks **MCP over stdio** — what your IDE launches in the background.
-
-```bash
-neuromesh connect --global --agent-rules   # recommended once per machine
-```
-
-That registers the server **and** copies the agent rule so the IDE actually calls NeuroMesh instead of raw `Read` / Grep.
-
-**Manual** (when `neuromesh` is on PATH) — paste into `~/.cursor/mcp.json`:
+Manual MCP config (any client):
 
 ```json
-{
-  "mcpServers": {
-    "neuromesh": {
-      "command": "neuromesh",
-      "args": ["mcp"]
-    }
-  }
-}
+{ "mcpServers": { "neuromesh": { "command": "neuromesh", "args": ["mcp"] } } }
 ```
 
-Per-client paths: [docs/mcp.md](docs/mcp.md).
+Per-client paths, engines and options: [docs/mcp.md](docs/mcp.md) · [docs/configuration.md](docs/configuration.md).
 
 ---
 
-## Agent loop
-
-Pass the **user task as written** — any language. Default **`engine: fast`**: graph + server-assisted concept expansion; no keyword tables.
+## How it works
 
 ```
-get_context_packet(query / task_description / prompt / task)
-  → check coverage.claim and retrieval.resolution_tier
-  → neuromesh_search_symbols or neuromesh_expand_gap if seeds missed
-  → neuromesh_expand_fold when a folded body is required
-  → neuromesh_trace for callers and blast radius
-  → neuromesh_record_feedback after a successful edit
+task as written ──► seed resolution ──► graph activation ──► selection ──► folded packet
+                    identifiers, files,   Calls / Imports /    required +   signatures kept,
+                    config keys, string   Parameterizes /      callees +    bodies folded,
+                    literals, path words  twins, pheromones    ranked fill  budget-capped
 ```
 
-Teach every IDE: [docs/agent-guide.md](docs/agent-guide.md) · Cursor template: [docs/agent-rule.mdc](docs/agent-rule.mdc).
+1. **Index** — tree-sitter (and light parsers for YAML/JSON/shell/notebooks) turns every file into nodes and edges; string literals that look like names (`"/api/users"`, `"neuromesh_record_feedback"`, `DATABASE_URL`) are indexed too.
+2. **Seed** — the prompt's code names resolve to nodes; twins with the same name are settled by directory and body words; guesses that land in docs/tests/fixtures are dropped.
+3. **Activate & select** — energy spreads along typed edges; seeds and the callees the prompt names get required seats; the rest is a ranked, budgeted fill.
+4. **Fold** — bodies outside the question are folded to signatures; the agent can expand a fold on demand.
+5. **Learn** — `record_feedback` reinforces the path a successful task walked, never a whole neighbourhood.
+
+The MCP agent loop (`get_context_packet` → `search_symbols` / `expand_gap` → `expand_fold` → `trace` → `record_feedback`) is documented in [docs/agent-guide.md](docs/agent-guide.md).
 
 ---
 
-## 3D Neural Galaxy
-
-`neuromesh monitor` is a live map of **your** project: packages at a glance, then the file graph, then symbols inside a module.
-
-![Macro constellation of project subsystems in the 3D Neural Galaxy](docs/assets/galaxy-constellation.jpg)
-
-Constellation — packages and subsystems
-
-![3D Neural Galaxy file graph with Physarum slime tubes](docs/assets/galaxy-3d.jpg)
-
-3D galaxy — files and call/import links
-
-![Module zoom showing Core files and function symbols](docs/assets/galaxy-module.jpg)
-
-Module zoom — files and symbols in one area of your codebase
-
-Default URL: [http://127.0.0.1:8765](http://127.0.0.1:8765) · `neuromesh monitor` · port: `neuromesh port`
-
----
-
-## Tools (MCP)
-
-
-| Tool                        | Use                                  |
-| --------------------------- | ------------------------------------ |
-| **`get_context_packet`** | Main entry — folded evidence packet |
-| `neuromesh_expand_fold`     | Restore one folded body              |
-| `neuromesh_search_symbols`  | Ranked symbol search when seeds miss |
-| `neuromesh_trace`           | Call / import chains                 |
-| `neuromesh_record_feedback` | Strengthen paths you actually edited |
-
-
-Full reference: [docs/mcp.md](docs/mcp.md).
-
----
-
-## Everyday CLI
+## Run the benchmarks
 
 ```bash
-neuromesh index              # refresh graph after large changes
-neuromesh status             # node / edge counts
-neuromesh monitor            # 3D graph UI (see above)
-neuromesh doctor --engine    # show retrieval preset
-neuromesh config engine hybrid   # opt in to semantic search (needs embed install)
+bash scripts/benchmark-holdout.sh              # every gold set, one line each (checkouts fetched, graphs cached)
+bash scripts/benchmark-holdout.sh holdout-web  # one set
+NM_EXPLAIN=1 bash scripts/benchmark-holdout.sh dev   # + per-task reasons in target/explain-dev.txt
 ```
 
-Command reference: [docs/cli.md](docs/cli.md).
-
----
-
-## Languages
-
-Rust, TypeScript, Python, Go, Java, Kotlin, PHP, C#, Dart, Swift, Ruby, C, C++, Scala, R, Julia via **tree-sitter**. Jupyter notebooks (`.ipynb`) are read as code: cells in order, outputs dropped, so a notebook is searchable like any other source file. Framework overlays for Laravel, Django, Next, Vue, Axum, Rails, Flutter, PyTorch, and others. Details: [docs/architecture.md](docs/architecture.md).
-
----
-
-## What we actually measured
-
-On repositories the engine was **never tuned on** (gold written from the source before any run; one command: `bash scripts/benchmark-holdout.sh`):
-
-| holdout | recall | precision | forbidden files | needed symbols reachable |
-| :--- | ---: | ---: | ---: | ---: |
-| gin + torchvision (Go, Python) | 1.000 | 0.554 | 0 | 20/20 |
-| libuv + fmt (C, C++) | 1.000 | 0.573 | 0 | 16/16 |
-| os-lib + cli + Flux.jl (Scala, R, Julia) | 1.000 | 0.541 | 1 | 14/15 |
-| peft + keras-hub (Hugging Face, Keras 3 libraries) | 1.000 | 0.632 | 0 | 10/10 |
-
-The right file is almost always in the packet; the packet usually also carries 1–3 neighbours that a single-file gold does not want. With a real model (DeepSeek-V4-Flash answering, GLM-5.3 judging, real `verify` for patch tasks) the packet reached task success **1.00** on the Go holdout and **0.80** on the vision holdout, against 0.90 / 0.70 for the whole gold files — at fewer tokens. keras-io + setfit (the earlier Keras/HF holdout) was tuned on during phase D-3 and is no longer counted as unseen. Full table, caveats and what is still unmeasured: [docs/measured.md](docs/measured.md).
-
-Savings are **per task**, after folding — not a marketing average. Run `neuromesh eval` on your own repo to see your numbers.
-
-Example from a **650k-token monorepo** (release **v0.9.0**, default `engine: fast`):
-
-| Task (plain language) | Mode | Full repo | Before fold | Packet sent | Saved vs repo | Extra greps | ms |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Fix the MCP tool handler | balanced | 650,859 | 72,428 | 17,389 | **97.3%** | **0** | 22 |
-| Trace graph routing code | balanced | 650,859 | 19,625 | 4,080 | **99.4%** | **0** | 12 |
-
-Index on that project: **340 files · 552 ms**. Methodology and multilingual holdout: [docs/quality.md](docs/quality.md).
+Rules the project holds itself to: holdout sets are never tuned on; ratchets only move up; a mixed result is reverted and recorded, never shipped. Every finding since the fork (F1–F82) is written down with its measurement in [docs/planning/stage5-findings.fa.md](docs/planning/stage5-findings.fa.md).
 
 ---
 
 ## Documentation
 
+| Read this when you want to… | |
+|---|---|
+| wire an agent to the engine | [Agent guide](docs/agent-guide.md) · [MCP tools](docs/mcp.md) |
+| use the CLI | [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Engines](docs/engines.md) |
+| understand the design | [Architecture](docs/architecture.md) · [Isolation](docs/isolation.md) |
+| check the numbers | [Measured](docs/measured.md) · [Quality methodology](docs/quality.md) |
+| follow or join the work | [ROADMAP.md](ROADMAP.md) · [Planning & findings (Persian)](docs/planning/) · [Contributing](docs/contributing.md) |
 
-| Doc                                    | Start here when you want to…                     |
-| -------------------------------------- | ------------------------------------------------ |
-| [Agent guide](docs/agent-guide.md)     | Wire Cursor / VS Code / Claude to use NeuroMesh  |
-| [MCP tools](docs/mcp.md)               | See what each tool returns                       |
-| [CLI](docs/cli.md)                     | Commands for install, index, connect, monitor    |
-| [Configuration](docs/configuration.md) | Switch engines, proxy, advanced tuning           |
-| [Engines](docs/engines.md)             | `fast` vs `hybrid` vs `deep` in one page         |
-| [Docs index](docs/README.md)           | Full map                                         |
-| [Changelog](docs/CHANGELOG.md)         | What changed in v0.9.0                           |
-| [Measured](docs/measured.md)           | Holdout numbers, caveats, what is unmeasured     |
+---
 
-
-MIT · [LICENSE](LICENSE)
-
-</details>
+<sub>Independent derivative of <a href="https://github.com/pinoox/neuromesh">NeuroMesh</a> by yoosef alipour, MIT. Baseline tag <code>baseline-v0.9.0</code>. See <a href="NOTICE">NOTICE</a> and <a href="ATTRIBUTION.md">ATTRIBUTION.md</a>. MIT · <a href="LICENSE">LICENSE</a></sub>
