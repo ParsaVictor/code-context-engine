@@ -231,3 +231,55 @@ ratchet نگه می‌داریم.
 | **G5** | release v1.0: measured.md مرجع، باینری، PR های upstream | — | همه سبز |
 
 زمان خالص: W3 یک روز، G4 نصف روز، G3 وابسته به تیم، G5 یک روز.
+
+## ۱۳. افزوده‌ی 2026-09-22 (بعد از #120) — وضعیت نهایی session 14، روش کار جدید، درس‌ها
+
+**main = بعد از PR #120.** چهار PR امروز: #117 (W1/F83)، #118 (W2/F84)، #119 (W3/F85)، #120 (G4/F86). باینری دسکتاپ از همین main.
+
+| مجموعه | عدد فعلی (recall / precision / forbidden) | ratchet |
+|---|---|---|
+| dev | 1.000 / 0.938 / 0 | — |
+| large | 1.000 / 0.675 / 0 | precision ≥0.655 |
+| holdout-2 | 1.000 / 0.700 / 0 | گیت (تیون نشود) |
+| holdout-c | 1.000 / 0.589 / 0 | گیت |
+| holdout-lang | 1.000 / 0.589 / 1 | گیت |
+| holdout-ml2 | 1.000 / 0.632 / 0 | گیت |
+| holdout-ml | 1.000 / 0.478 / 0 | — |
+| holdout-cfg | 1.000 / 0.767 / 0 | recall ≥0.95 / precision ≥0.745 |
+| holdout-web (**۳۰** سؤال) | 0.800 / 0.608 / 0 | target-only ≥0.90 / ≥0.60 |
+| self (**۳۰** سؤال) | 0.833 / 0.578 / 0 | — |
+
+**روش کار جدید (۳ برابر سریع‌تر، از W3 به بعد — همین را ادامه بده):**
+1. همه‌ی تغییرات یک مرحله در **یک branch**؛ بعد از هر اصلاح فقط مجموعه‌ی مؤثر را بسنج (self ~۲ دقیقه، web ~۲ دقیقه با
+   کش ایندکس؛ تغییر parser/graph کش را باطل می‌کند: web ~۴ دقیقه، large ~۱۰).
+2. **یک گیت کامل در آخر** (۹ مجموعه + self + `cargo test --workspace` + clippy) در background با `--line-buffered`.
+3. اگر گیت مخلوط شد: **bisect** با کامنت کردن یک قاعده (`// BISECT`) و سنجش فقط مجموعه‌ی افتاده (large/holdout-2 معمولاً
+   ۳ دقیقه با کش) — نه حدس. در G4 یک bisect قاعده‌ی مقصر را در ۵ دقیقه پیدا کرد.
+4. probe موقت: `if std::env::var("NM_PROBE").is_ok() { eprintln!("PROBE …") }` با sed یک‌خطی، بعد `sed -i '/PROBE/d'`.
+   برای گراف: `tests/zz_probe_tmp.rs` با `support/index_cache::graph_for_checkout` + `get_edges_map` (قبل از commit حذف).
+5. جدول per-task از dump: `awk` روی `target/explain-<set>.txt` (خط `===`، `gold:`، `✓`) → diff قبل/بعد.
+
+**درس‌های session 14 (دیگر تکرار نشود):**
+- **هیچ فایلی بدون کلمه‌ای از prompt صندلی نمی‌گیرد.** سه نسخه‌ی «صندلی بی‌شاهد» (≤۵ caller؛ import شده؛ seed کوچک) هر بار
+  large −0.1 + forbidden و holdout-2 −0.03 دادند (F83). گلدهایی که چنین callee ای می‌خواستند از همین قاعده‌ی حذف‌شده
+  تغذیه می‌شدند و با دلیل اصلاح شدند (`handle_tool_call_intent`، `orders_stock_of_unknown`).
+- **کلمه‌ی عادی که اتفاقاً stem یک فایل است، آدرس نیست** («session» → `session.ts`): حتی به‌عنوان حدس large −0.05 (F86).
+- **دو کلمه‌ی مسیر بدون شرط کم‌تکرار = «جا» نه فایل** (`management/commands/*` ← «management command»، large −0.033، F84).
+- **BM25 با امتیاز خالص** فایل ریز یا غول‌پیکر را برنده می‌کند؛ اول پوشش، بعد چگالی؛ نثر (README/docs) هرگز؛ بین
+  هم‌پوشش‌ها اول فایلی که *مسیرش* prompt را می‌گوید (F85/F86).
+- **عدد یک مجموعه‌ی کوچک که رویش فیکس شده، عدد پروژه نیست**: self ۲۰ سؤالی 0.925 بود، ۱۰ سؤال کور جدید 0.55 داد. فقط
+  holdout ها و سؤال‌های تیم (G3) عدد واقعی‌اند.
+- کامنت/دوک‌کامنتی که prompt یک گلد را نقل کند، خودش گلد را می‌گیرد (self-reference؛ F25/F83) — مثال‌های دیگر بنویس.
+- heredoc ی bash `'\'` را می‌خورد → `replace('\', "/")` خطای کامپایل؛ خطوط با backslash را با Edit tool بنویس.
+- `git stash` روی branch ی که همه‌چیز commit شده کاری نمی‌کند؛ برای مقایسه با main: `git checkout <sha>` + فایل probe untracked.
+- perl -0pi با چند جایگزینی: اگر یکی `die` کند هیچ‌کدام اعمال نمی‌شود؛ بعدش grep کن.
+- `stage4_security` محلی ۳۵–۹۶ ثانیه است (گیت <30s) — CI مرجع؛ نادیده بگیر.
+
+**باز مانده (به ترتیب):**
+1. **G3** — ۳۰ سؤال تیم روی ریپوی خصوصی (`NM_PRIVATE_SET_DIR`/`NM_PRIVATE_DIR`؛ گلد قفل قبل از اجرا؛ engine قبلش packet
+   نمی‌بیند). یک دور probe، fix خوشه‌ها با روش batch. هدف: private recall ≥0.90.
+2. خوشه‌های ثبت‌شده در F86 برای دور بعد: تماس بدون receiver به شیء decorate شده (`knex('users')` → literal `decorate('knex')`)؛
+   `identifier:MDX` (acronym) anchor ی غلط؛ literal «upload» فایل route را anchor می‌کند؛ `self_path_address`/`self_strip_plural`
+   (فایل درست ۱–۲ کلمه کمتر از haystack می‌گوید).
+3. **G5** — release v1.0: measured.md مرجع، باینری دسکتاپ، PR های upstream (پس از G3 یا با اعداد فعلی اگر Parsa بخواهد).
+4. فاز C دوباره با Flash وقتی Baseten شارژ شد (۲ سلول fixtures).
