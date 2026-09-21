@@ -1277,3 +1277,26 @@ web باقی‌مانده: `fd_login_flow` 1/3 (auth route + password-manager ب
 باقی self: `self_exon_budget` (۵ فایل هم‌پوشش، هیچ‌کدام مسیرشان نمی‌گوید — مرز صادقانه)، `self_packet_cap` 1/2 (precision 1.0).
 درس: مسیر «یک قاعده، یک اندازه‌گیری» را رها کردیم؛ ۶ اصلاح پشت هم فقط روی self (۲ دقیقه هر بار) و یک گیت کامل در آخر —
 همان دقت، یک‌سوم زمان.
+
+## F86 — G4: ۲۰ سؤال واقعی جدید (۱۰ self + ۱۰ web)، گلد کور، یک دور probe (session 14، PR G4)
+
+**اعداد کور (قبل از هر فیکس):** ۱۰ سؤال جدید self ≈ 0.55 recall، ۱۰ سؤال جدید web ≈ 0.58 — یعنی هر ۱۰ سؤال واقعی هنوز
+خوشه‌ی جدید می‌دهد (همان درس session 13). خوشه‌ها و فیکس‌ها:
+
+| خوشه | فیکس |
+|---|---|
+| «the billing page»، «the tasks route»، «the settings page»: فایل `<پوشه>/<stem قراردادی>` (page/route/layout/index) | `push_dir_convention_seeds`: فقط جفت مجاور (کلمه‌ی درست قبل از page/route/…)؛ نسخه‌ی بدون مجاورت «store the **user**» را به `routes/api/users/index.ts` می‌برد و `fd_login_flow` را از ۱/۳ به ۰ انداخت |
+| «multipart requests» → `multipart.ts`: کلمه‌ی prompt عیناً stem یک فایل یکتاست | **رد شد** (`push_exact_stem_seeds`): نسخه‌ی STRONG با «session» همه‌ی seedهای دیگر را هرس می‌کرد؛ نسخه‌ی حدسی (`token`) large 0.675→0.625، holdout-2 0.700→0.673، c/lang −0.01 و دو تست فیکسچر را می‌انداخت — یک کلمه‌ی عادی که اتفاقاً stem فایلی است، آدرس نیست |
+| self: فایل ۱۲k توکنی (`activator.rs`) با «یک کلمه بیشتر» جلوی `seed/sink.rs` (۱۰ کلمه، چگالی ۳.۴×) می‌ایستاد | در BM25 pass: بین فایل‌های «تا یک کلمه کمتر از بهترین»، اول آن‌که *مسیرش* کلمه‌ی prompt را دارد (`seed/sink.rs` ← «seed sink»)؛ اگر هیچ مسیری نگفت، پوشش دقیق‌تر برنده است (نسخه‌ی «همیشه تا یک کلمه + چگالی» `synapse.rs` کوچک را جلوی `graph.rs` می‌نشاند و self را −0.03 می‌برد) |
+
+| مجموعه | کور | بعد |
+|---|---|---|
+| self (۳۰) | 0.800 / 0.574 | **0.833 / 0.578** (۱۰ تای جدید: 0.55 → 0.65) |
+| holdout-web (۳۰) | 0.739 / 0.606 | **0.800 / 0.608** (۱۰ تای جدید: 0.58 → 0.70) |
+| ۸ مجموعه‌ی دیگر | — | بدون تغییر |
+
+باقی‌مانده (بی‌شاهد یا anchor ی غلط): `fd_multipart_limit` (literal «upload» فایل route را anchor می‌کند)، `fd_knex_decorator`
+(`knex('users')` تماس بدون receiver به شیء decorate شده — فیکس بعدی: نام تماسِ resolve‑نشده که دقیقاً یک فایل آن را در
+`decorate('knex')` دارد)، `tx_table_of_contents` (`identifier:MDX` قوی و غلط)، `self_path_address`/`self_strip_plural`
+(فایل درست ۱–۲ کلمه کمتر از haystack ها می‌گوید). درس مهم: **گلد ۲۰ سؤالی self «0.925» بود و با ۱۰ سؤال جدید 0.55** — عدد
+یک مجموعه‌ی کوچک که رویش فیکس شده، عدد پروژه نیست؛ فقط holdout ها هستند.

@@ -356,6 +356,7 @@ pub(crate) fn push_path_hint_seeds(
         sink.push(graph, prompt, et.clone(), energy, "entity_type");
     }
     push_compound_stem_seeds(graph, prompt, config, sink);
+    push_dir_convention_seeds(graph, prompt, config, sink);
     push_word_stem_seeds(graph, prompt, config, sink);
     push_path_word_seeds(graph, prompt, config, sink);
     push_body_word_seeds(graph, prompt, config, sink);
@@ -483,6 +484,86 @@ pub(crate) fn push_path_word_seeds(
     for (pos, path) in top.into_iter().enumerate() {
         let energy = signal_weight(config, SignalKind::PathHint, pos + 1);
         sink.push(graph, prompt, path.clone(), energy, "stem");
+    }
+}
+
+/// "the billing page", "the tasks route", "the settings page": a prompt word
+/// that is a directory, next to a word that is what a framework calls the
+/// file inside it (`page`, `route`, `layout`, `index`, `handler`). The file
+/// `<dir>/<convention>.*` is the address (G4, holdout-web). Only when that
+/// file is unique for the pair; a `page.tsx` under several `settings/`
+/// directories is not one place.
+pub(crate) fn push_dir_convention_seeds(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    config: &SeedResolutionConfig,
+    sink: &mut SeedSink<'_, '_, '_>,
+) {
+    const CONVENTION: &[(&str, &[&str])] = &[
+        ("page", &["page"]),
+        ("pages", &["page"]),
+        ("route", &["route", "index", "routes"]),
+        ("routes", &["route", "index", "routes"]),
+        ("endpoint", &["route", "index"]),
+        ("layout", &["layout"]),
+        ("handler", &["handler", "index"]),
+        ("controller", &["controller", "index"]),
+        ("plugin", &["index", "plugin"]),
+        ("loading", &["loading"]),
+    ];
+    let strip = |w: &str| crate::seed::weak_file_seed::strip_plural(w).to_string();
+    let words: Vec<String> = prompt
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| w.len() >= 4)
+        .map(|w| w.to_lowercase())
+        .collect();
+    // Only the word right before the convention word ("the billing page",
+    // "the tasks route"): a noun elsewhere in the sentence ("store the
+    // user" next to "the /login route") names no directory.
+    let pairs: Vec<(String, &[&str])> = words
+        .windows(2)
+        .filter_map(|w| {
+            CONVENTION
+                .iter()
+                .find(|(k, _)| *k == w[1])
+                .map(|(_, s)| (w[0].clone(), *s))
+        })
+        .collect();
+    if pairs.is_empty() {
+        return;
+    }
+    let files = graph.file_node_paths();
+    let mut pushed = 0usize;
+    for (word, stems) in &pairs {
+        if CONVENTION.iter().any(|(k, _)| k == word) || is_prompt_stopword(word) {
+            continue;
+        }
+        let w = strip(word);
+        let hits: Vec<String> = files
+            .iter()
+            .filter(|(_, p)| !crate::selector::is_noise_path(p))
+            .filter(|(_, p)| {
+                let stem = p
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_lowercase())
+                    .unwrap_or_default();
+                let parent = p
+                    .parent()
+                    .and_then(|d| d.file_name())
+                    .and_then(|s| s.to_str())
+                    .map(|s| strip(&s.trim_matches(['(', ')', '[', ']']).to_lowercase()))
+                    .unwrap_or_default();
+                parent == w && stems.contains(&stem.as_str())
+            })
+            .map(|(_, p)| p.to_string_lossy().replace('\\', "/"))
+            .collect();
+        if hits.len() != 1 {
+            continue;
+        }
+        let energy = signal_weight(config, SignalKind::PathHint, pushed + 1);
+        sink.push(graph, prompt, hits[0].clone(), energy, "file");
+        pushed += 1;
     }
 }
 
@@ -936,22 +1017,32 @@ pub(crate) fn push_body_word_seeds(
             })
             .unwrap_or(0)
     };
-    let mut tied: Vec<(NodeId, usize, f32)> = ranked
+    // One word of coverage is not a lead: a 12k-token file that spells one
+    // more prompt word than a 400-token file at a third of its density is
+    // the bigger haystack, not the answer. Files within one word of the
+    // best compete on density, then the path breaks what is left.
+    let wide: Vec<(NodeId, usize, f32)> = ranked
         .iter()
-        .filter(|(_, c, _)| *c == covered)
+        .filter(|(_, c, _)| *c + 1 >= covered)
         .cloned()
         .collect();
-    let best_score = tied.iter().map(|(_, _, s)| *s).fold(best_score, f32::max);
-    let max_path = tied
+    let max_path = wide
         .iter()
         .map(|(id, _, _)| path_hits(id))
         .max()
         .unwrap_or(0);
-    if max_path > 0 {
-        tied.retain(|(id, _, _)| path_hits(id) == max_path);
+    let mut tied: Vec<(NodeId, usize, f32)> = if max_path > 0 {
+        // A file whose path spells the prompt ("seed sink" → `seed/sink.rs`)
+        // beats a haystack that spells one more word.
+        wide.into_iter()
+            .filter(|(id, _, _)| path_hits(id) == max_path)
+            .collect()
     } else {
-        tied.retain(|(_, _, s)| *s >= best_score * 0.6);
-    }
+        wide.into_iter().filter(|(_, c, _)| *c == covered).collect()
+    };
+    let best_score = tied.iter().map(|(_, _, s)| *s).fold(best_score, f32::max);
+    tied.retain(|(_, _, s)| *s >= best_score * 0.6);
+    let covered = tied.iter().map(|(_, c, _)| *c).min().unwrap_or(covered);
     let top: Vec<(NodeId, usize)> = tied.into_iter().map(|(id, c, _)| (id, c)).collect();
     if top.len() > 2 {
         return;
