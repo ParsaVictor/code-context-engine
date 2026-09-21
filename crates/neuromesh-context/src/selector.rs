@@ -129,6 +129,65 @@ pub fn select(
     focus_terms: &HashSet<String>,
     mode: OptimizationMode,
 ) -> Selection {
+    select_with_named(
+        graph,
+        neighborhood,
+        seeds,
+        seed_energies,
+        focus_terms,
+        &PromptWords::default(),
+        mode,
+    )
+}
+
+/// The prompt's own words, as evidence for a callee seat. `focus_terms` is
+/// for matching files and symbols and mixes in identifier fragments
+/// (`state_dict` → "dict") and aliases; a seat needs words the user wrote.
+#[derive(Debug, Default, Clone)]
+pub struct PromptWords {
+    /// Prose tokens, 4+ letters, lowercased; identifiers (with `_` or `.`)
+    /// excluded.
+    pub prose: HashSet<String>,
+    /// Prose words the prompt capitalises mid-sentence ("how is Item
+    /// linked", "build a Trainer"): not seeds on their own (F34), but
+    /// evidence for a callee so named.
+    pub named: HashSet<String>,
+}
+
+impl PromptWords {
+    pub fn from_prompt(prompt: &str) -> Self {
+        let mut words = Self::default();
+        for (i, token) in prompt
+            .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '.')
+            .enumerate()
+        {
+            if token.len() < 4 || token.contains(['_', '.']) {
+                continue;
+            }
+            words.prose.insert(token.to_lowercase());
+            let mut chars = token.chars();
+            let capitalised = i > 0
+                && chars.next().is_some_and(|c| c.is_uppercase())
+                && chars.clone().any(|c| c.is_lowercase())
+                && !chars.any(|c| c.is_uppercase());
+            if capitalised {
+                words.named.insert(token.to_lowercase());
+            }
+        }
+        words
+    }
+}
+
+/// `select` with the prompt's own words (`PromptWords`) for callee seats.
+pub fn select_with_named(
+    graph: &NeuralProjectGraph,
+    neighborhood: &HashSet<NodeId>,
+    seeds: &HashSet<NodeId>,
+    seed_energies: &HashMap<NodeId, f32>,
+    focus_terms: &HashSet<String>,
+    prompt_words: &PromptWords,
+    mode: OptimizationMode,
+) -> Selection {
     let fill_cap = fill_budget(mode);
     if seeds.is_empty() {
         return Selection {
@@ -163,7 +222,6 @@ pub fn select(
     }
 
     const MAX_REQUIRED_CALLEE_FILES: usize = 3;
-    const MAX_FOCUSED_CALLEE_CALLERS: usize = 5;
     let mut callee_candidates: Vec<(NodeId, String, bool, bool, String)> = Vec::new();
     for seed in seeds {
         let Some(seed_node) = graph.get_node(seed) else {
@@ -198,10 +256,23 @@ pub fn select(
                 continue;
             }
             let stem_focus = focus_terms.iter().any(|t| file_stem_eq(&node.file_path, t));
-            let focus = stem_focus || focus_terms.contains(&node.name.to_lowercase());
-            // A callee invoked from many places is shared plumbing (`ctx.Set`,
-            // `cleanPath`), not the substance of a question about its caller.
-            if !focus && caller_count(graph, &neighbor) > MAX_FOCUSED_CALLEE_CALLERS {
+            // A callee takes a forced seat only on prompt evidence: its name,
+            // its file's stem, or a word of that stem or of its directory
+            // ("password" → `password-manager.ts`, "tasks" → `tasks/`). A
+            // callee the prompt never points at stays in the ranked fill,
+            // however few callers it has (W1: the unguarded seat is what made
+            // the F81 call-graph fix cost large −0.08).
+            // A prompt word that already names the seed ("Model.predict" →
+            // `model`) is no evidence for a callee that merely shares it
+            // (`setup_model`); only words the seed does not own count.
+            let seed_words = seed_own_words(&seed_node);
+            let focus = stem_focus
+                || focus_terms.contains(&node.name.to_lowercase())
+                || callee_name_words_in_prompt(&node.name, prompt_words, &seed_words, || {
+                    file_imports_file(graph, &seed_node.file_path, &node.file_path)
+                })
+                || callee_path_named_in_prompt(&node.file_path, &prompt_words.prose, &seed_words);
+            if !focus {
                 continue;
             }
             callee_candidates.push((
@@ -1129,12 +1200,157 @@ pub fn is_noise_path_in(path: &Path, examples_core: bool) -> bool {
         || neuromesh_core::is_low_priority_source_path_in(path, examples_core)
 }
 
-fn caller_count(graph: &NeuralProjectGraph, id: &NodeId) -> usize {
+/// Words the seed already owns: its name and its file's stem, split into
+/// identifier words. A prompt word among these names the seed, not a callee.
+fn seed_own_words(seed: &neuromesh_core::ContextNode) -> HashSet<String> {
+    let stem = seed
+        .file_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    neuromesh_parser::tokenize_ident(&seed.name)
+        .into_iter()
+        .chain(neuromesh_parser::tokenize_ident(stem))
+        .flat_map(|w| w.split(['-', '_']).map(str::to_string).collect::<Vec<_>>())
+        .map(|w| w.to_lowercase())
+        .collect()
+}
+
+/// Whether a prompt word the seed does not own names one of `words`,
+/// plural-tolerant, 4+ letters on both sides.
+fn words_named_in_prompt(
+    words: &[String],
+    prompt_words: &HashSet<String>,
+    seed_words: &HashSet<String>,
+) -> bool {
+    prompt_words.iter().any(|term| {
+        term.len() >= 4
+            && !seed_words.contains(term)
+            && words
+                .iter()
+                .any(|w| w.len() >= 4 && (w == term || same_word_stem(w, term)))
+    })
+}
+
+/// Prompt evidence for a callee by name:
+/// - the prompt spells the identifier out (`create_access_token` ← "create
+///   the access token": every 4+ letter word, at least one the seed does
+///   not own), or
+/// - a word the prompt capitalises as a name is a word of it (`ItemsPublic`
+///   ← "how is Item linked"), or
+/// - one prose word is a word of it *and* the seed's file imports the
+///   callee's file by name (`getUserSubscriptionPlan` ← "free plan", with
+///   `import { getUserSubscriptionPlan } from "@/lib/subscription"`).
+///
+/// One shared prose word alone, in a long prompt against a same-package
+/// function nobody imported ("handles" → `uv__handle_…`), is not evidence.
+fn callee_name_words_in_prompt(
+    name: &str,
+    prompt_words: &PromptWords,
+    seed_words: &HashSet<String>,
+    imported_by_seed: impl FnOnce() -> bool,
+) -> bool {
+    let words: Vec<String> = neuromesh_parser::tokenize_ident(name)
+        .into_iter()
+        .map(|w| w.to_lowercase())
+        .filter(|w| w.len() >= 4)
+        .collect();
+    if words.is_empty() {
+        return false;
+    }
+    let in_prose = |w: &String| {
+        prompt_words
+            .prose
+            .iter()
+            .any(|t| w == t || same_word_stem(w, t))
+    };
+    let owned_by_seed = |w: &String| seed_words.iter().any(|s| s == w || same_word_stem(s, w));
+    let spelled_out = words.iter().all(in_prose) && words.iter().any(|w| !owned_by_seed(w));
+    spelled_out
+        || words_named_in_prompt(&words, &prompt_words.named, seed_words)
+        || (words_named_in_prompt(&words, &prompt_words.prose, seed_words) && imported_by_seed())
+}
+
+/// Whether `from` imports (or depends on) a symbol or the file at `to`.
+fn file_imports_file(graph: &NeuralProjectGraph, from: &Path, to: &Path) -> bool {
+    let Some(from_id) = graph.file_id_for_path(from) else {
+        return false;
+    };
     graph
-        .get_connected_neighbors(id)
-        .iter()
-        .filter(|(_, e)| e.edge_type == EdgeType::Calls && e.target == *id)
-        .count()
+        .get_connected_neighbors(&from_id)
+        .into_iter()
+        .any(|(neighbor, edge)| {
+            edge.source == from_id
+                && matches!(edge.edge_type, EdgeType::Imports | EdgeType::DependsOn)
+                && graph.get_node(&neighbor).is_some_and(|n| n.file_path == to)
+        })
+}
+
+/// Prompt evidence for a callee's file beyond its exact stem: a prose word of
+/// the stem (`password-manager` ← "password") or of its parent directory
+/// (`plugins/app/tasks/` ← "tasks"). Directories a framework stamps on every
+/// project (`plugins/`, `routes/`, `lib/`) name nothing.
+fn callee_path_named_in_prompt(
+    path: &Path,
+    prompt_words: &HashSet<String>,
+    seed_words: &HashSet<String>,
+) -> bool {
+    const CONVENTION_DIRS: &[&str] = &[
+        "src",
+        "lib",
+        "app",
+        "apps",
+        "api",
+        "pkg",
+        "internal",
+        "plugins",
+        "plugin",
+        "routes",
+        "route",
+        "components",
+        "component",
+        "utils",
+        "util",
+        "core",
+        "common",
+        "shared",
+        "helpers",
+        "services",
+        "service",
+        "models",
+        "model",
+        "views",
+        "view",
+        "controllers",
+        "handlers",
+        "middleware",
+        "config",
+        "server",
+        "client",
+        "packages",
+        "modules",
+        "module",
+        "engine",
+        "external",
+        "tests",
+        "test",
+        "types",
+        "hooks",
+    ];
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let parent = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .filter(|d| !CONVENTION_DIRS.contains(&d.to_lowercase().as_str()))
+        .unwrap_or("");
+    let words: Vec<String> = neuromesh_parser::tokenize_ident(stem)
+        .into_iter()
+        .chain(neuromesh_parser::tokenize_ident(parent))
+        .flat_map(|w| w.split(['-', '_']).map(str::to_string).collect::<Vec<_>>())
+        .map(|w| w.to_lowercase())
+        .collect();
+    words_named_in_prompt(&words, prompt_words, seed_words)
 }
 
 pub fn is_common_call(name: &str) -> bool {

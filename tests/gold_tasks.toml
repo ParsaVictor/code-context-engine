@@ -3,10 +3,17 @@
 [[task]]
 id = "handle_tool_call_intent"
 prompt = "How does handle_tool_call extract intent?"
+# F83: activator.rs dropped from this gold. Intent extraction is
+# `TaskSignatureExtractor::extract` (signature.rs) called from
+# `handle_tool_call` (tools.rs); activator.rs consumes the extracted
+# signature and mentions "intent" only in its own tests quoting this very
+# prompt — the self-referential case F25 excluded from physarum_usage. It
+# was in the packet through an unguarded callee seat (any imported callee
+# with ≤5 callers), the rule that made the F81 call-graph fix cost large
+# −0.08; with seats needing prompt evidence it has none.
 gold_files = [
   "crates/neuromesh-mcp/src/tools.rs",
   "crates/neuromesh-task/src/signature.rs",
-  "crates/neuromesh-context/src/activator.rs",
 ]
 expect_seeds_missed = false
 

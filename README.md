@@ -43,12 +43,12 @@ Gold sets are written from reading the source **before** the engine runs. Recall
 
 | Holdout | Languages / stack | Recall | Precision | Forbidden |
 |---|---|---:|---:|---:|
-| gin + torchvision | Go, Python | 1.000 | 0.554 | 0 |
-| libuv + fmt | C, C++ | 1.000 | 0.573 | 0 |
-| os-lib + cli + Flux.jl | Scala, R, Julia | 1.000 | 0.541 | 1 |
+| gin + torchvision | Go, Python | 1.000 | 0.700 | 0 |
+| libuv + fmt | C, C++ | 1.000 | 0.578 | 0 |
+| os-lib + cli + Flux.jl | Scala, R, Julia | 1.000 | 0.589 | 1 |
 | peft + keras-hub | Hugging Face / Keras 3 libraries | 1.000 | 0.632 | 0 |
 
-**Sets that have been tuned on** (dev-class): nanoGPT / express / vit-pytorch / fastapi-template 1.000 / 0.938 · django + ultralytics 1.000 / 0.666 · Hydra + argparse configs 1.000 / 0.712 · Fastify + Next.js app router 0.642 / 0.602 · this repository (20 real questions) 0.675 / 0.406.
+**Sets that have been tuned on** (dev-class): nanoGPT / express / vit-pytorch / fastapi-template 1.000 / 0.938 · django + ultralytics 1.000 / 0.675 · Hydra + argparse configs 1.000 / 0.767 · Fastify + Next.js app router 0.717 / 0.572 · this repository (20 real questions) 0.675 / 0.428.
 
 **Task success with a real model** (DeepSeek-V4-Pro answering, GLM-5.3 judging against the real source, real `verify` for patch tasks):
 
