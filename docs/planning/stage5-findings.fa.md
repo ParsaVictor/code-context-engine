@@ -1213,3 +1213,10 @@ decorator ی fastify — شیء در scope نیست)، `tx_dashboard_guard` 0/2�
 خودش که همین prompt را نقل می‌کنند دارد (همان حالت self-referential که F25 از `physarum_usage` حذف کرد)؛ استخراج intent در
 `signature.rs` است و caller اش `tools.rs`. گلد اصلاح شد (۳→۲ فایل، دلیل در `tests/gold_tasks.toml`). ratchet ها: large 0.64→0.655،
 cfg 0.69→0.745.
+
+**فیکسچر `orders_stock_of_unknown` (task_success، CI):** `src/store.js::createStore` هم فقط از صندلی بی‌شاهد می‌آمد
+(prompt هیچ کلمه‌ای از store.js ندارد؛ گیت sidecar ی fill هم آن را رد می‌کند). دو تلاش برای برگرداندن صندلی بی‌شاهد
+(«import شده + ≤۵ caller»؛ «seed کوچک با ≤۳ callee + ≤۵ caller») هر دو large را به 0.54–0.59 + forbidden و holdout-2/cfg/dev
+را پایین بردند → revert. فیکس درست `stock.has(sku) ? stock.get(sku) : 0` است که عیناً در `addItem`/`removeItem` همان فایل
+هست؛ `needs` اصلاح شد (`inventory.js::addItem` به‌جای `store.js::createStore`). درس: هر گلدی که «callee ی بی‌نام seed» را
+می‌خواهد، از قاعده‌ی حذف‌شده تغذیه می‌شد؛ با گلد واقعی تیم (G3) باید دید این خواسته چقدر واقعی است.
