@@ -713,8 +713,14 @@ impl NeuralProjectGraph {
                 }
                 EdgeType::Calls => {
                     let source_file = rel.source_file.to_string_lossy();
+                    // The caller is defined in the file the call was parsed
+                    // from; look there first. `resolve_unique` alone gives up
+                    // when the name is shared (`POST` in every `route.ts`) and
+                    // hung the edge off the file, so the route's callees never
+                    // reached the seed (F81).
                     let source = self
                         .resolve_api_in_file(&rel.source_symbol, &source_file)
+                        .or_else(|| self.resolve_in_file(&rel.source_symbol, &source_file))
                         .or_else(|| self.resolve_unique(&rel.source_symbol, Some(&source_file)))
                         .unwrap_or_else(|| file_id.clone());
                     // Overlay templates (`hello` → `theme/default/hello.twig`) must
@@ -1655,12 +1661,15 @@ impl NeuralProjectGraph {
         }
     }
 
-    fn resolve_call_target(
+    /// Resolve a bare call name; the flag says whether the target was
+    /// found in scope (same file or an imported file) rather than by
+    /// package- or language-wide uniqueness.
+    fn resolve_call_target_scoped(
         &self,
         name: &str,
         source_file: &Path,
         imported_files: &HashSet<PathBuf>,
-    ) -> Option<NodeId> {
+    ) -> Option<(NodeId, bool)> {
         let data = self.inner.read();
         let (ids, exact) = case_narrowed(&data, name);
         // A YAML key or an argparse flag is data, never a callee: `Profile(...)`
@@ -1680,7 +1689,7 @@ impl NeuralProjectGraph {
             .cloned()
             .collect();
         if same_file.len() == 1 {
-            return same_file.into_iter().next();
+            return same_file.into_iter().next().map(|id| (id, true));
         }
 
         let imported: Vec<NodeId> = ids
@@ -1693,7 +1702,7 @@ impl NeuralProjectGraph {
             .cloned()
             .collect();
         if imported.len() == 1 {
-            return imported.into_iter().next();
+            return imported.into_iter().next().map(|id| (id, true));
         }
 
         let src_pkg = package_name(source_file);
@@ -1707,7 +1716,7 @@ impl NeuralProjectGraph {
             .cloned()
             .collect();
         if same_crate.len() == 1 {
-            return same_crate.into_iter().next();
+            return same_crate.into_iter().next().map(|id| (id, false));
         }
 
         let src_ext = path_ext(source_file);
@@ -1723,11 +1732,11 @@ impl NeuralProjectGraph {
             .cloned()
             .collect();
         if same_lang.len() == 1 {
-            return same_lang.into_iter().next();
+            return same_lang.into_iter().next().map(|id| (id, false));
         }
 
         if ids.len() == 1 {
-            return ids.into_iter().next();
+            return ids.into_iter().next().map(|id| (id, false));
         }
         None
     }
@@ -1998,6 +2007,7 @@ impl NeuralProjectGraph {
             let type_name = hint
                 .strip_prefix("impl:")
                 .or_else(|| hint.strip_prefix("type:"))
+                .or_else(|| hint.strip_prefix("obj:"))
                 .unwrap_or(hint);
             let keys = [
                 format!("{}::{}", type_name.to_lowercase(), name.to_lowercase()),
@@ -2026,9 +2036,32 @@ impl NeuralProjectGraph {
                 }
             }
         }
+        // `userNameSchema.parse(`, `db.user.update(`: the member lives on an
+        // object the graph knows only as a symbol in scope (defined here or
+        // imported). Using the member is using that object — the edge goes
+        // to the object's definition, not to a stranger sharing the member's
+        // name (F83).
+        if let Some(object) = receiver_hint.and_then(|h| h.strip_prefix("obj:")) {
+            if let Some((id, true)) =
+                self.resolve_call_target_scoped(object, source_file, imported_files)
+            {
+                return Some((id, EdgeConfidence::Proven));
+            }
+        }
 
-        if let Some(id) = self.resolve_call_target(name, source_file, imported_files) {
-            return Some((id, EdgeConfidence::Proven));
+        if let Some((id, scoped)) =
+            self.resolve_call_target_scoped(name, source_file, imported_files)
+        {
+            // `db.user.update(`: the receiver is a plain object the graph
+            // does not know, so a same-named free function elsewhere is a
+            // guess, not a fact — unless it is in this file or imported.
+            let plain_object = receiver_hint.is_some_and(|h| h.starts_with("obj:"));
+            let confidence = if plain_object && !scoped {
+                EdgeConfidence::Likely
+            } else {
+                EdgeConfidence::Proven
+            };
+            return Some((id, confidence));
         }
         if let Some(prefix) = hmvc_app_prefix(source_file) {
             let prefix_slash = format!("{prefix}/");

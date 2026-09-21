@@ -12,7 +12,8 @@ use crate::seed::{
 };
 use crate::selector::{
     budget_mode_name, consumer_named_in_focus, fill_budget, focus_terms_ask_for_consumers,
-    is_noise_path, packet_cap, path_sort_keys, seed_callee_exon_names, select, sort_key,
+    is_noise_path, packet_cap, path_sort_keys, seed_callee_exon_names, select_with_named, sort_key,
+    PromptWords,
 };
 use crate::skeleton::{CodeSkeletonizer, FoldedIntron, FunctionSpan};
 use crate::style_routing::{
@@ -505,12 +506,15 @@ impl ContextActivator {
             }
         }
 
-        let mut selection = select(
+        // The prompt's own words: evidence for callee seats (see `PromptWords`).
+        let prompt_words = PromptWords::from_prompt(&signature.raw_prompt);
+        let mut selection = select_with_named(
             graph,
             &neighborhood,
             &seed_set,
             &seed_energies,
             &focus_terms,
+            &prompt_words,
             effective_mode,
         );
         if !call_graph_task {

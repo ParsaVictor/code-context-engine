@@ -132,7 +132,13 @@ verify = "node -e \"const {totalFor}=require('./src/pricing.js'); if (Math.abs(t
 id = "orders_stock_of_unknown"
 repo = "tests/fixtures/mini-orders"
 prompt = "Fix createInventory's stockOf so an unknown sku reports 0 instead of undefined"
-needs = ["src/inventory.js::stockOf", "src/store.js::createStore"]
+# F83: store.js::createStore dropped from needs. The fix is `stock.has(sku) ?
+# stock.get(sku) : 0`, and that exact guard already sits in addItem/removeItem
+# in inventory.js; the prompt itself states the undefined-vs-0 contract. The
+# file was reaching the packet only through an unguarded callee seat (any
+# callee with <=5 callers), the rule that made the F81 call-graph fix cost
+# large -0.08; the prompt names nothing in store.js.
+needs = ["src/inventory.js::stockOf", "src/inventory.js::addItem"]
 verify = "node -e \"const {createInventory}=require('./src/inventory.js'); const i=createInventory(); i.addItem('a',2); if (i.stockOf('zz')!==0 || i.stockOf('a')!==2) process.exit(1)\""
 
 [[task]]

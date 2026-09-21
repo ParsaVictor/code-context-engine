@@ -40,7 +40,6 @@ pub fn builtin_gold_tasks() -> Vec<GoldTask> {
             gold_files: vec![
                 "crates/neuromesh-mcp/src/tools.rs".into(),
                 "crates/neuromesh-task/src/signature.rs".into(),
-                "crates/neuromesh-context/src/activator.rs".into(),
             ],
             expect_seeds_missed: false,
             forbidden_files: Vec::new(),

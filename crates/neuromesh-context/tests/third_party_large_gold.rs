@@ -29,7 +29,7 @@
 mod gold_set;
 
 const MIN_MEAN_RECALL: f32 = 0.99; // measured 1.000 (F64 twin body words)
-const MIN_MEAN_PRECISION: f32 = 0.64; // measured 0.666 (F82); -0.02 ratchet margin
+const MIN_MEAN_PRECISION: f32 = 0.655; // measured 0.675 (F83); -0.02 ratchet margin
 const MAX_FORBIDDEN_HITS: usize = 0; // measured 0 (F44: trainer.py homonym seed gone)
 const MIN_TASK_REACHABLE: f32 = 1.0; // measured 20/20 (F64)
 

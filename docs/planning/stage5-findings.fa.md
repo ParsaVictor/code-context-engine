@@ -1163,3 +1163,60 @@ recall 1.0→0.933) → whitelist قراردادی. یک قاعده‌ی دیگ�
 | ۷ مجموعه‌ی دیگر + self | — | بدون تغییر |
 
 سقف token تسک `handle_tool_call_intent` (فیکسچر روی خود ریپو) 27.5k→28.5k: `activator.rs` خودش فایل گلد است و با هر PR بزرگ‌تر می‌شود.
+
+## F83 — W1: صندلی callee فقط با شواهد prompt + F81 + یال member-call به شیء (session 14، PR W1)
+
+**چرا F81 قبلاً large را می‌انداخت:** `select()` بدون هیچ شاهدی از prompt تا ۳ صندلی به callee می‌داد (فقط «≤۵ caller»).
+تا وقتی یال Calls از تابع هم‌نام (`POST` در هر `route.ts`) به فایل می‌چسبید، این صندلی‌ها کم بودند؛ با گراف درست
+(`resolve_in_file` قبل از `resolve_unique`) هر seed چند callee واقعی داشت و همه می‌نشستند (`setup_model` ی trainer برای
+`Model.predict`؛ `update` ی `use-toast.ts` برای `db.user.update(`).
+
+سه چیز با هم عوض شد (هر کدام تنها، مخلوط بود):
+1. **شواهد prompt برای صندلی callee** (`selector.rs`): نام callee در prompt، یا stem فایلش، یا (`PromptWords`، کلمات
+   *خود* prompt نه focus_terms که تکه‌های identifier و alias دارد): (الف) کل identifier با کلمات prompt هجی شده باشد
+   (`create_access_token` ← «create the access token»)، (ب) کلمه‌ای که prompt وسط جمله با حرف بزرگ نوشته (`ItemsPublic` ←
+   «how is Item linked»؛ F34 می‌گوید تنها seed نیست، ولی با یال Calls ی Proven شاهد است)، (ج) یک کلمه‌ی prose + فایل seed
+   فایل callee را import می‌کند (`getUserSubscriptionPlan` ← «free plan» + `import … from "@/lib/subscription"`)، یا (د) کلمه‌ی
+   stem/پوشه‌ی والد فایل callee (`tasks/`؛ پوشه‌های قراردادی `plugins/`, `lib/`, `src/` نه). کلمه‌ای که خود seed دارد
+   (`Model.predict` → `model`) شاهد نیست. مسیر «بدون شاهد ولی ≤۵ caller» حذف شد.
+   - نسخه‌ی «هر کلمه‌ی مشترک» (یک کلمه از prompt بلند): holdout-c 0.573→0.533، ml2 0.632→0.555 (`uv-common.c`، `signal.c`،
+     `_buffer_dict.py` از تکه‌ی `state_dict`→«dict»). سیگنال گم‌شده: کلمه باید *نوشته‌ی کاربر* باشد و یا کل نام را بپوشاند
+     یا با import ی صریح پشتیبانی شود.
+2. **F81** در `finalize_links` (arm Calls): `resolve_in_file` قبل از `resolve_unique`.
+3. **member-call روی شیء ساده** (`db.user.update(`، `userNameSchema.parse(`): parser (هر دو مسیر regex و tree-sitter)
+   receiver_hint `obj:<root>` می‌دهد؛ linker اول خود شیء را در scope (همین فایل یا import شده) resolve می‌کند و یال به
+   *تعریف شیء* می‌رود (`PATCH → userNameSchema @ lib/validations/user.ts`)؛ اگر شیء ناشناخته بود، تابع آزاد هم‌نام در جای
+   دیگر فقط `Likely` است (صندلی نمی‌گیرد). dedupe یال‌ها per (caller, member, object) شد (`routeContextSchema.parse` قبلاً
+   `userNameSchema.parse` را می‌خورد). `export const x = call/new/object` در TS حالا symbol است (قبلاً فقط SCREAMING_SNAKE؛ F54).
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| holdout-web | 0.642 / 0.602 | **0.717** / 0.572 |
+| large | 1.000 / 0.666 | 1.000 / **0.675** |
+| holdout-2 | 0.554 | **0.700** |
+| holdout-c | 0.573 | 0.578 |
+| holdout-lang | 0.541 / forbidden 1 | 0.589 / 1 |
+| holdout-ml | 0.437 | 0.478 |
+| holdout-ml2 | 0.632 (strict 7) | 0.632 (strict 6) |
+| holdout-cfg | 0.712 | 0.767 |
+| dev | 1.000 / 0.938 | 1.000 / 0.938 |
+| self (۲۰) | 0.675 / 0.406 | 0.675 / 0.428 |
+
+web باقی‌مانده (recall): `fd_login_flow` 1/3، `fd_rate_limit` 1/2 (env.ts)، `fd_session_plugin` 1/2 (env.ts)، `fd_task_delete_image`
+1/3 و `fd_task_upload` 2/3 (route ی `tasks/index.ts` ی caller)، `fd_update_password` 1/2 (`passwordManager.hash` روی
+decorator ی fastify — شیء در scope نیست)، `tx_dashboard_guard` 0/2، `tx_stripe_*` (W2). precision web 0.602→0.572: صندلی
+`lib/validations/post.ts` با stem «post» (قاعده‌ی قدیمی stem، حالا با یال جدید) در دو تسک.
+
+**فیکسچر `handle_tool_call_intent`:** با حذف مسیر «بدون شاهد» activator.rs از packet افتاد (recall 0.67 < 0.8 gate).
+بازگرداندنش با قاعده‌ی «import شده + ≤۵ caller» (بدون کلمه‌ی prompt) اندازه‌گیری شد: large 0.675→0.542 + forbidden، dev
+0.938→0.925، holdout-2 0.700→0.679، cfg 0.767→0.712 — همان صندلی بی‌شاهد قدیمی. activator.rs «intent» را فقط در تست‌های
+خودش که همین prompt را نقل می‌کنند دارد (همان حالت self-referential که F25 از `physarum_usage` حذف کرد)؛ استخراج intent در
+`signature.rs` است و caller اش `tools.rs`. گلد اصلاح شد (۳→۲ فایل، دلیل در `tests/gold_tasks.toml`). ratchet ها: large 0.64→0.655،
+cfg 0.69→0.745.
+
+**فیکسچر `orders_stock_of_unknown` (task_success، CI):** `src/store.js::createStore` هم فقط از صندلی بی‌شاهد می‌آمد
+(prompt هیچ کلمه‌ای از store.js ندارد؛ گیت sidecar ی fill هم آن را رد می‌کند). دو تلاش برای برگرداندن صندلی بی‌شاهد
+(«import شده + ≤۵ caller»؛ «seed کوچک با ≤۳ callee + ≤۵ caller») هر دو large را به 0.54–0.59 + forbidden و holdout-2/cfg/dev
+را پایین بردند → revert. فیکس درست `stock.has(sku) ? stock.get(sku) : 0` است که عیناً در `addItem`/`removeItem` همان فایل
+هست؛ `needs` اصلاح شد (`inventory.js::addItem` به‌جای `store.js::createStore`). درس: هر گلدی که «callee ی بی‌نام seed» را
+می‌خواهد، از قاعده‌ی حذف‌شده تغذیه می‌شد؛ با گلد واقعی تیم (G3) باید دید این خواسته چقدر واقعی است.

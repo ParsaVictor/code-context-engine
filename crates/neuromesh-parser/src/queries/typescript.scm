@@ -54,3 +54,14 @@
     (variable_declarator
       name: (identifier) @symbol.name
       (#match? @symbol.name "^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$")))) @symbol
+
+; `export const userNameSchema = z.object({...})`, `export const db = new
+; PrismaClient()`: an exported module-level object built by a call is what
+; `userNameSchema.parse(` and `db.user.update(` are member calls on. Without
+; a node the member call binds to a stranger sharing the member's name (F83).
+; Literals (`export const revalidate = 60`) stay out.
+(export_statement
+  (lexical_declaration
+    (variable_declarator
+      name: (identifier) @symbol.name
+      value: [(call_expression) (new_expression) (object) (binary_expression) (await_expression)]))) @symbol
