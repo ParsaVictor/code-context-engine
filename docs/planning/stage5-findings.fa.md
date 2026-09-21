@@ -1220,3 +1220,31 @@ cfg 0.69→0.745.
 را پایین بردند → revert. فیکس درست `stock.has(sku) ? stock.get(sku) : 0` است که عیناً در `addItem`/`removeItem` همان فایل
 هست؛ `needs` اصلاح شد (`inventory.js::addItem` به‌جای `store.js::createStore`). درس: هر گلدی که «callee ی بی‌نام seed» را
 می‌خواهد، از قاعده‌ی حذف‌شده تغذیه می‌شد؛ با گلد واقعی تیم (G3) باید دید این خواسته چقدر واقعی است.
+
+## F84 — W2: آدرس فایل در مسیرش، نام‌پوشه، و شیء decorate شده (session 14، PR W2)
+
+۸ تسک باقی‌مانده‌ی web یک شکل داشتند: فایل درست هیچ symbol نام‌برده ندارد و فقط *مسیرش* با کلمات prompt می‌خواند.
+چهار قاعده، همه با کلمات *خود prompt* (`PromptWords.prose`، نه focus_terms):
+
+1. **مسیر فایل prompt را هجی می‌کند** (`path_spells_prompt`، selector.rs): ≥۲ کلمه‌ی متمایز prompt در کلمات stem +
+   پوشه‌های غیرقراردادی مسیر، **و** دست‌کم یکی از آن‌ها را ≤۸ فایل حمل کنند. چنین فایلی از گیت consumer در `select()` و گیت
+   sidecar در materialize رد می‌شود (`webhooks/stripe/route.ts` ← «Stripe webhook»). بدون شرط کم‌تکرار: `management/commands/*.py`
+   ی django با «management command» می‌آمد (large 0.675→0.642) — دو کلمه‌ای که یک زیرشاخه‌ی کامل دارد «جا» است نه فایل.
+2. **کلمه‌ی نام‌پوشه** (`dir_word_retarget`، seed/sink.rs): کلمه‌ی prompt که نام پوشه است و فقط با prefix به symbol رسیده
+   (`dashboard`→`DashboardLoading`) به فایل هم‌پوشه‌ای که کلمه‌ی دوم prompt را در *نام خودش* دارد منتقل می‌شود
+   (`dashboard/layout.tsx`)؛ اگر چنین فایلی نبود prefix می‌ماند (kosha «school scores» → `school/routes.py` پاس). این همان
+   قاعده‌ی رد‌شده‌ی #112 است، به‌جای «رد کردن»، «جابه‌جایی» — پس هیچ‌وقت seed خالی نمی‌ماند.
+3. **شیء decorate شده** (graph.rs، مسیر `obj:`): وقتی شیءِ member-call در scope نیست ولی دقیقاً یک فایل نامش را داخل کوتیشن
+   دارد (`fastify.decorate('passwordManager', …)`) یال به آن فایل می‌رود (Likely، هدف File). و **seed فایلی** (route ی
+   پیدا‌شده از literal مسیرش) callee های همه‌ی symbol های داخلش را می‌بیند (handler های بی‌نام روی `plugin` ی default export
+   می‌نشینند). همان شواهد prompt صندلی را می‌گیرد (`password-manager` ← «password»).
+4. **کلمه‌ی پوشه‌ی خودِ seed شاهد نیست**: `layers` برای seed ی داخل `layers/` (flux) sibling ی `normalise.jl` را نمی‌نشاند
+   (holdout-lang 0.583→0.589 برگشت).
+
+| مجموعه | بعد از W1 | بعد از W2 |
+|---|---|---|
+| holdout-web | 0.717 / 0.572 | **0.817 / 0.618** |
+| ۸ مجموعه‌ی دیگر + self | — | بدون افت (large 0.675، holdout-2 0.700، lang 0.589، holdout-c 0.578→0.589) |
+
+web باقی‌مانده: `fd_login_flow` 1/3 (auth route + password-manager بی‌نام)، `fd_rate_limit`/`fd_session_plugin` (env.ts —
+«env variable» سه‌حرفی است)، `fd_task_delete_image` 1/3، `tx_stripe_checkout` 1/2 (`lib/subscription.ts` بی‌نام).

@@ -2047,6 +2047,22 @@ impl NeuralProjectGraph {
             {
                 return Some((id, EdgeConfidence::Proven));
             }
+            // Not a symbol anywhere, but exactly one file spells the object's
+            // name in quotes: a decorator or registration
+            // (`fastify.decorate('passwordManager', …)`) is where
+            // `passwordManager.hash(` lives. The file, marked Likely.
+            let spelled: Vec<NodeId> = self
+                .files_with_literal(object)
+                .into_iter()
+                .filter(|fid| {
+                    self.get_node(fid).is_some_and(|n| {
+                        n.file_path != source_file && !is_fixture_path(&n.file_path)
+                    })
+                })
+                .collect();
+            if spelled.len() == 1 {
+                return Some((spelled[0].clone(), EdgeConfidence::Likely));
+            }
         }
 
         if let Some((id, scoped)) =
