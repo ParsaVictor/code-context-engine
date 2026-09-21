@@ -10,7 +10,7 @@ bash scripts/benchmark-holdout.sh holdout  # one set
 The rule behind the table: **a number from a repository the engine was tuned on is
 not the project's number.** Only the holdout rows are.
 
-## Gold sets (2026-09-20, main after PR #112)
+## Gold sets (2026-09-20, main after PR #115)
 
 | set | repos | role | recall | precision | forbidden | oracle reachable / strict |
 |---|---|---|---|---|---|---|
