@@ -139,3 +139,75 @@ prompt = "How does the index cache compute the code hash that keys the cached gr
 gold_files = ["crates/neuromesh-context/tests/support/index_cache.rs"]
 forbidden_files = []
 expect_seeds_missed = false
+
+# --- G4 (2026-09-21): ten more real questions, gold written before any run ---
+
+[[task]]
+id = "self_dir_word_retarget"
+prompt = "When a prompt word is a directory name and only prefix-matches a symbol, how does the seed sink move it to a sibling file?"
+gold_files = ["crates/neuromesh-context/src/seed/sink.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_bm25_body_ranking"
+prompt = "How are files ranked by the words their body spells, and how is document length normalised?"
+gold_files = ["crates/neuromesh-graph/src/graph.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_path_address"
+prompt = "Which rule lets a file pass the sidecar gate because its path spells two prompt words, and what makes one of them rare?"
+gold_files = ["crates/neuromesh-context/src/selector.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_member_call_object"
+prompt = "How is a member call on a plain object like db.user.update() tagged by the parser and then bound by the linker?"
+gold_files = ["crates/neuromesh-parser/src/query_extract.rs", "crates/neuromesh-graph/src/graph.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_callee_seat_evidence"
+prompt = "What prompt evidence does a callee need to take a required seat in select()?"
+gold_files = ["crates/neuromesh-context/src/selector.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_convention_dirs"
+prompt = "Which directory names are treated as framework conventions that name nothing?"
+gold_files = ["crates/neuromesh-context/src/selector.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_strip_plural"
+prompt = "Where is the plural-stripping helper used to compare prompt words with path tokens?"
+gold_files = ["crates/neuromesh-context/src/seed/weak_file_seed.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_common_call_list"
+prompt = "Which call names count as common plumbing that never gets a callee seat?"
+gold_files = ["crates/neuromesh-context/src/selector.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_literal_index_build"
+prompt = "How does ingest build the literal index of quoted name-like strings per file?"
+gold_files = ["crates/neuromesh-graph/src/graph.rs", "crates/neuromesh-graph/src/intern.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "self_snapshot_fields"
+prompt = "Which struct holds the persisted graph snapshot and where are its fields restored on load?"
+gold_files = ["crates/neuromesh-graph/src/intern.rs", "crates/neuromesh-graph/src/graph.rs"]
+forbidden_files = []
+expect_seeds_missed = false

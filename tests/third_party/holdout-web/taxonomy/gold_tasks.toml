@@ -70,3 +70,40 @@ prompt = "How does the dashboard layout handle a visitor who is not logged in?"
 gold_files = ["app/(dashboard)/dashboard/layout.tsx", "lib/session.ts"]
 forbidden_files = ["app/(marketing)/pricing/page.tsx"]
 expect_seeds_missed = false
+
+# --- G4 (2026-09-21): five more, gold written from the source before any run ---
+
+[[task]]
+id = "tx_og_image"
+prompt = "How does the OG image route validate its query params and render the image on the edge runtime?"
+gold_files = ["app/api/og/route.tsx", "lib/validations/og.ts"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_billing_page"
+prompt = "How does the billing page load the current user's subscription plan and pass it to the billing form?"
+gold_files = ["app/(dashboard)/dashboard/billing/page.tsx", "lib/subscription.ts", "components/billing-form.tsx"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_settings_page"
+prompt = "Which components does the dashboard settings page compose and how does it get the current user?"
+gold_files = ["app/(dashboard)/dashboard/settings/page.tsx", "lib/session.ts"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_register_page"
+prompt = "How does the register page render the user auth form?"
+gold_files = ["app/(auth)/register/page.tsx", "components/user-auth-form.tsx"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "tx_table_of_contents"
+prompt = "How is the table of contents built from the MDX body for docs pages?"
+gold_files = ["lib/toc.ts", "components/toc.tsx"]
+forbidden_files = []
+expect_seeds_missed = false

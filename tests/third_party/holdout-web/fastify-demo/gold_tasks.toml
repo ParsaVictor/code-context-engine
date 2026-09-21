@@ -70,3 +70,40 @@ prompt = "How is the session cookie plugin configured and where does the secret 
 gold_files = ["src/plugins/external/session.ts", "src/plugins/external/env.ts"]
 forbidden_files = ["src/plugins/app/tasks/tasks-repository.ts"]
 expect_seeds_missed = false
+
+# --- G4 (2026-09-21): five more, gold written from the source before any run ---
+
+[[task]]
+id = "fd_auth_autohook"
+prompt = "Where is the onRequest hook that rejects unauthenticated API requests except the login route?"
+gold_files = ["src/routes/api/autohooks.ts"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_knex_decorator"
+prompt = "How is the knex instance decorated onto fastify and used by the users repository?"
+gold_files = ["src/plugins/external/knex.ts", "src/plugins/app/users/users-repository.ts"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_multipart_limit"
+prompt = "What is the maximum upload file size configured for multipart requests?"
+gold_files = ["src/plugins/external/multipart.ts"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_admin_prehandler"
+prompt = "How does the tasks route restrict deletion to admins with a preHandler and where is isAdmin defined?"
+gold_files = ["src/routes/api/tasks/index.ts", "src/plugins/app/authorization.ts"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "fd_generic_file_manager"
+prompt = "How does the generic file manager plugin move and delete files on disk?"
+gold_files = ["src/plugins/app/file-manager.ts"]
+forbidden_files = []
+expect_seeds_missed = false

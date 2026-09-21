@@ -10,7 +10,7 @@ bash scripts/benchmark-holdout.sh holdout  # one set
 The rule behind the table: **a number from a repository the engine was tuned on is
 not the project's number.** Only the holdout rows are.
 
-## Gold sets (2026-09-21, main after W3 — F85)
+## Gold sets (2026-09-21, main after G4 — F86)
 
 | set | repos | role | recall | precision | forbidden | oracle reachable / strict |
 |---|---|---|---|---|---|---|
@@ -22,7 +22,7 @@ not the project's number.** Only the holdout rows are.
 | holdout-ml | keras-io examples (Keras), setfit (Hugging Face) | **tuned on in D-3** (5 iterations read its numbers) — dev-class since then; fresh ML holdout is `holdout-ml2` | **1.000** | **0.478** | **0** | 10/10 · 10 |
 | **holdout-ml2** | peft (Hugging Face adapter library), keras-hub (Keras 3 model library) | never tuned on; first run after gold lock (session 12) | **1.000** | **0.632** | **0** | 10/10 · 6 |
 | **holdout-cfg** | lightning-hydra-template (Hydra YAML), detr (argparse) | D-4 gold; F55 (session 12) + F71/F72 (session 13) tuned on it — dev-class for config questions | **1.000** | **0.767** | **0** | — |
-| holdout-web | fastify/demo (Fastify API), shadcn-ui/taxonomy (Next.js app router) | dev-class for the web domain (fixed on since session 13; the private B2B set stays the real holdout) | **0.817** | **0.667** | **0** | — |
+| holdout-web (30 q) | fastify/demo (Fastify API), shadcn-ui/taxonomy (Next.js app router) | dev-class for the web domain (fixed on since session 13; 10 blind questions added in G4 scored 0.58 before fixes) | **0.800** | **0.608** | **0** | — |
 | **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.587** | **0** | — |
 
 - **recall / precision** are file-level against a hand-written gold (`gold_files`) per question.
