@@ -5,7 +5,9 @@ use std::collections::HashMap;
 fn tier_for_reason(reason: &str) -> Option<&'static str> {
     use crate::retrieval::embedding_confidence::{TIER_EMBEDDING_PRIMARY, TIER_L1_EXACT};
     match reason {
-        "identifier" | "entity" | "file" | "client_keyword" | "alias_code" => Some(TIER_L1_EXACT),
+        "identifier" | "entity" | "file" | "stem" | "client_keyword" | "alias_code" => {
+            Some(TIER_L1_EXACT)
+        }
         "client_expansion" | "inferred_keyword" | "path_hint" | "entity_type" | "token"
         | "style_hint" | "style_component" | "style_partial" | "style_mixin" | "style_token"
         | "view_component" => Some(TIER_L1_EXACT),
@@ -237,7 +239,7 @@ fn is_guess_reason(reason: &str) -> bool {
 
 /// The question is about tests, docs, examples or fixtures, so those paths
 /// are its subject and not noise.
-fn prompt_names_low_priority(prompt: &str) -> bool {
+pub(crate) fn prompt_names_low_priority(prompt: &str) -> bool {
     let lower = prompt.to_lowercase();
     [
         "test",

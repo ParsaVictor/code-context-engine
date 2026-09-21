@@ -623,6 +623,20 @@ impl NeuralProjectGraph {
                     ids.push(file_id.clone());
                 }
             }
+            if reingested {
+                for list in data.word_index.values_mut() {
+                    list.retain(|existing| *existing != file_id);
+                }
+            }
+            let words = crate::intern::body_words(src);
+            data.body_lengths
+                .insert(file_id.clone(), words.len() as u32);
+            for word in words {
+                data.word_index
+                    .entry(word)
+                    .or_default()
+                    .push(file_id.clone());
+            }
         }
         if keep_source {
             if let Some(src) = content {
@@ -631,6 +645,86 @@ impl NeuralProjectGraph {
         } else {
             data.source_overlay.remove(&rel);
         }
+    }
+
+    /// Plural-tolerant spellings of a query word as body-word keys.
+    fn body_word_forms(word: &str) -> Vec<String> {
+        let w = word.to_lowercase();
+        let mut forms = vec![w.clone(), format!("{w}s"), format!("{w}es")];
+        if let Some(base) = w.strip_suffix("es").filter(|b| b.len() >= 4) {
+            forms.push(base.to_string());
+        }
+        if let Some(base) = w.strip_suffix('s').filter(|b| b.len() >= 4) {
+            forms.push(base.to_string());
+        }
+        forms
+    }
+
+    /// Files whose body spells `word` (any plural form), deduplicated.
+    fn files_spelling(&self, data: &GraphData, word: &str) -> Vec<NodeId> {
+        let mut out: Vec<NodeId> = Vec::new();
+        for form in Self::body_word_forms(word) {
+            if let Some(ids) = data.word_index.get(&form) {
+                for id in ids {
+                    if !out.contains(id) {
+                        out.push(id.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// BM25-lite over body words: every non-noise file that spells at least
+    /// one of `words`, scored by the sum of idf over the distinct words it
+    /// spells, best first. Returns (file, distinct words covered, score).
+    pub fn body_word_ranking(&self, words: &[String], limit: usize) -> Vec<(NodeId, usize, f32)> {
+        let data = self.inner.read();
+        let total = data.body_lengths.len().max(1) as f32;
+        let avg_len = (data.body_lengths.values().map(|&l| l as f32).sum::<f32>() / total).max(1.0);
+        // BM25 with binary term frequency: a 12k-token file that spells every
+        // word of the prompt is not the answer to all of them; length
+        // normalisation (k1 = 1.2, b = 0.75) keeps the short, dense file ahead.
+        const K1: f32 = 1.2;
+        const B: f32 = 0.75;
+        let mut scores: HashMap<NodeId, (usize, f32)> = HashMap::new();
+        for word in words {
+            let files = self.files_spelling(&data, word);
+            if files.is_empty() {
+                continue;
+            }
+            let idf = ((total + 1.0) / (files.len() as f32 + 0.5)).ln();
+            for id in files {
+                let len = data.body_lengths.get(&id).copied().unwrap_or(0) as f32;
+                let norm = (K1 + 1.0) / (1.0 + K1 * (1.0 - B + B * len / avg_len));
+                let e = scores.entry(id).or_insert((0, 0.0));
+                e.0 += 1;
+                e.1 += idf * norm;
+            }
+        }
+        let mut ranked: Vec<(NodeId, usize, f32)> =
+            scores.into_iter().map(|(id, (n, s))| (id, n, s)).collect();
+        // Coverage first: the file that spells more of the question beats the
+        // one that spells less of it densely; score orders equals.
+        ranked.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then_with(|| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal))
+                .then_with(|| a.0.as_str().cmp(b.0.as_str()))
+        });
+        ranked.truncate(limit);
+        ranked
+    }
+
+    /// How many distinct `words` the body of the file at `path` spells.
+    pub fn body_word_hits(&self, path: &Path, words: &[String]) -> usize {
+        let Some(file_id) = self.file_id_for_path(path) else {
+            return 0;
+        };
+        let data = self.inner.read();
+        words
+            .iter()
+            .filter(|w| self.files_spelling(&data, w).contains(&file_id))
+            .count()
     }
 
     /// Files whose source spells `literal` inside quotes — a tool name, a
@@ -2515,6 +2609,8 @@ impl NeuralProjectGraph {
                 applied_learning_episodes: data.applied_learning_episodes.clone(),
                 concept_index: data.concept_index.clone(),
                 literal_index: data.literal_index.clone(),
+                word_index: data.word_index.clone(),
+                body_lengths: data.body_lengths.clone(),
             }
         };
         if snapshot_structurally_unchanged(path, &snapshot) {
@@ -2562,6 +2658,8 @@ impl NeuralProjectGraph {
                 applied_learning_episodes: HashSet::new(),
                 concept_index: ConceptIndex::default(),
                 literal_index: HashMap::new(),
+                word_index: HashMap::new(),
+                body_lengths: HashMap::new(),
             });
             return Ok(true);
         }
@@ -2583,6 +2681,8 @@ impl NeuralProjectGraph {
         data.applied_learning_episodes = snapshot.applied_learning_episodes;
         data.parser_epoch = snapshot.parser_epoch;
         data.literal_index = snapshot.literal_index;
+        data.word_index = snapshot.word_index;
+        data.body_lengths = snapshot.body_lengths;
         if snapshot.workspace_root.is_some() {
             data.workspace_root = snapshot.workspace_root;
         }

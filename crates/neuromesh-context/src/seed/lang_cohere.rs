@@ -18,6 +18,7 @@ const STRONG: &[&str] = &[
     "identifier",
     "entity",
     "file",
+    "stem",
     "client_keyword",
     "config_key",
     "literal",

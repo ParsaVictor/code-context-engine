@@ -1248,3 +1248,32 @@ cfg 0.69→0.745.
 
 web باقی‌مانده: `fd_login_flow` 1/3 (auth route + password-manager بی‌نام)، `fd_rate_limit`/`fd_session_plugin` (env.ts —
 «env variable» سه‌حرفی است)، `fd_task_delete_image` 1/3، `tx_stripe_checkout` 1/2 (`lib/subscription.ts` بی‌نام).
+
+## F85 — W3: ایندکس کلمات بدنه (BM25 بدون tantivy) به‌عنوان رقیب seedهای حدسی (session 14، PR W3)
+
+**مشکل:** ۷ تسک self «مفهوم بی‌نام» بودند: جواب در بدنه/کامنت فایل است (`ratchet`، `add_argument`، `pheromone`، `exon budget`)
+ولی symbol ای به آن نام نیست؛ ۴ تای‌شان seed *غلط* داشتند (`token:pheromone → PheromoneConfig@edge.rs`، «python parser» →
+`python_lang.rs`). پس «BM25 فقط وقتی seed نیست» کافی نبود.
+
+**چه ساخته شد:**
+- `GraphData.word_index` + `body_lengths` (intern.rs؛ در snapshot هم): هر فایل → کلمات متمایز بدنه (اجزای identifier، کامنت،
+  string، ≥۴ حرف) + خود identifier های snake_case (`add_argument`). بدون tantivy — یک HashMap با NodeId ی Arc.
+- `graph.body_word_ranking(words)`: BM25 با tf دودویی و نرمال‌سازی طول (k1=1.2، b=0.75)؛ **مرتب‌سازی اول با تعداد کلمات پوشش
+  داده‌شده، بعد امتیاز** (بدون این، فایل‌های ۱۲k توکنی که همه‌چیز را می‌گویند یا فایل‌های ریز ۲ کلمه‌ای برنده می‌شدند).
+- `push_body_word_seeds` (activator_seed.rs، آخر pipeline): فقط وقتی هیچ seed قوی *واقعی* نیست. seed قوی = identifier/file/
+  literal/… که در مسیر noise نیفتاده باشد (`identifier:packet → packet()` در یک تست anchor نیست). seedهای فایلی که از prose
+  استنتاج شده‌اند (word-stem، path-word) حالا tag `stem` دارند: STRONG برای بقیه‌ی pipeline، ولی برای این pass مثل حدس
+  (compound-stem ی `index cache` → `index_cache.rs` همچنان `file` و قوی). نثر (`.md`، `docs/`) هرگز؛ تست/اسکریپت فقط وقتی
+  اکیداً بیش از هر فایل محصول را هجی کند. بین هم‌پوشش‌ها: اول فایلی که *مسیرش* کلمات prompt را دارد (`third_party_large_gold.rs`
+  برای «large gold set»)، وگرنه فقط آن‌که امتیازش ≥0.6× بهترین است (`config_reads.rs` 14.1 در برابر 7.3 و 3.5). ≤۲ فایل seed
+  می‌شوند؛ seedهای حدسی که کلمات کمتری هجی می‌کنند unresolved می‌شوند.
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| self (۲۰) | 0.675 / 0.428 | **0.925 / 0.607** |
+| holdout-web | 0.817 / 0.618 | 0.817 / **0.667** |
+| ۸ مجموعه‌ی دیگر | — | بدون تغییر |
+
+باقی self: `self_exon_budget` (۵ فایل هم‌پوشش، هیچ‌کدام مسیرشان نمی‌گوید — مرز صادقانه)، `self_packet_cap` 1/2 (precision 1.0).
+درس: مسیر «یک قاعده، یک اندازه‌گیری» را رها کردیم؛ ۶ اصلاح پشت هم فقط روی self (۲ دقیقه هر بار) و یک گیت کامل در آخر —
+همان دقت، یک‌سوم زمان.

@@ -52,7 +52,7 @@ fn prompt_asks_for_config(prompt: &str) -> bool {
 
 fn explicit_file_seed(query: &str) -> bool {
     let prefix = query.split(':').next().unwrap_or("");
-    matches!(prefix, "file" | "path_hint")
+    matches!(prefix, "file" | "stem" | "path_hint")
 }
 
 /// Drop seeds that resolved to a data node when the question is anchored in
