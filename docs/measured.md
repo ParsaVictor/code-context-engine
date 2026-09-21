@@ -126,3 +126,9 @@ NM_AUDIT_PATH=/path/to/checkout NM_PROBE="How does X do Y?" NM_PROBE_EDGES=1 NM_
 prints the files shipped, every seed with its resolution, each seed's outgoing call edges with
 caller counts, and every ranked candidate with its score breakdown — the tooling every finding in
 `stage5-findings.fa.md` was made with.
+
+## Baseline v0.9.0 vs this fork (2026-09-21)
+
+112 gold tasks, 15 repositories, both binaries on the same machine and day, scored by file name from each engine's `optimize` output (`scripts/compare-baseline.sh`; raw rows in `baseline-vs-fork-2026-09-21.txt`). Baseline recall 0.735 / precision 0.206 / 12 forbidden; fork 0.938 / 0.633 / 7. Baseline has no parser for Scala, R, Julia (recall 0 there), skips `.sh`/`.ps1`/`.ipynb`, and answers config questions at 0.5–0.75 recall. Where the baseline already worked (Go, Python), recall is equal and precision is ~3× higher. Both are weak on the Fastify + Next.js set (0.65 recall).
+
+Claude Code session A/B (`claude -p`, Sonnet, same task): Django 3.5k files — plain 8 turns / 233k context tokens / $0.239, with the engine 5 turns / 129k / $0.204; fastify/demo 68 files — 244k / $0.408 vs 194k / $0.391. The engine only shrinks the code-context share of a session; system prompt and tool schemas are re-read every turn.

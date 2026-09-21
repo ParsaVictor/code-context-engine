@@ -1,0 +1,30 @@
+BASE holdout/gin                  tasks=10 recall=1.000 precision=0.178 forbidden=0
+FORK holdout/gin                  tasks=10 recall=1.000 precision=0.608 forbidden=0
+BASE holdout/vision               tasks=10 recall=1.000 precision=0.157 forbidden=1
+FORK holdout/vision               tasks=10 recall=1.000 precision=0.550 forbidden=0
+BASE holdout-c/fmt                tasks= 8 recall=0.875 precision=0.319 forbidden=0
+FORK holdout-c/fmt                tasks= 8 recall=1.000 precision=0.500 forbidden=0
+BASE holdout-c/libuv              tasks= 8 recall=0.688 precision=0.285 forbidden=1
+FORK holdout-c/libuv              tasks= 8 recall=1.000 precision=0.667 forbidden=1
+BASE holdout-lang/cli             tasks= 5 recall=0.000 precision=0.000 forbidden=0
+FORK holdout-lang/cli             tasks= 5 recall=1.000 precision=0.257 forbidden=0
+BASE holdout-lang/flux            tasks= 5 recall=0.000 precision=0.000 forbidden=0
+FORK holdout-lang/flux            tasks= 5 recall=1.000 precision=0.667 forbidden=1
+BASE holdout-lang/oslib           tasks= 5 recall=0.000 precision=0.000 forbidden=0
+FORK holdout-lang/oslib           tasks= 5 recall=1.000 precision=0.900 forbidden=0
+BASE holdout-ml2/kerashub         tasks= 5 recall=1.000 precision=0.219 forbidden=1
+FORK holdout-ml2/kerashub         tasks= 5 recall=1.000 precision=0.747 forbidden=0
+BASE holdout-ml2/peft             tasks= 5 recall=1.000 precision=0.413 forbidden=2
+FORK holdout-ml2/peft             tasks= 5 recall=1.000 precision=0.683 forbidden=2
+BASE holdout-web/fastify-demo     tasks=10 recall=0.633 precision=0.283 forbidden=1
+FORK holdout-web/fastify-demo     tasks=10 recall=0.650 precision=0.583 forbidden=0
+BASE holdout-web/taxonomy         tasks=10 recall=0.650 precision=0.175 forbidden=3
+FORK holdout-web/taxonomy         tasks=10 recall=0.650 precision=0.633 forbidden=3
+BASE holdout-cfg/detr             tasks= 5 recall=0.500 precision=0.233 forbidden=0
+FORK holdout-cfg/detr             tasks= 5 recall=1.000 precision=0.750 forbidden=0
+BASE holdout-cfg/hydra            tasks= 6 recall=0.750 precision=0.353 forbidden=1
+FORK holdout-cfg/hydra            tasks= 6 recall=1.000 precision=0.706 forbidden=0
+BASE large/django                 tasks=10 recall=1.000 precision=0.170 forbidden=0
+FORK large/django                 tasks=10 recall=1.000 precision=0.723 forbidden=0
+BASE large/ultralytics            tasks=10 recall=1.000 precision=0.213 forbidden=2
+FORK large/ultralytics            tasks=10 recall=1.000 precision=0.633 forbidden=0
