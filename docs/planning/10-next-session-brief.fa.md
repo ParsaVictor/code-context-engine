@@ -1,4 +1,4 @@
-# بریف کامل چت بعدی — code-context-engine (2026-09-21، main بعد از PR #115)
+# بریف کامل چت بعدی — code-context-engine (2026-09-21، main بعد از PR #116)
 
 این سند تنها چیزی است که چت بعدی باید بخواند تا بدون خطا و سریع ادامه دهد. هر چیزی که این‌جا نیست، در فایل‌های
 ارجاع‌شده هست. ترتیب خواندن: همین سند → `stage5-findings.fa.md` فقط برای finding ای که به آن می‌رسی.
@@ -169,9 +169,34 @@ CI با `gh pr checks N` (tab-separated؛ ستون ۲ = وضعیت). مرج: `gh
 ```
 پروژه: fork NeuroMesh در C:\1\1_پروژه\5_neuromesh\repo (GitHub ParsaVictor/code-context-engine). اول
 docs/planning/10-next-session-brief.fa.md را کامل بخوان (قوانین §۲، دستورها §۳، تله‌ها §۴، معماری §۵، کارهای باز §۶) و
-حافظه‌ات (MEMORY.md → neuromesh-session13). main بعد از PR #115. اختیار کامل: بدون پرسیدن PR بزن، با CI سبز مرج کن،
+حافظه‌ات (MEMORY.md → neuromesh-session13). main بعد از PR #116. اختیار کامل: بدون پرسیدن PR بزن، با CI سبز مرج کن،
 بعد از هر PR گزارش ۳–۵ خطی (جدول قبل/بعد + قدم بعد). از §۶ به ترتیب شروع کن: W1 = صندلی callee با شواهد prompt، بعد F81.
 هر PR = ۹ مجموعه + self + tests + clippy سبز. holdout ها را تیون نکن؛ مخلوط = revert + ثبت در stage5-findings (F83 به بعد).
 بعد از هر sed بازه‌ای `git diff --stat`. سریع پیش برو؛ وقتی گزارش کامل خواستم، مرحله را تمام کن، handoff را به‌روز کن و
 بایست.
 ```
+
+## ۱۱. افزوده‌ی 2026-09-21 (بعد از #116) — محدودیت اصلی و راه حلش
+
+**محدودیت اصلی = recall روی ریپوهای web/route-shaped (Fastify + Next.js app router): 0.642.** روی همه‌ی ۱۱۲ تسک دیگر
+recall ما 0.938 در برابر 0.735 نسخه‌ی اصلی است؛ web تنها جایی است که هر دو ضعیف‌اند. علت‌های اندازه‌گیری‌شده (همه در
+`stage5-findings.fa.md` F80–F82):
+
+1. **F81** — یال Calls از تابع هم‌نام (`POST` در هر `route.ts`) به *فایل* می‌چسبد (`finalize_links` → arm Calls →
+   `resolve_unique` قبل از `resolve_in_file`). فیکسِ `resolve_in_file` اول: web recall +0.025 ولی large 0.641→0.558 +
+   forbidden، چون `select()` تا ۳ صندلی به callee می‌دهد حتی بدون شواهد prompt (`focus` فقط نام/stem؛ بدون focus هم اگر
+   caller_count ≤5). **ترتیب درست: اول صندلی callee فقط با شواهد prompt (نام callee یا stem/پوشه‌ی فایلش در prompt)، بعد F81.**
+2. **کلمه‌ی نام‌پوشه** (`dashboard` → `DashboardLoading` با prefix، به‌جای `dashboard/layout.tsx`): +0.125 web ولی تست
+   `learning_to_emission_kosha_routes_emitted` شکست چون بعد از رد کردن هیچ seed ای نماند و path-words (چون `anchored`)
+   خاموش بود. سیگنال: وقتی prefix-hit به‌خاطر نام‌پوشه رد شد، path-word seeds باید اجازه‌ی اجرا داشته باشند.
+3. **path-word seeds با anchor**: web 0.742 ولی c/cfg −0.08 (`loop-watcher.c` کنار `loop.c`). راه درست: امتیاز کلمات مسیر
+   *داخل* `select()`/fill (بالا بردن رتبه‌ی فایلی که ≥۲ کلمه‌ی prompt در مسیرش دارد)، نه seed جدید.
+4. web باقی‌مانده: `fd_login_flow` (۳ فایل گلد، packet ۱ — repository/password-manager ی callee نمی‌آیند ⇒ همان ۱)،
+   `fd_session_plugin`، `tx_stripe_*` (route های stripe بی‌نام ⇒ همان ۳).
+
+**هدف W1–W2:** holdout-web recall ≥0.80 با precision ≥0.60، بدون افت هیچ‌کدام از ۹ مجموعه و self. اگر یک قاعده web را
+بالا برد و یکی دیگر را انداخت: سیگنال گم‌شده را از dump پیدا کن (`NM_EXPLAIN`)؛ اگر دو تلاش جواب نداد، revert و ثبت.
+
+ابزار مقایسه با نسخه‌ی اصلی: `scripts/compare-baseline.sh` (نتایج `docs/baseline-vs-fork-2026-09-21.txt`؛ باینری baseline
+از worktree روی tag `baseline-v0.9.0` با `CARGO_TARGET_DIR` جدا، ~۲۵ دقیقه build). A/B ی Claude Code: `claude -p "<task>"
+--output-format json --model sonnet --mcp-config <json> --strict-mcp-config --allowedTools …` (مسیر exe در JSON با `/`).
