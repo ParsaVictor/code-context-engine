@@ -65,3 +65,14 @@
     (variable_declarator
       name: (identifier) @symbol.name
       value: [(call_expression) (new_expression) (object) (binary_expression) (await_expression)]))) @symbol
+
+; `fastify.decorate('knex', knex(opts))`, `app.decorateRequest('user', null)`:
+; a decoration puts a name on the instance that other files use bare
+; (`const knex = fastify.knex; knex('users')`) with nothing in scope to
+; resolve it. The decorated name is a symbol of the file that decorates,
+; so the bare call and the member read bind there (F87).
+(call_expression
+  function: (member_expression
+    property: (property_identifier) @_decorate)
+  arguments: (arguments . (string (string_fragment) @symbol.name))
+  (#match? @_decorate "^decorate(Request|Reply)?$")) @symbol

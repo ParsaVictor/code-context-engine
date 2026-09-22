@@ -152,6 +152,11 @@ pub struct PromptWords {
     /// linked", "build a Trainer"): not seeds on their own (F34), but
     /// evidence for a callee so named.
     pub named: HashSet<String>,
+    /// Files the prompt addressed as a whole (a body-word hit, a path the
+    /// prompt wrote) and the pipeline expanded into a few of their symbols:
+    /// the callees of *every* symbol in them are the seed's callees, as
+    /// for an unexpanded file seed (F87).
+    pub address_files: HashSet<std::path::PathBuf>,
 }
 
 impl PromptWords {
@@ -230,7 +235,8 @@ pub fn select_with_named(
         // A file seed (a route file found by its route literal, a file the
         // prompt named) is the whole file: the callees of every symbol it
         // contains are its callees. The same prompt evidence gates them.
-        let callers: Vec<NodeId> = if seed_node.node_type == NodeType::File {
+        let whole_file = prompt_words.address_files.contains(&seed_node.file_path);
+        let callers: Vec<NodeId> = if seed_node.node_type == NodeType::File || whole_file {
             graph
                 .nodes_in_file(&seed_node.file_path)
                 .into_iter()
@@ -238,6 +244,25 @@ pub fn select_with_named(
                 .collect()
         } else {
             vec![seed.clone()]
+        };
+        // A whole file addressed by its body (`activator.rs`, 12k tokens) calls
+        // into dozens of files and imports most of them: one shared prose
+        // word plus an import, or a word of a callee's directory, is no
+        // evidence there. Its callees need the name spelled out, capitalised,
+        // or the file's stem named. A small route file keeps the weak rules.
+        const SPRAWL_CALLEE_FILES: usize = 12;
+        let sprawling = whole_file && {
+            let mut files: HashSet<std::path::PathBuf> = HashSet::new();
+            for c in &callers {
+                for (n, e) in graph.get_connected_neighbors(c) {
+                    if e.edge_type == EdgeType::Calls && e.source == *c {
+                        if let Some(t) = graph.get_node(&n) {
+                            files.insert(t.file_path);
+                        }
+                    }
+                }
+            }
+            files.len() > SPRAWL_CALLEE_FILES
         };
         for (caller, neighbor, edge) in callers.iter().flat_map(|c| {
             graph
@@ -283,9 +308,14 @@ pub fn select_with_named(
             let focus = stem_focus
                 || focus_terms.contains(&node.name.to_lowercase())
                 || callee_name_words_in_prompt(&node.name, prompt_words, &seed_words, || {
-                    file_imports_file(graph, &seed_node.file_path, &node.file_path)
+                    !sprawling && file_imports_file(graph, &seed_node.file_path, &node.file_path)
                 })
-                || callee_path_named_in_prompt(&node.file_path, &prompt_words.prose, &seed_words);
+                || (!sprawling
+                    && callee_path_named_in_prompt(
+                        &node.file_path,
+                        &prompt_words.prose,
+                        &seed_words,
+                    ));
             if !focus {
                 continue;
             }

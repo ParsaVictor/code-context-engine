@@ -1300,3 +1300,32 @@ web باقی‌مانده: `fd_login_flow` 1/3 (auth route + password-manager ب
 `decorate('knex')` دارد)، `tx_table_of_contents` (`identifier:MDX` قوی و غلط)، `self_path_address`/`self_strip_plural`
 (فایل درست ۱–۲ کلمه کمتر از haystack ها می‌گوید). درس مهم: **گلد ۲۰ سؤالی self «0.925» بود و با ۱۰ سؤال جدید 0.55** — عدد
 یک مجموعه‌ی کوچک که رویش فیکس شده، عدد پروژه نیست؛ فقط holdout ها هستند.
+
+## F87 — خوشه‌های باز F86: seed تمام‌فایل و صندلی callee، acronym به‌عنوان anchor، decorate ی fastify (session 15، PR F87)
+
+سه خوشه‌ی باقی‌مانده‌ی F86 در یک branch؛ بعد از هر اصلاح فقط web/self سنجیده شد، یک گیت کامل در آخر.
+
+| خوشه | سیگنال گم‌شده | فیکس |
+|---|---|---|
+| `tx_table_of_contents` (0/2): `identifier:MDX` → `Mdx` (Component) anchor قوی؛ BM25 خاموش | کلمه‌ی تمام‌بزرگ نثر («the MDX body») که به symbol ی با حروف *دیگر* رسیده، حدس است نه آدرس | `push_anchor_queries`: اگر `is_acronym(ident)` و نام نود ≠ عین ident → retag به `stem:MDX` (STRONG می‌ماند ولی body-pass با آن رقابت می‌کند) |
+| همان تسک بعد از retag: body-seed = `app/(docs)/docs/[[...slug]]/page.tsx` که `getTableOfContents` را صدا می‌زند، ولی صندلی callee نیامد | `expand_file_seeds_to_symbols` فایل را به ۱–۸ symbol (با کلمه‌ی prompt در نام) تبدیل می‌کند و `DocPage` (که تماس را دارد) بین‌شان نیست؛ حلقه‌ی صندلی فقط callee های *seed* را می‌بیند | `PromptWords.address_files` (فایل‌هایی با reason `file_seed:expanded`) → در `select()` همان رفتار File seed: callee های *همه‌ی* symbol های فایل کاندید صندلی‌اند، با همان شواهد prompt |
+| اثر جانبی روی self: `activator.rs` (۱۲k توکن، body-seed) با شاهد «یک کلمه + import» یا «کلمه‌ی پوشه» (`seed/` ← «seed») ۳ فایل اضافه می‌آورد (`self_negative_feedback` 0.33→0.20، `self_member_call_object` 1.0→0.5) | فایل «پهن» (callee در >۱۲ فایل) هر کلمه‌ی prompt را در یکی از callee هایش دارد | `sprawling`: برای seed تمام‌فایل با >۱۲ فایل callee فقط شواهد قوی (نام spelled-out، کلمه‌ی capitalised، stem). نسخه‌ی «همیشه فقط قوی برای تمام‌فایل» `tx_create_post_limit` را می‌انداخت (`route.ts` کوچک، `getUserSubscriptionPlan` ← «free plan» + import) — اندازه تعیین می‌کند نه نوع seed |
+| `fd_knex_decorator` (1/2): `const knex = fastify.knex; knex('users')` تماس بی‌receiver؛ `'knex'` ۴ حرفی در literal_index نیست (حداقل ۸) | نام decorate شده هیچ symbol ای ندارد | `typescript.scm`: `x.decorate('name', …)` / `decorateRequest` / `decorateReply` → `name` symbol ی فایل decorate کننده. تماس bare با `resolve_ranked` به آن می‌رسد. نسخه‌ی graph-side («تماس unresolved که literal ش دقیقاً در یک فایل است») به‌خاطر حداقل طول literal اصلاً فعال نشد و حذف شد |
+
+`fd_multipart_limit` (literal «upload»): در dump اصلاً literal seed نداشت — `tasks-file-manager.ts` sidecar ی physarum است (precision 0.5، recall 1). دست نخورد؛ precision-tuning بسته است.
+
+| مجموعه | قبل | بعد |
+|---|---|---|
+| holdout-web (۳۰) | 0.800 / 0.608 | **0.856 / 0.638** (+`fd_login_flow` 0→2/3، `fd_knex_decorator` 2/2، `tx_table_of_contents` 1/2) |
+| self (۳۰) | 0.833 / 0.578 | **0.867 / 0.583** |
+
+باقی‌مانده‌ی web: `components/toc.tsx` (استفاده‌ی JSX `<DashboardTableOfContents/>` یال Calls ندارد)، `tx_og_image` (`lib/validations/og.ts`؛ stem «og» دو حرفی)، `fd_task_upload`/`fd_task_delete_image` (route ی `tasks/index.ts` بی‌نام در prompt)، `tx_stripe_checkout`، `tx_dashboard_guard` (`lib/session.ts`)، `fd_rate_limit`/`fd_session_plugin` (`env.ts`).
+
+**گیت اول مخلوط بود و bisect دو سیگنال گم‌شده داد (هر کدام یک اجرا):**
+
+| افت | مقصر | سیگنال گم‌شده | فیکس |
+|---|---|---|---|
+| large 0.675→0.667 (`django_csrf`: `context_processors.py` اضافه) | retag ی acronym | `CSRF` کنار `CsrfViewMiddleware` *قطعه‌ی* anchor واقعی است و به‌عنوان `identifier:` هرس می‌شد؛ با tag ی `stem:` از هرس فرار کرد | retag فقط وقتی هیچ identifier دیگری acronym را در خود ندارد |
+| holdout-c 0.589→0.578 (`fmt_parse_format_string`: `format.h` اضافه) | صندلی تمام‌فایل | prompt هم `base.h` را نام برده هم دو تابعش را؛ فایل ظرفِ symbol های نام‌برده است نه آدرس؛ callee های symbol های *دیگر* base.h (stem «format») صندلی گرفتند | فایلی که `identifier:` ای در آن resolve شده از `address_files` بیرون می‌ماند |
+
+بعد از هر دو: c 0.589، large 0.675، web 0.856/0.638، self 0.867/0.583 — همه‌ی ۹ مجموعه بدون افت.
