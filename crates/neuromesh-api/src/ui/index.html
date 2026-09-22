@@ -2325,6 +2325,10 @@
                             Center Orbit
                         </button>
                         <div style="display:flex; align-items:center; gap:0.25rem; background:rgba(0,0,0,0.35); border:1px solid var(--border-color); border-radius:6px; padding:0.15rem;">
+                            <button class="btn-secondary" id="btnDragModeRotate" style="padding: 0.3rem 0.65rem; font-size: 0.78rem;" onclick="window.setGalaxyDragMode('rotate')" title="Drag to rotate">🔄 <span data-i18n="drag_mode_rotate">Rotate</span></button>
+                            <button class="btn-secondary" id="btnDragModePan" style="padding: 0.3rem 0.65rem; font-size: 0.78rem;" onclick="window.setGalaxyDragMode('pan')" title="Drag to move the view">✋ <span data-i18n="drag_mode_pan">Move</span></button>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:0.25rem; background:rgba(0,0,0,0.35); border:1px solid var(--border-color); border-radius:6px; padding:0.15rem;">
                             <button class="btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.85rem; line-height:1;" onclick="window.zoomGalaxy(1.35)" title="Zoom in">+</button>
                             <button class="btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.85rem; line-height:1;" onclick="window.zoomGalaxy(1/1.35)" title="Zoom out">−</button>
                         </div>
@@ -3131,6 +3135,8 @@
                 btn_mode: 'Mode:',
                 btn_center_orbit: 'Center Orbit',
                 galaxy_controls_hint: 'Drag to rotate · Shift+drag to pan · Scroll or +/− to zoom · Double-click to reset',
+                drag_mode_rotate: 'Rotate',
+                drag_mode_pan: 'Move',
                 btn_back_galaxy: 'Back to Constellation',
                 btn_fire_impulse: 'Neural Impulse',
                 btn_slime_play: 'Play slime',
@@ -3341,6 +3347,8 @@
                 btn_mode: 'حالت:',
                 btn_center_orbit: 'مرکز مدار',
                 galaxy_controls_hint: 'درگ برای چرخش · Shift+درگ برای جابه‌جایی · اسکرول یا +/− برای زوم · دابل‌کلیک برای بازنشانی',
+                drag_mode_rotate: 'چرخش',
+                drag_mode_pan: 'جابه‌جایی',
                 btn_back_galaxy: 'بازگشت به نمای کل کهکشان',
                 btn_fire_impulse: 'انفجار پالس عصبی',
                 btn_slime_play: 'پخش اسلایم',
@@ -3651,6 +3659,7 @@
                 } catch (e) {}
                 window.toggleGalaxyHud(hudCollapsed);
                 window.toggleGalaxyLayersPanel(layersCollapsed);
+                if (typeof window.syncGalaxyDragModeButtons === 'function') window.syncGalaxyDragModeButtons();
                 setTimeout(() => {
                     resizeCanvas();
                     if (typeof window.syncGalaxyLayerCheckboxes === 'function') {
@@ -5944,6 +5953,13 @@
         let is3D = true;
         let rotX = 0.95; // Comfortable natural 3D angle (~54 deg)
         let rotY = 0.05;
+        // 'rotate' = plain drag orbits the shape (old default, still needs
+        // Shift/right-click for a one-off pan). 'pan' flips it: plain drag
+        // just slides the whole view around — easier for "go look over there"
+        // exploration than fighting rotation to reach a corner.
+        let galaxyDragMode = (function () {
+            try { return localStorage.getItem('neuromesh_galaxy_drag_mode') || 'rotate'; } catch (e) { return 'rotate'; }
+        })();
         // Wide enough that a dense, multi-thousand-node graph can be zoomed
         // out to see the whole shape, or zoomed in to read one dense cluster.
         const GALAXY_MIN_ZOOM = 0.06;
@@ -7144,7 +7160,13 @@
         }
 
         canvas.addEventListener('mousedown', e => {
-            galaxyPointerDown(e, e.button === 2 || e.button === 1 || e.shiftKey);
+            // Right/middle click always pans (an escape hatch regardless of
+            // mode); Shift temporarily gives the *other* behavior; otherwise
+            // follow the Rotate/Move toggle.
+            const wantPan = (e.button === 2 || e.button === 1)
+                ? true
+                : (e.shiftKey ? galaxyDragMode !== 'pan' : galaxyDragMode === 'pan');
+            galaxyPointerDown(e, wantPan);
         });
 
         canvas.addEventListener('mousemove', e => {
@@ -7161,7 +7183,7 @@
         // is handled separately below by the pinch-to-zoom listeners.
         canvas.addEventListener('touchstart', e => {
             if (e.touches.length !== 1) return;
-            galaxyPointerDown(e.touches[0], false);
+            galaxyPointerDown(e.touches[0], galaxyDragMode === 'pan');
         }, { passive: true });
 
         canvas.addEventListener('touchmove', e => {
@@ -7237,6 +7259,31 @@
             const idleMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastInteractAt;
             hint.style.opacity = idleMs < 6000 ? '1' : '0.35';
         }, 500);
+
+        window.setGalaxyDragMode = function(mode) {
+            galaxyDragMode = mode === 'pan' ? 'pan' : 'rotate';
+            try { localStorage.setItem('neuromesh_galaxy_drag_mode', galaxyDragMode); } catch (e) {}
+            window.syncGalaxyDragModeButtons();
+        };
+
+        window.syncGalaxyDragModeButtons = function() {
+            const rotateBtn = document.getElementById('btnDragModeRotate');
+            const panBtn = document.getElementById('btnDragModePan');
+            if (rotateBtn) {
+                rotateBtn.classList.toggle('btn-primary', galaxyDragMode === 'rotate');
+                rotateBtn.classList.toggle('btn-secondary', galaxyDragMode !== 'rotate');
+            }
+            if (panBtn) {
+                panBtn.classList.toggle('btn-primary', galaxyDragMode === 'pan');
+                panBtn.classList.toggle('btn-secondary', galaxyDragMode !== 'pan');
+            }
+            const hint = document.getElementById('galaxyControlsHint');
+            if (hint) {
+                hint.innerText = galaxyDragMode === 'pan'
+                    ? (currentLang === 'fa' ? 'درگ برای جابه‌جایی · Shift+درگ برای چرخش · اسکرول یا +/− برای زوم · دابل‌کلیک برای بازنشانی' : 'Drag to move · Shift+drag to rotate · Scroll or +/− to zoom · Double-click to reset')
+                    : (currentLang === 'fa' ? 'درگ برای چرخش · Shift+درگ برای جابه‌جایی · اسکرول یا +/− برای زوم · دابل‌کلیک برای بازنشانی' : 'Drag to rotate · Shift+drag to pan · Scroll or +/− to zoom · Double-click to reset');
+            }
+        };
 
         window.zoomGalaxy = function(factor) {
             if (!canvas) return;
