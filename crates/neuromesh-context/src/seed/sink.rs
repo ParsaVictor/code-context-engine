@@ -258,7 +258,7 @@ pub(crate) fn prompt_names_low_priority(prompt: &str) -> bool {
 }
 
 /// `CLI`, `MCP`, `API`, `RPN`: two to four upper-case letters.
-fn is_acronym(query: &str) -> bool {
+pub(crate) fn is_acronym(query: &str) -> bool {
     (2..=4).contains(&query.len()) && query.chars().all(|c| c.is_ascii_uppercase())
 }
 

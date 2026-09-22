@@ -507,7 +507,12 @@ impl ContextActivator {
         }
 
         // The prompt's own words: evidence for callee seats (see `PromptWords`).
-        let prompt_words = PromptWords::from_prompt(&signature.raw_prompt);
+        let mut prompt_words = PromptWords::from_prompt(&signature.raw_prompt);
+        prompt_words.address_files = seed_reasons
+            .iter()
+            .filter(|(_, reason)| reason.as_str() == "file_seed:expanded")
+            .filter_map(|(id, _)| graph.get_node(id).map(|n| n.file_path))
+            .collect();
         let mut selection = select_with_named(
             graph,
             &neighborhood,

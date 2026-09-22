@@ -20,6 +20,35 @@ pub(crate) fn push_anchor_queries(
         let before = sink.resolved_count();
         sink.push(graph, prompt, ident.clone(), 1.0, "identifier");
         if sink.resolved_count() > before {
+            // "the MDX body", "the OG image": an upper-case word of prose is a
+            // format or a product name, and a symbol spelled like it in
+            // another case (`Mdx`) is a guess at what the question means,
+            // not its anchor. Retagged `stem`: it stays a seed but the
+            // body-word pass may still compete with it (F87).
+            if crate::seed::sink::is_acronym(ident) {
+                let tag = format!("identifier:{ident}");
+                let buffers = sink.buffers_mut();
+                let guessed: Vec<neuromesh_core::NodeId> = buffers
+                    .resolutions
+                    .iter()
+                    .filter(|s| s.query == tag)
+                    .filter_map(|s| s.resolved_id.clone())
+                    .filter(|id| graph.get_node(id).is_some_and(|n| n.name != *ident))
+                    .collect();
+                if !guessed.is_empty() {
+                    let retag = format!("stem:{ident}");
+                    for s in buffers.resolutions.iter_mut() {
+                        if s.query == tag
+                            && s.resolved_id.as_ref().is_some_and(|id| guessed.contains(id))
+                        {
+                            s.query = retag.clone();
+                        }
+                    }
+                    for id in guessed {
+                        buffers.reasons.insert(id, retag.clone());
+                    }
+                }
+            }
             continue;
         }
         // The bare half of a dotted identifier (`segmentsFromString` next to
