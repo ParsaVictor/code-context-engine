@@ -7113,7 +7113,7 @@
                 // the shape *toward* the right, matching the drag direction
                 // (previously this was inverted and felt "backwards").
                 rotY -= deltaX * 0.005;
-                rotX -= deltaY * 0.005;
+                rotX += deltaY * 0.005;
                 rotX = Math.max(0.15, Math.min(1.48, rotX));
             }
 
