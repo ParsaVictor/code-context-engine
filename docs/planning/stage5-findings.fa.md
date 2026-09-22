@@ -1320,3 +1320,12 @@ web باقی‌مانده: `fd_login_flow` 1/3 (auth route + password-manager ب
 | self (۳۰) | 0.833 / 0.578 | **0.867 / 0.583** |
 
 باقی‌مانده‌ی web: `components/toc.tsx` (استفاده‌ی JSX `<DashboardTableOfContents/>` یال Calls ندارد)، `tx_og_image` (`lib/validations/og.ts`؛ stem «og» دو حرفی)، `fd_task_upload`/`fd_task_delete_image` (route ی `tasks/index.ts` بی‌نام در prompt)، `tx_stripe_checkout`، `tx_dashboard_guard` (`lib/session.ts`)، `fd_rate_limit`/`fd_session_plugin` (`env.ts`).
+
+**گیت اول مخلوط بود و bisect دو سیگنال گم‌شده داد (هر کدام یک اجرا):**
+
+| افت | مقصر | سیگنال گم‌شده | فیکس |
+|---|---|---|---|
+| large 0.675→0.667 (`django_csrf`: `context_processors.py` اضافه) | retag ی acronym | `CSRF` کنار `CsrfViewMiddleware` *قطعه‌ی* anchor واقعی است و به‌عنوان `identifier:` هرس می‌شد؛ با tag ی `stem:` از هرس فرار کرد | retag فقط وقتی هیچ identifier دیگری acronym را در خود ندارد |
+| holdout-c 0.589→0.578 (`fmt_parse_format_string`: `format.h` اضافه) | صندلی تمام‌فایل | prompt هم `base.h` را نام برده هم دو تابعش را؛ فایل ظرفِ symbol های نام‌برده است نه آدرس؛ callee های symbol های *دیگر* base.h (stem «format») صندلی گرفتند | فایلی که `identifier:` ای در آن resolve شده از `address_files` بیرون می‌ماند |
+
+بعد از هر دو: c 0.589، large 0.675، web 0.856/0.638، self 0.867/0.583 — همه‌ی ۹ مجموعه بدون افت.
