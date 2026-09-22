@@ -508,10 +508,22 @@ impl ContextActivator {
 
         // The prompt's own words: evidence for callee seats (see `PromptWords`).
         let mut prompt_words = PromptWords::from_prompt(&signature.raw_prompt);
+        // A file the prompt addressed as a whole and the pipeline expanded
+        // into symbols. Not one where the prompt also named a symbol
+        // ("parse_format_string in base.h"): there the symbols are the
+        // address and the file is their container.
+        let named_symbol_files: HashSet<std::path::PathBuf> = seed_reasons
+            .iter()
+            .filter(|(_, reason)| reason.starts_with("identifier:"))
+            .filter_map(|(id, _)| graph.get_node(id))
+            .filter(|n| n.node_type != NodeType::File)
+            .map(|n| n.file_path)
+            .collect();
         prompt_words.address_files = seed_reasons
             .iter()
             .filter(|(_, reason)| reason.as_str() == "file_seed:expanded")
             .filter_map(|(id, _)| graph.get_node(id).map(|n| n.file_path))
+            .filter(|p| !named_symbol_files.contains(p))
             .collect();
         let mut selection = select_with_named(
             graph,
