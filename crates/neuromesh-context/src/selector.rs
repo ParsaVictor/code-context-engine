@@ -311,7 +311,11 @@ pub fn select_with_named(
                     !sprawling && file_imports_file(graph, &seed_node.file_path, &node.file_path)
                 })
                 || (!sprawling
-                    && callee_path_named_in_prompt(&node.file_path, &prompt_words.prose, &seed_words));
+                    && callee_path_named_in_prompt(
+                        &node.file_path,
+                        &prompt_words.prose,
+                        &seed_words,
+                    ));
             if !focus {
                 continue;
             }

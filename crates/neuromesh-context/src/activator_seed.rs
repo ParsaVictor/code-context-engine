@@ -44,7 +44,9 @@ pub(crate) fn push_anchor_queries(
                     let retag = format!("stem:{ident}");
                     for s in buffers.resolutions.iter_mut() {
                         if s.query == tag
-                            && s.resolved_id.as_ref().is_some_and(|id| guessed.contains(id))
+                            && s.resolved_id
+                                .as_ref()
+                                .is_some_and(|id| guessed.contains(id))
                         {
                             s.query = retag.clone();
                         }
