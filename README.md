@@ -109,7 +109,18 @@ The system prompt and tool definitions are re-read every turn and dominate small
 
 ## Install
 
-Pre-built binaries come from upstream's installer; this fork is built from source until its first release.
+Pre-built binaries for Linux x86_64, macOS (Apple Silicon) and Windows x86_64 are on the
+[releases page](https://github.com/ParsaVictor/code-context-engine/releases) (v1.0.0 is the first).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ParsaVictor/code-context-engine/main/install.sh | sh
+```
+
+```powershell
+irm https://raw.githubusercontent.com/ParsaVictor/code-context-engine/main/install.ps1 | iex
+```
+
+Or from source:
 
 ```bash
 git clone https://github.com/ParsaVictor/code-context-engine
