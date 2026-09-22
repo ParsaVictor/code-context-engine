@@ -8,7 +8,7 @@
 
 set -e
 
-REPO="pinoox/neuromesh"
+REPO="ParsaVictor/code-context-engine"
 INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="neuromesh"
 
@@ -28,7 +28,7 @@ cat << 'EOF'
  |_| \_|\___|\__,_|_|  \___/|_|  |_|\___||___/_| |_|
 EOF
 printf "${NC}\n"
-printf "${BOLD}NeuroMesh v0.9.0 — zero-embed fast engine · MCP context engine${NC}\n\n"
+printf "${BOLD}code-context-engine v1.0.0 — MCP context engine (NeuroMesh derivative)${NC}\n\n"
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
