@@ -4,7 +4,7 @@ try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 } catch {}
 
-$Repo = "pinoox/neuromesh"
+$Repo = "ParsaVictor/code-context-engine"
 $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\neuromesh"
 $BinPath = Join-Path $InstallDir "neuromesh.exe"
 
@@ -31,7 +31,7 @@ Write-Host @"
  |_| \_|\___|\__,_|_|  \___/|_|  |_|\___||___/_| |_|
 "@ -ForegroundColor Cyan
 
-Write-Host "NeuroMesh v0.9.0 — zero-embed fast engine · MCP context engine`n" -ForegroundColor Green
+Write-Host "code-context-engine v1.0.0 — MCP context engine (NeuroMesh derivative)`n" -ForegroundColor Green
 
 Write-Host "Fetching latest release…" -ForegroundColor Gray
 $DownloadUrl = "https://github.com/$Repo/releases/latest/download/neuromesh-windows-x86_64.zip"

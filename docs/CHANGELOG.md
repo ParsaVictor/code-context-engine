@@ -4,6 +4,53 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+## 1.0.0 — 2026-09-22
+
+The first release of code-context-engine as its own project. Everything below is
+measured on pinned third-party checkouts with hand-written gold (`docs/measured.md`);
+the four holdout sets were never tuned on.
+
+### Headline numbers (recall / precision, file level)
+
+- Holdouts, never tuned on: gin + torchvision **1.000 / 0.700** · libuv + fmt **1.000 / 0.589** ·
+  os-lib + cli + Flux.jl **1.000 / 0.589** · peft + keras-hub **1.000 / 0.632**.
+- Against NeuroMesh v0.9.0 on the same 112 tasks, same day: recall 0.735 → **0.938**, three times the precision.
+- Task success with a real model (DeepSeek-V4-Flash + GLM-5.3 judge): every gate passes on both holdouts.
+
+### Retrieval
+
+- **Project isolation** — one graph per project id; nothing leaks between workspaces (P0).
+- **Prompt-only seeding with evidence** — a file enters the packet only for a word the prompt wrote:
+  identifiers, quoted literals and routes, config keys ("the X flag"), kebab tokens, two prose words
+  that spell a stem, a directory convention ("the billing page"), and a body-word index (BM25-lite,
+  coverage first) that competes only with guessed seeds.
+- **Callee seats need prompt evidence** — a called file is forced in only when the prompt names it
+  (name spelled out, capitalised word, stem or directory word); the unguarded "few callers" seat is gone.
+- **Call graph** — calls resolve in their own file first; member calls bind to their object
+  (`db.user.update(`), including objects a framework decorates (`fastify.decorate('knex', …)`);
+  `Api → handler` edges; config keys → their readers (`Parameterizes`).
+- **Config → code** — YAML/argparse/Hydra keys are graph nodes; "the compile key" seeds the file that
+  defines it and the reader that uses it.
+- **Guess hygiene** — acronym fragments, docs/tests/fixtures, homonyms without an owner, exact-case
+  resolution, framework-convention stems (`route.ts`, `index`, `page`) never count as "named".
+- **Languages** — C/C++, Scala, R, Julia, shell, notebooks, YAML added to the parser set; Keras/HF
+  overlay; per-language test-file naming.
+
+### Packet
+
+- Python skeletons keep class headers and fold long docstrings; sidecar gate at every size;
+  deterministic packets (five nondeterminism sources removed); prompts over 32 KB refused with the limit.
+- Learning loop: feedback learns the path it walked; negative feedback reaches required files.
+
+### Harness and honesty
+
+- `scripts/benchmark-holdout.sh` — nine public sets in one command; index cache; `NM_EXPLAIN` dumps
+  the reason for every packet file.
+- Private-repository harness (`NM_PRIVATE_SET_DIR` / `NM_PRIVATE_DIR`) for gold that lives outside the tree.
+- Task-success harness with a separate judge grading against the real source; `scripts/phase-c-run.sh`.
+- `docs/measured.md` is the reference; README reports holdout numbers only.
+
+
 ## 0.9.0 — 2026-08-30
 
 ### On-demand embed model install
