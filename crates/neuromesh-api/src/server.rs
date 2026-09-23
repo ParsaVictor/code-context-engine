@@ -792,37 +792,35 @@ impl HttpServer {
 
             // Reset THIS project's settings back to the true defaults —
             // never touches any other project's `nm.config.json`.
-            ("POST", "/api/config/reset") => {
-                match state.reset_engine_settings().await {
-                    Ok(()) => {
-                        state.log(
-                            "INFO",
-                            "CONFIG",
-                            "Settings reset to defaults for this project",
-                        );
-                        let cfg = state.config.read().clone();
-                        Self::send_json(
-                            &mut stream,
-                            200,
-                            &json!({
-                                "success": true,
-                                "config": cfg,
-                                "graph_backend_active": state.mcp_handler.graph_backend_label(),
-                                "graph_proxy_connected": state.mcp_handler.graph_proxy_active(),
-                            }),
-                        )
-                        .await?;
-                    }
-                    Err(e) => {
-                        Self::send_json(
-                            &mut stream,
-                            500,
-                            &json!({ "success": false, "error": e.to_string() }),
-                        )
-                        .await?;
-                    }
+            ("POST", "/api/config/reset") => match state.reset_engine_settings().await {
+                Ok(()) => {
+                    state.log(
+                        "INFO",
+                        "CONFIG",
+                        "Settings reset to defaults for this project",
+                    );
+                    let cfg = state.config.read().clone();
+                    Self::send_json(
+                        &mut stream,
+                        200,
+                        &json!({
+                            "success": true,
+                            "config": cfg,
+                            "graph_backend_active": state.mcp_handler.graph_backend_label(),
+                            "graph_proxy_connected": state.mcp_handler.graph_proxy_active(),
+                        }),
+                    )
+                    .await?;
                 }
-            }
+                Err(e) => {
+                    Self::send_json(
+                        &mut stream,
+                        500,
+                        &json!({ "success": false, "error": e.to_string() }),
+                    )
+                    .await?;
+                }
+            },
 
             ("GET", "/api/engines") | ("GET", "/api/graph-proxy") => {
                 let resp = crate::routes::engines::engines_status(&state);
@@ -1217,10 +1215,15 @@ impl HttpServer {
                 let history = state.metrics.get_history();
                 let overall = summarize_history(&history);
 
-                let mut by_project: std::collections::BTreeMap<String, Vec<&neuromesh_core::OptimizationMetadata>> =
-                    std::collections::BTreeMap::new();
+                let mut by_project: std::collections::BTreeMap<
+                    String,
+                    Vec<&neuromesh_core::OptimizationMetadata>,
+                > = std::collections::BTreeMap::new();
                 for row in &history {
-                    by_project.entry(row.project_id.0.clone()).or_default().push(row);
+                    by_project
+                        .entry(row.project_id.0.clone())
+                        .or_default()
+                        .push(row);
                 }
                 let mut projects: Vec<Value> = by_project
                     .into_iter()
