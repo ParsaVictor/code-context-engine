@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+title: >-
+  code-context-engine: a local-first MCP context engine for AI coding agents
+message: If you use this software or its measurements, please cite it.
+type: software
+authors:
+  - given-names: Mohammad Parsa
+    family-names: Karkooti
+    email: 1.parsa.karkooti@gmail.com
+repository-code: https://github.com/ParsaVictor/code-context-engine
+license: MIT
+version: 1.0.0
+date-released: "2026-09-22"
+keywords:
+  - model-context-protocol
+  - code-retrieval
+  - code-graph
+  - context-engineering
+  - ai-coding-assistant
+  - token-efficiency
+  - rust
+abstract: >-
+  code-context-engine answers "which files does this task need?" from a
+  per-project code graph instead of re-reading a repository every turn. It
+  resolves seeds from the task as written, expands along call, import and
+  configuration edges, and emits a folded evidence packet for an MCP client.
+  Recall and precision are published per question against hand-written gold
+  sets on third-party repositories the engine was never tuned on.
+references:
+  - type: software
+    title: NeuroMesh
+    authors:
+      - name: yoosef alipour
+    repository-code: https://github.com/pinoox/neuromesh
+    license: MIT
+    notes: Baseline this project is an independent derivative of (tag baseline-v0.9.0).

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How the numbers are measured
+    url: https://github.com/ParsaVictor/code-context-engine/blob/main/docs/measured.md
+    about: Every published recall/precision number, the gold sets, and what was never tuned on.
+  - name: Upstream NeuroMesh
+    url: https://github.com/pinoox/neuromesh
+    about: This project is an independent derivative; issues in the original engine belong there.

@@ -1,0 +1,22 @@
+name: Feature or language request
+description: A language, framework, or retrieval behaviour the engine should handle.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What question does your agent fail to answer today
+      description: A concrete prompt and the files it should have reached.
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: What is the code shape behind it
+      description: "The idiom the engine would have to understand — a decorator, a DI container, a route table, a config key…"
+  - type: checkboxes
+    id: measure
+    attributes:
+      label: Measurement
+      options:
+        - label: I can provide a public repository where this shape appears, so it can be measured on a gold set.

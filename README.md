@@ -15,7 +15,13 @@ A local-first MCP context engine for AI coding agents: a per-project code graph,
 
 Cursor · Claude Code · Codex · VS Code · Zed · any MCP client
 
-[Why](#why-this-fork) · [Measured](#what-is-measured) · [Install](#install) · [How it works](#how-it-works) · [Benchmarks](#run-the-benchmarks) · [Roadmap](ROADMAP.md) · [Docs](docs/README.md)
+[Why](#why-this-fork) · [Measured](#what-is-measured) · [Install](#install) · [How it works](#how-it-works) · [Benchmarks](#run-the-benchmarks) · [FAQ](docs/faq.md) · [Roadmap](ROADMAP.md) · [Docs](docs/README.md)
+
+<!-- DEMO GIF — drop the recording at docs/assets/demo.gif and uncomment the line below.
+     Keep it under ~10 MB and around 1200px wide so GitHub plays it inline.
+     One take, no titles: ask an agent a question, show the packet, show the file count.
+<img src="docs/assets/demo.gif" alt="An agent asks a question and receives a folded evidence packet instead of whole files" width="820">
+-->
 
 </div>
 
@@ -185,7 +191,8 @@ Rules the project holds itself to: holdout sets are never tuned on; ratchets onl
 | use the CLI | [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Engines](docs/engines.md) |
 | understand the design | [Architecture](docs/architecture.md) · [Isolation](docs/isolation.md) |
 | check the numbers | [Measured](docs/measured.md) · [Quality methodology](docs/quality.md) |
-| follow or join the work | [ROADMAP.md](ROADMAP.md) · [Planning & findings (Persian)](docs/planning/) · [Contributing](docs/contributing.md) |
+| ask the short questions | [FAQ](docs/faq.md) |
+| follow or join the work | [ROADMAP.md](ROADMAP.md) · [Planning & findings (Persian)](docs/planning/) · [Contributing](.github/CONTRIBUTING.md) |
 
 ---
 
