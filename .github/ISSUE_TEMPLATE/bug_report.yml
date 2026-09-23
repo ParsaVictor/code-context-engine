@@ -1,0 +1,39 @@
+name: Bug report
+description: The engine returned a wrong or empty packet, crashed, or a command failed.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The task/question you asked, and what the packet contained.
+      placeholder: |
+        Prompt: "How does the login route verify the password?"
+        Packet: src/schemas/auth.ts only — the route file never came.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Which files should have been in the packet
+      description: Paths, and why you expected them (caller, import, config key, literal…).
+    validations:
+      required: true
+  - type: input
+    id: repo
+    attributes:
+      label: Repository the question was about
+      description: A public repo and commit if possible — it makes the issue reproducible.
+  - type: textarea
+    id: env
+    attributes:
+      label: Version and environment
+      description: "`neuromesh --version`, OS, MCP client (Claude Code / Cursor / VS Code…)."
+    validations:
+      required: true
+  - type: textarea
+    id: explain
+    attributes:
+      label: Packet reason dump (optional but decisive)
+      description: "Output of `neuromesh packet --json --query \"<your prompt>\"`, or the `neuromesh_explain_packet` MCP tool."
+      render: text

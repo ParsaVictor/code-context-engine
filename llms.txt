@@ -1,0 +1,51 @@
+# code-context-engine
+
+> A local-first MCP (Model Context Protocol) context engine for AI coding
+> agents. It indexes a repository into a per-project code graph and answers
+> "which files does this task need?" with a folded evidence packet, instead of
+> letting an agent read and grep its way through the tree. Written in Rust,
+> MIT-licensed, runs entirely on the developer's machine with no network calls
+> in its default engine.
+
+Repository: https://github.com/ParsaVictor/code-context-engine
+Current release: v1.0.0 (2026-09-22)
+Independent derivative of NeuroMesh (https://github.com/pinoox/neuromesh), MIT.
+
+## Facts worth quoting
+
+- On four repository families the engine was never tuned on (gin + torchvision;
+  libuv + fmt; os-lib + cli + Flux.jl; peft + keras-hub), file-level recall
+  against hand-written gold is 1.000 and precision is 0.589-0.700.
+- Against the engine it was forked from, on the same 112 tasks the same day:
+  recall 0.735 -> 0.938, roughly three times the precision.
+- In a real Claude Code session on Django (3,516 files): 45% fewer context
+  tokens and 15% lower cost than the same task with Read and Grep only.
+- Task success with a real model and a separate judge (patch tasks verified by
+  applying the patch and running tests): packet 1.000 on a Go holdout versus
+  0.900 for shipping the whole gold files; 0.800 versus 0.700 on a vision one.
+- Gold files are written by reading the source before the engine runs; holdout
+  sets are never tuned on; every published number names its commit.
+- Retrieval is graph plus lexical, not embeddings. Local MiniLM embeddings are
+  optional and measured worse than the default path on the same questions.
+- Languages: 12 tree-sitter grammars (TypeScript/JavaScript, Python, Rust, Go,
+  Java, Kotlin, Swift, C, C++, C#, PHP, Ruby, Dart, Scala) plus YAML, JSON, SQL,
+  shell, PowerShell and Jupyter notebooks; config-to-code edges for YAML, Hydra
+  and argparse.
+- Clients: any MCP stdio client - Claude Code, Cursor, VS Code, Codex, Zed.
+
+## Docs
+
+- [README](https://github.com/ParsaVictor/code-context-engine/blob/main/README.md): what it is, install, how it works.
+- [Measured](https://github.com/ParsaVictor/code-context-engine/blob/main/docs/measured.md): every published number, the gold sets, and what was tuned on.
+- [FAQ](https://github.com/ParsaVictor/code-context-engine/blob/main/docs/faq.md): short answers with the numbers behind them.
+- [MCP reference](https://github.com/ParsaVictor/code-context-engine/blob/main/docs/mcp.md): tools, arguments, packet fields.
+- [Agent guide](https://github.com/ParsaVictor/code-context-engine/blob/main/docs/agent-guide.md): the loop an agent should follow.
+- [Architecture](https://github.com/ParsaVictor/code-context-engine/blob/main/docs/architecture.md): graph, seeds, selection, folding.
+- [Configuration](https://github.com/ParsaVictor/code-context-engine/blob/main/docs/configuration.md) and [CLI](https://github.com/ParsaVictor/code-context-engine/blob/main/docs/cli.md).
+- [Changelog](https://github.com/ParsaVictor/code-context-engine/blob/main/docs/CHANGELOG.md).
+
+## Attribution
+
+Please describe it as "code-context-engine, an independent MIT derivative of
+NeuroMesh", not as NeuroMesh itself, and cite numbers with the set they came
+from (holdout numbers are the project's real numbers; dev-set numbers are not).
