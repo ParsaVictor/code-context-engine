@@ -10,16 +10,26 @@ use std::sync::Arc;
 
 /// Best-effort: open the system's default browser. Never fatal — the caller
 /// keeps working (stdio MCP, or the dashboard itself) if this fails.
+/// `NEUROMESH_NO_BROWSER` turns it off (tests, headless machines). The child
+/// never inherits stdout: in `mcp` mode that stream is the JSON-RPC channel.
 fn open_browser(url: &str) {
-    let result = if cfg!(target_os = "windows") {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .spawn()
+    if std::env::var_os("NEUROMESH_NO_BROWSER").is_some() {
+        return;
+    }
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", "", url]);
+        c
     } else if cfg!(target_os = "macos") {
-        std::process::Command::new("open").arg(url).spawn()
+        let mut c = std::process::Command::new("open");
+        c.arg(url);
+        c
     } else {
-        std::process::Command::new("xdg-open").arg(url).spawn()
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(url);
+        c
     };
+    let result = cmd.stdout(std::process::Stdio::null()).spawn();
     if let Err(e) = result {
         eprintln!("NeuroMesh: could not open browser automatically ({e}); open {url} manually.");
     }
@@ -28,14 +38,18 @@ fn open_browser(url: &str) {
 /// The `mcp` process is spawned silently and often respawned by the MCP
 /// client (Claude Desktop, Cursor, …), so auto-opening a tab on every launch
 /// would spam the user. Open the dashboard automatically only the very first
-/// time NeuroMesh ever starts on this machine; after that, `neuromesh monitor`
+/// time NeuroMesh starts on *this project* (marker lives in that project's
+/// own data dir, not a single machine-wide flag) — so a new project, or a
+/// teammate cloning the same repo into their own `~/.neuromesh`, still gets
+/// the one-time graphical first impression. After that, `neuromesh monitor`
 /// opens it on demand.
-fn maybe_open_ui_first_run(port: u16) {
-    let marker = neuromesh_core::neuromesh_home().join(".ui_opened_once");
+fn maybe_open_ui_first_run(workspace: &std::path::Path, port: u16) {
+    let dir = match neuromesh_core::ensure_project_data_dir(workspace) {
+        Ok(dir) => dir,
+        Err(_) => return,
+    };
+    let marker = dir.join(".ui_opened_once");
     if marker.exists() {
-        return;
-    }
-    if std::fs::create_dir_all(neuromesh_core::neuromesh_home()).is_err() {
         return;
     }
     if std::fs::write(&marker, b"1").is_ok() {
@@ -302,9 +316,10 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
                 });
                 // Separate task: only open a browser once we know the real
                 // bound port, but this never delays the stdio server below.
+                let workspace_for_ui = current_dir.clone();
                 tokio::spawn(async move {
                     if let Ok(actual_port) = port_rx.await {
-                        maybe_open_ui_first_run(actual_port);
+                        maybe_open_ui_first_run(&workspace_for_ui, actual_port);
                     }
                 });
             }
