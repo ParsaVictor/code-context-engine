@@ -1,0 +1,86 @@
+# Locked 2026-09-30 before any engine run on ripgrep. Plain-language
+# questions only; gold from reading the source (grep-checked).
+
+[[task]]
+id = "rg_binary_detection"
+prompt = "How does it tell that a file is binary while reading it, and what happens then?"
+gold_files = ["crates/searcher/src/line_buffer.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_ignore_rules"
+prompt = "How are the rules from ignore files matched against paths while walking directories?"
+gold_files = ["crates/ignore/src/gitignore.rs", "crates/ignore/src/dir.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_compressed"
+prompt = "How does it search inside compressed files such as gzip archives?"
+gold_files = ["crates/cli/src/decompress.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_parallel_walk"
+prompt = "How is the directory traversal spread across several threads?"
+gold_files = ["crates/ignore/src/walk.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_glob_to_regex"
+prompt = "How is a shell-style wildcard pattern converted into a regular expression?"
+gold_files = ["crates/globset/src/glob.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_hyperlinks"
+prompt = "How are clickable links to matching files written into terminal output?"
+gold_files = ["crates/printer/src/hyperlink.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_json_output"
+prompt = "How are search results emitted in a machine-readable format for other programs?"
+gold_files = ["crates/printer/src/json.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_memory_map"
+prompt = "When does it read a file through memory mapping instead of normal reads?"
+gold_files = ["crates/searcher/src/searcher/mmap.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_smart_case"
+prompt = "How does the search become case-insensitive only when the pattern has no capital letters?"
+gold_files = ["crates/regex/src/config.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_file_types"
+prompt = "How are language names like rust or python mapped to file name extensions?"
+gold_files = ["crates/ignore/src/types.rs", "crates/ignore/src/default_types.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_context_lines"
+prompt = "How are the lines before and after a match collected for display?"
+gold_files = ["crates/searcher/src/searcher/core.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "rg_terminal_colors"
+prompt = "How does it decide whether output goes to a terminal so colors can be turned on?"
+gold_files = ["crates/cli/src/lib.rs"]
+forbidden_files = []
+expect_seeds_missed = false

@@ -1,0 +1,11 @@
+# Concept-question holdout (2026-09-30): plain-language questions, no
+# identifier in the prompt, on a Rust workspace we never tuned on.
+# Gold written from reading the source before any engine run; run once,
+# after the concept work on this repo is frozen.
+#
+#   ripgrep — BurntSushi/ripgrep 14.1.1: multi-crate Rust workspace
+
+[[repo]]
+name = "ripgrep"
+url = "https://github.com/BurntSushi/ripgrep"
+rev = "4649aa9700619f94cf9c66876e9549d83420e16c"
