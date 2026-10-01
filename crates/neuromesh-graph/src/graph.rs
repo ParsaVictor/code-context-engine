@@ -744,7 +744,14 @@ impl NeuralProjectGraph {
     /// Files ranked by field-weighted BM25 (path, defined names, body) over
     /// the stemmed words of `prompt` — see [`crate::file_rank`].
     pub fn file_rank(&self, prompt: &str, limit: usize) -> Vec<crate::file_rank::RankedFile> {
-        let terms = crate::file_rank::weighted_query_terms(prompt);
+        // A prompt cannot buy unbounded work: the first 32 KB (the seed
+        // pipeline's own cap), and at most 256 distinct terms.
+        let mut end = prompt.len().min(32 * 1024);
+        while !prompt.is_char_boundary(end) {
+            end -= 1;
+        }
+        let mut terms = crate::file_rank::weighted_query_terms(&prompt[..end]);
+        terms.truncate(256);
         if terms.is_empty() {
             return Vec::new();
         }

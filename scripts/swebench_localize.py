@@ -70,16 +70,24 @@ def main():
     ap.add_argument("--out", default="results.jsonl")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--repo", default="")
+    ap.add_argument("--only", default="", help="comma-separated repos to keep")
+    ap.add_argument("--shard", default="", help="i/n: this process takes every n-th instance starting at i")
     ap.add_argument("--work", default=os.path.join(tempfile.gettempdir(), "swe-wt"))
     args = ap.parse_args()
 
     rows = json.load(open(args.data, encoding="utf-8"))
+    if args.only:
+        keep = set(args.only.split(","))
+        rows = [r for r in rows if r["repo"] in keep]
     if args.repo:
         rows = [r for r in rows if r["repo"] == args.repo]
     done = set()
     if os.path.exists(args.out):
         done = {json.loads(l)["instance_id"] for l in open(args.out, encoding="utf-8") if l.strip()}
     todo = [r for r in rows if r["instance_id"] not in done]
+    if args.shard:
+        i, n = (int(x) for x in args.shard.split("/"))
+        todo = todo[i::n]
     if args.limit:
         todo = todo[: args.limit]
     os.makedirs(args.work, exist_ok=True)
@@ -101,6 +109,9 @@ def main():
                     ours_hit=hit(files, gold),
                     **{f"ours_hit@{k}": hit(files, gold, k) for k in (1, 3, 5)},
                 )
+                ranked = pkt.get("ranked_paths") or []
+                if ranked:
+                    rec.update(**{f"bm25f_hit@{k}": hit(ranked, gold, k) for k in (1, 3, 5, 10)})
                 bm = Bm25(dest, repo_files(dest)).rank(row["problem_statement"])
                 rec.update(**{f"bm25_hit@{k}": hit(bm, gold, k) for k in (1, 3, 5, 10)})
             except Exception as e:  # recorded, not fatal: one bad checkout must not stop the run
