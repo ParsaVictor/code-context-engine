@@ -70,16 +70,24 @@ def main():
     ap.add_argument("--out", default="results.jsonl")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--repo", default="")
+    ap.add_argument("--only", default="", help="comma-separated repos to keep")
+    ap.add_argument("--shard", default="", help="i/n: this process takes every n-th instance starting at i")
     ap.add_argument("--work", default=os.path.join(tempfile.gettempdir(), "swe-wt"))
     args = ap.parse_args()
 
     rows = json.load(open(args.data, encoding="utf-8"))
+    if args.only:
+        keep = set(args.only.split(","))
+        rows = [r for r in rows if r["repo"] in keep]
     if args.repo:
         rows = [r for r in rows if r["repo"] == args.repo]
     done = set()
     if os.path.exists(args.out):
         done = {json.loads(l)["instance_id"] for l in open(args.out, encoding="utf-8") if l.strip()}
     todo = [r for r in rows if r["instance_id"] not in done]
+    if args.shard:
+        i, n = (int(x) for x in args.shard.split("/"))
+        todo = todo[i::n]
     if args.limit:
         todo = todo[: args.limit]
     os.makedirs(args.work, exist_ok=True)
