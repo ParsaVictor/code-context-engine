@@ -92,7 +92,9 @@ pub fn run_incremental(
     );
     levels_attempted.push(RetrievalTier::L1.as_str().into());
 
+    let t_e = Instant::now();
     let mut est = estimator.estimate(&view, signature);
+    neuromesh_graph::timing("escalate: L1 estimate", t_e);
     let mut final_tier = RetrievalTier::L1;
 
     let l1_budget = budget.for_tier(RetrievalTier::L1);
@@ -115,10 +117,16 @@ pub fn run_incremental(
     }
 
     // L2: pattern expand + 2 hops — critical gaps or low embedding confidence
-    if should_escalate_to_l2(&est, &view, activator, graph, signature, &embedding_config) {
+    let t_e = Instant::now();
+    let go_l2 = should_escalate_to_l2(&est, &view, activator, graph, signature, &embedding_config);
+    neuromesh_graph::timing("escalate: should_escalate_to_l2", t_e);
+    if go_l2 {
         let l2_start = Instant::now();
         let seed_ids = activator.seed_node_ids(&view);
+        let t_e = Instant::now();
         let pattern_files = pattern_expand(graph, &seed_ids, plan.intent);
+        neuromesh_graph::timing("escalate: pattern_expand", t_e);
+        let t_l2 = Instant::now();
         sig.engine_override = Some(RetrievalTier::L2.seed_engine(
             configured_engine,
             retrieval_engine,
@@ -136,6 +144,7 @@ pub fn run_incremental(
             &plan,
             Some(view),
         );
+        neuromesh_graph::timing("escalate: L2 activate", t_l2);
         latency_ms.insert(
             RetrievalTier::L2.as_str().into(),
             l2_start.elapsed().as_millis() as u64,
@@ -172,14 +181,16 @@ pub fn run_incremental(
         #[cfg(feature = "embeddings")]
         if retrieval_engine == RetrievalEngine::Fast && !l3_sidecar_loaded {
             if let Some(workspace) = graph.workspace_root() {
-                let l3_emb = fast_l3_embedding_config(retrieval_engine, &embedding_config);
-                if let Err(e) =
-                    neuromesh_graph::ensure_file_tier_sidecar(graph, &workspace, &l3_emb)
-                {
-                    tracing::warn!("fast L3 sidecar build failed: {e}");
-                } else {
-                    l3_sidecar_loaded = graph.embedding_index().is_loaded();
-                }
+                // Never inside the question: building the file tier embeds
+                // every file of the workspace (django: 3.5k files, many
+                // minutes on a laptop CPU) and the answer waited for it.
+                // Built once in the background; a later question uses it.
+                spawn_l3_sidecar_build(
+                    graph.clone(),
+                    workspace,
+                    fast_l3_embedding_config(retrieval_engine, &embedding_config),
+                );
+                l3_sidecar_loaded = graph.embedding_index().is_loaded();
             }
         }
         #[cfg(not(feature = "embeddings"))]
@@ -310,6 +321,26 @@ fn needs_embedding_escalation(
         return true;
     }
     low_embedding_confidence(graph, prompt, embedding_config, &seed_ids)
+}
+
+/// Builds the file-tier sidecar on a background thread, once per process.
+#[cfg(feature = "embeddings")]
+fn spawn_l3_sidecar_build(
+    graph: NeuralProjectGraph,
+    workspace: std::path::PathBuf,
+    config: EmbeddingConfig,
+) {
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if STARTED.swap(true, std::sync::atomic::Ordering::AcqRel) {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("neuromesh-l3-sidecar".into())
+        .spawn(move || {
+            if let Err(e) = neuromesh_graph::ensure_file_tier_sidecar(&graph, &workspace, &config) {
+                tracing::warn!("fast L3 sidecar build failed: {e}");
+            }
+        });
 }
 
 fn fast_l3_embedding_config(
