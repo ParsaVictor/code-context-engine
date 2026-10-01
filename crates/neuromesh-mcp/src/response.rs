@@ -150,8 +150,12 @@ fn folds_for_path(
     file_path: &Path,
     fold_ids: &[String],
 ) -> Vec<FoldDescriptor> {
+    // A file reached by several seeds lists its folds once per seed in
+    // `fold_ids`; the packet names each fold once.
+    let mut seen = std::collections::HashSet::new();
     fold_ids
         .iter()
+        .filter(|id| seen.insert(id.as_str()))
         .filter_map(|id| {
             let stored = registry.get_fold(id)?;
             if path_eq(&stored.file_path, file_path) {
