@@ -7,6 +7,37 @@ use neuromesh_core::{NodeId, SeedResolutionConfig, TaskIntent, TaskSignature};
 use neuromesh_graph::NeuralProjectGraph;
 use neuromesh_task::{is_prompt_stopword, normalize_prompt_tokens};
 
+/// An all-lowercase letters-only word the prompt writes as prose: never in
+/// backticks, never as `word()`, `word.` member or `::word`. Such a word
+/// can name a symbol, but the question gives no sign that it does.
+fn is_prose_word(prompt: &str, ident: &str) -> bool {
+    if ident.len() < 3 || !ident.chars().all(|c| c.is_ascii_lowercase()) {
+        return false;
+    }
+    let marked = [
+        format!("`{ident}`"),
+        format!("{ident}("),
+        format!("::{ident}"),
+        format!(".{ident}"),
+        format!("{ident}."),
+    ];
+    let lower = prompt.to_lowercase();
+    // `{ident}.` at the end of a sentence is prose; only count it when a
+    // word character follows the dot.
+    !marked.iter().enumerate().any(|(i, m)| {
+        if i == 4 {
+            lower.match_indices(m.as_str()).any(|(pos, _)| {
+                lower[pos + m.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+            })
+        } else {
+            lower.contains(m.as_str())
+        }
+    })
+}
+
 pub(crate) fn push_anchor_queries(
     graph: &NeuralProjectGraph,
     signature: &TaskSignature,
@@ -30,7 +61,11 @@ pub(crate) fn push_anchor_queries(
             let fragment_of_other = signature.identifiers.iter().any(|other| {
                 other != ident && other.to_lowercase().contains(&ident.to_lowercase())
             });
-            if crate::seed::sink::is_acronym(ident) && !fragment_of_other {
+            // Same for a plain lowercase word the prompt never marks as code
+            // ("How does this tool prevent…" → a function called `tool`):
+            // an English word that happens to be a symbol name is a guess.
+            let prose_word = is_prose_word(prompt, ident);
+            if (crate::seed::sink::is_acronym(ident) && !fragment_of_other) || prose_word {
                 let tag = format!("identifier:{ident}");
                 let buffers = sink.buffers_mut();
                 let guessed: Vec<neuromesh_core::NodeId> = buffers
@@ -38,7 +73,7 @@ pub(crate) fn push_anchor_queries(
                     .iter()
                     .filter(|s| s.query == tag)
                     .filter_map(|s| s.resolved_id.clone())
-                    .filter(|id| graph.get_node(id).is_some_and(|n| n.name != *ident))
+                    .filter(|id| prose_word || graph.get_node(id).is_some_and(|n| n.name != *ident))
                     .collect();
                 if !guessed.is_empty() {
                     let retag = format!("stem:{ident}");
@@ -941,6 +976,82 @@ pub(crate) fn push_compound_symbol_seeds(
 /// elsewhere on one prefix-matched word (`token:pheromone` →
 /// `PheromoneConfig` in edge.rs) is dropped when the body hit spells two
 /// or more words and the guess's file spells fewer.
+/// W3 by field-weighted BM25 (`NeuralProjectGraph::file_rank`): the whole
+/// question against every file's path, defined names, comments and body,
+/// stemmed. The best file is seeded, and up to two runners-up that score
+/// within 30% of it (recall over precision; a plain-language question
+/// often spans two or three files, as with path-word seeds). Guess seeds
+/// that landed on a file the ranking puts far below the best — one prose
+/// word that happened to be a function name elsewhere — give way.
+/// Returns false (legacy W3 runs) when nothing spells two question words.
+fn push_ranked_file_seeds(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    config: &SeedResolutionConfig,
+    names_low: bool,
+    sink: &mut SeedSink<'_, '_, '_>,
+) -> bool {
+    use crate::seed::weak_file_seed::{prefix, WEAK};
+    const RUNNER_UP: f32 = 0.7;
+    const GUESS_FLOOR: f32 = 0.5;
+    let ranked: Vec<neuromesh_graph::RankedFile> = graph
+        .file_rank(prompt, 200)
+        .into_iter()
+        .filter(|r| names_low || !crate::selector::is_noise_path(&r.path))
+        .collect();
+    let Some(best) = ranked.first() else {
+        return false;
+    };
+    if best.matched < 2 {
+        return false;
+    }
+    let top = best.score;
+    let picks: Vec<&neuromesh_graph::RankedFile> = ranked
+        .iter()
+        .take(3)
+        .filter(|r| r.score >= top * RUNNER_UP)
+        .collect();
+    let score_of = |path: &std::path::Path| -> f32 {
+        ranked
+            .iter()
+            .find(|r| r.path == path)
+            .map(|r| r.score)
+            .unwrap_or(0.0)
+    };
+    let weaker: Vec<NodeId> = sink
+        .resolutions()
+        .iter()
+        .filter(|s| WEAK.contains(&prefix(&s.query)) || prefix(&s.query) == "stem")
+        .filter_map(|s| s.resolved_id.clone())
+        .filter(|id| {
+            graph.get_node(id).is_some_and(|n| {
+                !picks.iter().any(|p| p.path == n.file_path)
+                    && score_of(&n.file_path) < top * GUESS_FLOOR
+            })
+        })
+        .collect();
+    if !weaker.is_empty() {
+        let buffers = sink.buffers_mut();
+        for s in buffers.resolutions.iter_mut() {
+            if s.resolved_id.as_ref().is_some_and(|id| weaker.contains(id)) {
+                s.resolved_id = None;
+                s.confidence = 0.0;
+                s.resolution_tier = None;
+            }
+        }
+        for id in &weaker {
+            buffers.energies.remove(id);
+            buffers.reasons.remove(id);
+        }
+    }
+    for (pos, r) in picks.iter().enumerate() {
+        let energy = signal_weight(config, SignalKind::PathHint, pos + 1);
+        let rel = r.path.to_string_lossy().replace('\\', "/");
+        sink.push(graph, prompt, rel, energy, "body");
+    }
+    true
+}
+
 pub(crate) fn push_body_word_seeds(
     graph: &NeuralProjectGraph,
     prompt: &str,
@@ -966,6 +1077,9 @@ pub(crate) fn push_body_word_seeds(
             })
     });
     if anchored {
+        return;
+    }
+    if push_ranked_file_seeds(graph, prompt, config, names_low, sink) {
         return;
     }
     let words: Vec<String> = {

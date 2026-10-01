@@ -2,6 +2,7 @@ pub mod activation;
 pub mod concept_index;
 pub mod edge;
 pub mod embeddings;
+pub mod file_rank;
 pub mod graph;
 mod intern;
 pub mod manifest;
@@ -28,6 +29,7 @@ pub use embeddings::{
     sidecar_tier_stats, stem_union_file_hits,
 };
 pub use embeddings::{load_sidecar, EmbeddingIndex, EmbeddingSidecar};
+pub use file_rank::RankedFile;
 pub use graph::{
     node_learning_bonus, path_echoes_symbol, GraphStats, IndexState, NeuralProjectGraph,
     NodeLearningProfile, ProjectIdReconciliation, GRAPH_PARSER_EPOCH,

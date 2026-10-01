@@ -1329,3 +1329,16 @@ web باقی‌مانده: `fd_login_flow` 1/3 (auth route + password-manager ب
 | holdout-c 0.589→0.578 (`fmt_parse_format_string`: `format.h` اضافه) | صندلی تمام‌فایل | prompt هم `base.h` را نام برده هم دو تابعش را؛ فایل ظرفِ symbol های نام‌برده است نه آدرس؛ callee های symbol های *دیگر* base.h (stem «format») صندلی گرفتند | فایلی که `identifier:` ای در آن resolve شده از `address_files` بیرون می‌ماند |
 
 بعد از هر دو: c 0.589، large 0.675، web 0.856/0.638، self 0.867/0.583 — همه‌ی ۹ مجموعه بدون افت.
+
+## سؤال‌های مفهومی (session 16، ۲۰۲۶-۰۹-۳۰) — F88–F91
+
+منبع: گزارش یوسف (۳/۷ روی ریپوی خودمان). ست جدید `tests/third_party/concept` (۱۴ سؤال، بدون نام شناسه) baseline: recall **0.286**.
+
+| F | علت ریشه‌ای | اصلاح عمومی | اثر روی concept |
+|---|---|---|---|
+| F88 | stdout در حالت `mcp`: بنر داشبورد با `println!` | `eprintln!` + تست باینری واقعی (#126) | — |
+| F89 | regex «How does [this] X» کلمه‌ی انگلیسی `tool`/`system` را identifier قوی کرد → W3 هرگز اجرا نشد | `is_prose_word`: کلمه‌ی lowercase بدون نشانه‌ی کد (backtick، `()`، `.`، `::`) → `stem:` (مثل acronym در F87) | root_fs درست شد |
+| F90 | W3 کلمه‌به‌کلمه: «estimate» → تابعی به همین نام؛ BM25 باینری بدون stem و بدون وزن مسیر/نام/کامنت؛ روی tie بی‌خیال می‌شد | `file_rank.rs`: BM25F (path 3، نام‌ها 2، کامنت‌ها 2، بدنه 1) با Snowball stemmer؛ `comment_index` جدید در گراف؛ تا ۳ فایل با امتیاز ≥۰.۷ بهترین | 0.286 → 0.536 |
+| F91 | شکاف واژگانی («fade» ↔ `evaporate`، «how many» ↔ `count`) | thesaurus عمومی ۴۹ خوشه در `thesaurus.txt` (وزن 0.35)؛ عمداً هیچ موضوع ست holdout (ripgrep) در آن نیست | → **0.679** |
+
+تله: فایل‌های خود ما روی ست self اثر می‌گذارند — thesaurus داخل `.rs` بالای ۴ سؤال آمد؛ به `.txt` (که ایندکس نمی‌شود) منتقل شد. سؤال‌های gold هرگز در کامنت کد نقل نشوند.

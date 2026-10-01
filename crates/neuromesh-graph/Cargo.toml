@@ -18,6 +18,7 @@ tracing.workspace = true
 parking_lot.workspace = true
 rayon.workspace = true
 sha2 = "0.10"
+rust-stemmers = "1.2"
 simsimd = { version = "6.4", default-features = false }
 
 [features]

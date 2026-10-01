@@ -134,6 +134,8 @@ struct DerivedIndexes {
     learning_boost: Arc<HashMap<NodeId, f32>>,
     examples_revision: Option<u64>,
     examples_are_core: bool,
+    file_rank_key: Option<(u64, u64)>,
+    file_rank: Arc<crate::file_rank::FileRankIndex>,
 }
 
 #[derive(Clone)]
@@ -637,6 +639,17 @@ impl NeuralProjectGraph {
                     .or_default()
                     .push(file_id.clone());
             }
+            if reingested {
+                for list in data.comment_index.values_mut() {
+                    list.retain(|existing| *existing != file_id);
+                }
+            }
+            for word in crate::intern::comment_words(src) {
+                data.comment_index
+                    .entry(word)
+                    .or_default()
+                    .push(file_id.clone());
+            }
         }
         if keep_source {
             if let Some(src) = content {
@@ -713,6 +726,32 @@ impl NeuralProjectGraph {
         });
         ranked.truncate(limit);
         ranked
+    }
+
+    /// Files ranked by field-weighted BM25 (path, defined names, body) over
+    /// the stemmed words of `prompt` — see [`crate::file_rank`].
+    pub fn file_rank(&self, prompt: &str, limit: usize) -> Vec<crate::file_rank::RankedFile> {
+        let terms = crate::file_rank::weighted_query_terms(prompt);
+        if terms.is_empty() {
+            return Vec::new();
+        }
+        self.file_rank_index().rank(&terms, limit)
+    }
+
+    fn file_rank_index(&self) -> Arc<crate::file_rank::FileRankIndex> {
+        let data = self.inner.read();
+        let key = (data.mesh.node_revision(), data.generation);
+        {
+            let cached = self.derived.read();
+            if cached.file_rank_key == Some(key) {
+                return Arc::clone(&cached.file_rank);
+            }
+        }
+        let index = Arc::new(crate::file_rank::FileRankIndex::build(&data));
+        let mut cached = self.derived.write();
+        cached.file_rank_key = Some(key);
+        cached.file_rank = Arc::clone(&index);
+        index
     }
 
     /// How many distinct `words` the body of the file at `path` spells.
@@ -2589,7 +2628,7 @@ impl NeuralProjectGraph {
         let snapshot = {
             let data = self.inner.read();
             GraphSnapshot {
-                version: 3,
+                version: 4,
                 nodes: data
                     .mesh
                     .nodes()
@@ -2611,6 +2650,7 @@ impl NeuralProjectGraph {
                 literal_index: data.literal_index.clone(),
                 word_index: data.word_index.clone(),
                 body_lengths: data.body_lengths.clone(),
+                comment_index: data.comment_index.clone(),
             }
         };
         if snapshot_structurally_unchanged(path, &snapshot) {
@@ -2660,6 +2700,7 @@ impl NeuralProjectGraph {
                 literal_index: HashMap::new(),
                 word_index: HashMap::new(),
                 body_lengths: HashMap::new(),
+                comment_index: HashMap::new(),
             });
             return Ok(true);
         }
@@ -2683,6 +2724,7 @@ impl NeuralProjectGraph {
         data.literal_index = snapshot.literal_index;
         data.word_index = snapshot.word_index;
         data.body_lengths = snapshot.body_lengths;
+        data.comment_index = snapshot.comment_index;
         if snapshot.workspace_root.is_some() {
             data.workspace_root = snapshot.workspace_root;
         }

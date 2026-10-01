@@ -135,6 +135,43 @@ pub fn run_gold_set(set: &str) -> GoldSetSummary {
             Vec::new()
         };
         for task in &gold {
+            // `NM_RANK_PROBE=1`: where the BM25F file ranker puts the gold,
+            // independent of the seed pipeline.
+            if std::env::var("NM_RANK_PROBE").is_ok_and(|v| v == "1") {
+                let ranked: Vec<_> = graph
+                    .file_rank(&task.prompt, 200)
+                    .into_iter()
+                    .filter(|r| !neuromesh_context::selector::is_noise_path(&r.path))
+                    .collect();
+                let pos = |g: &String| {
+                    ranked
+                        .iter()
+                        .position(|r| {
+                            r.path
+                                .to_string_lossy()
+                                .replace('\\', "/")
+                                .ends_with(g.as_str())
+                        })
+                        .map(|p| (p + 1).to_string())
+                        .unwrap_or_else(|| "-".into())
+                };
+                let gold_pos: Vec<String> = task.gold_files.iter().map(pos).collect();
+                let top: Vec<String> = ranked
+                    .iter()
+                    .take(3)
+                    .map(|r| {
+                        format!(
+                            "{}:{:.1}",
+                            r.path.to_string_lossy().replace('\\', "/"),
+                            r.score
+                        )
+                    })
+                    .collect();
+                lines.push(format!(
+                    "  rank {:<28} gold@{:?} top={:?}",
+                    task.id, gold_pos, top
+                ));
+            }
             let activator = ContextActivator::new(Arc::new(ReversibleContextRegistry::new()));
             let view = activator.activate(
                 &graph,
