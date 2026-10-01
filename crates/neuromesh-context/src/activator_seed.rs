@@ -17,6 +17,8 @@ fn is_prose_word(prompt: &str, ident: &str) -> bool {
     let marked = [
         format!("`{ident}`"),
         format!("{ident}("),
+        // Julia mutating functions and Rust macros: `trainstep!`, `vec!`.
+        format!("{ident}!"),
         format!("::{ident}"),
         format!(".{ident}"),
         format!("{ident}."),
@@ -25,7 +27,7 @@ fn is_prose_word(prompt: &str, ident: &str) -> bool {
     // `{ident}.` at the end of a sentence is prose; only count it when a
     // word character follows the dot.
     !marked.iter().enumerate().any(|(i, m)| {
-        if i == 4 {
+        if i == 5 {
             lower.match_indices(m.as_str()).any(|(pos, _)| {
                 lower[pos + m.len()..]
                     .chars()
@@ -798,9 +800,12 @@ pub(crate) fn push_compound_stem_seeds(
         // The halves of the pair are not symbols of their own once the pair
         // named a file (the bare_owner rule for `owner.member`): the
         // `identifier:index` that reached some unrelated `index()` goes.
+        // A half the prompt wrote as prose is retagged `stem:` (F89); it goes too.
         let halves = [
             format!("identifier:{}", pair[0]),
             format!("identifier:{}", pair[1]),
+            format!("stem:{}", pair[0]),
+            format!("stem:{}", pair[1]),
         ];
         let buffers = sink.buffers_mut();
         let dropped: Vec<neuromesh_core::NodeId> = buffers
@@ -994,9 +999,10 @@ fn push_ranked_file_seeds(
     use crate::seed::weak_file_seed::{prefix, WEAK};
     const RUNNER_UP: f32 = 0.7;
     const GUESS_FLOOR: f32 = 0.5;
-    let ranked: Vec<neuromesh_graph::RankedFile> = graph
-        .file_rank(prompt, 200)
-        .into_iter()
+    let all = graph.file_rank(prompt, 200);
+    let ranked: Vec<neuromesh_graph::RankedFile> = all
+        .iter()
+        .cloned()
         .filter(|r| names_low || !crate::selector::is_noise_path(&r.path))
         .collect();
     let Some(best) = ranked.first() else {
@@ -1011,9 +1017,11 @@ fn push_ranked_file_seeds(
         .take(3)
         .filter(|r| r.score >= top * RUNNER_UP)
         .collect();
+    // Scored against every file, tests included: a guess that landed on a
+    // test the prompt spells (`tests/support/index_cache.rs`) is evidence,
+    // even though tests are not offered as picks.
     let score_of = |path: &std::path::Path| -> f32 {
-        ranked
-            .iter()
+        all.iter()
             .find(|r| r.path == path)
             .map(|r| r.score)
             .unwrap_or(0.0)

@@ -740,7 +740,10 @@ impl NeuralProjectGraph {
 
     fn file_rank_index(&self) -> Arc<crate::file_rank::FileRankIndex> {
         let data = self.inner.read();
-        let key = (data.mesh.node_revision(), data.generation);
+        // Structural key only: learning updates bump the node revision on
+        // every query, and rebuilding (stemming the whole vocabulary) per
+        // query is what a cache is for avoiding.
+        let key = (data.generation, data.file_to_nodes.len() as u64);
         {
             let cached = self.derived.read();
             if cached.file_rank_key == Some(key) {
