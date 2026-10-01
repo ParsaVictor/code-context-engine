@@ -27,3 +27,16 @@
 - gold قبل از packet قفل؛ هیچ قانونی که فقط یک سوال را درست کند (hardcode اسم) پذیرفته نیست.
 - ratchetها فقط بالا می‌روند.
 - `retry_negative` باگ نیست: این fork واقعاً retry دارد (`crates/neuromesh-provider/src/anthropic.rs`)؛ در ست ما gold آن همان فایل‌های provider است.
+
+## به‌روزرسانی ۲۰۲۶-۱۰-۰۱ — نتیجه‌ی A–E و فازهای بعدی
+
+انجام‌شده: A (#126)، B، C، D، E در PR #127 — concept 0.286→0.679، holdout ripgrep 0.042→0.500، cold start 3.6→2.6 s، ۹ ست بدون افت.
+
+| فاز | کار | الگو | معیار خروج |
+|---|---|---|---|
+| H | gate نهایی + انتشار 1.1.0 | — | tag + سه باینری |
+| I | harness در release + اجرای موازی ست‌ها | — | دور کامل ≤ ۱۰ دقیقه |
+| J | ادغام RRF رتبه‌ی BM25F با embedding (MiniLM موجود) فقط برای سؤال بدون anchor | Cody / Continue / claude-context (hybrid) | concept-holdout ≥ 0.7 روی holdout تازه |
+| K | packet در سطح تعریف برای سؤال مفهومی + رتبه‌ی PageRank داخل packet | Aider repo-map، chunking در claude-context | precision مفهومی ≥ 0.4 بدون افت recall |
+| L | holdout تازه‌ی دوم (Python)، gold قفل قبل از اجرا | — | عدد صادقانه |
+| M | مقایسه‌ی مستقیم با رقبا (claude-context، Serena، Aider repo-map) روی همین ست‌ها | — | جدول منتشرشده در `docs/measured.md` |
