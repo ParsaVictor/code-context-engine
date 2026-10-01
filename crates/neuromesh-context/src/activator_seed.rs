@@ -66,7 +66,7 @@ pub(crate) fn push_anchor_queries(
             // Same for a plain lowercase word the prompt never marks as code
             // ("How does this tool prevent…" → a function called `tool`):
             // an English word that happens to be a symbol name is a guess.
-            let prose_word = is_prose_word(prompt, ident);
+            let prose_word = is_prose_word(prompt, ident) && !fragment_of_other;
             if (crate::seed::sink::is_acronym(ident) && !fragment_of_other) || prose_word {
                 let tag = format!("identifier:{ident}");
                 let buffers = sink.buffers_mut();
@@ -1002,8 +1002,8 @@ fn push_ranked_file_seeds(
     let all = graph.file_rank(prompt, 200);
     let ranked: Vec<neuromesh_graph::RankedFile> = all
         .iter()
-        .cloned()
         .filter(|r| names_low || !crate::selector::is_noise_path(&r.path))
+        .cloned()
         .collect();
     let Some(best) = ranked.first() else {
         return false;
