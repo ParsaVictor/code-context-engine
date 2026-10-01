@@ -59,8 +59,9 @@ for set in "${sets[@]}"; do tests+=(--test "${TEST[$set]}"); done
 cargo test --release -q -p neuromesh-context "${tests[@]}" --no-run 2>/dev/null
 bin_of() {
   # newest optimised binary for a harness name
-  ls -t target/release/deps/"$1"-*.exe target/release/deps/"$1"-* 2>/dev/null \
-    | grep -v '\.d$\|\.pdb$' | head -1
+  # absolute: run_set changes directory before executing it
+  ls -t "$root"/target/release/deps/"$1"-*.exe "$root"/target/release/deps/"$1"-* 2>/dev/null \
+    | grep -Ev '\.(d|pdb|exp|lib|rlib)$' | head -1
 }
 
 out="target/bench-fast"

@@ -8,7 +8,7 @@
 > in its default engine.
 
 Repository: https://github.com/ParsaVictor/code-context-engine
-Current release: v1.0.0 (2026-09-22)
+Current release: v1.1.0 (2026-10-01)
 Independent derivative of NeuroMesh (https://github.com/pinoox/neuromesh), MIT.
 
 ## Facts worth quoting

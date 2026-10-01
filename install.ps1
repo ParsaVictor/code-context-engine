@@ -31,7 +31,7 @@ Write-Host @"
  |_| \_|\___|\__,_|_|  \___/|_|  |_|\___||___/_| |_|
 "@ -ForegroundColor Cyan
 
-Write-Host "code-context-engine v1.0.0 — MCP context engine (NeuroMesh derivative)`n" -ForegroundColor Green
+Write-Host "code-context-engine v1.1.0 — MCP context engine (NeuroMesh derivative)`n" -ForegroundColor Green
 
 Write-Host "Fetching latest release…" -ForegroundColor Gray
 $DownloadUrl = "https://github.com/$Repo/releases/latest/download/neuromesh-windows-x86_64.zip"
