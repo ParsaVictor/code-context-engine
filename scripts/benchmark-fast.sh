@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
-# One command for the numbers the project reports: every third-party gold
-# set, dev and holdout, in one run. Prints one summary line per set.
+# Same numbers as benchmark-holdout.sh, faster: the gold harnesses are built
+# once with optimisations and the sets run side by side (NM_JOBS at a time,
+# default 3; each set indexes its own checkouts, so memory is the limit).
 #
-#   bash scripts/benchmark-holdout.sh            # all sets
-#   bash scripts/benchmark-holdout.sh holdout    # one set: dev|large|holdout|holdout-c|holdout-lang|holdout-ml|holdout-ml2|holdout-cfg|private
-#   bash scripts/benchmark-holdout.sh concept concept-holdout   # plain-language sets (not in the default run)
+#   bash scripts/benchmark-fast.sh                      # the nine default sets
+#   bash scripts/benchmark-fast.sh concept concept-holdout holdout-lang
 #
-# "private" is the phase-5b holdout on a repository that is not in this tree:
-# set NM_PRIVATE_SET_DIR (manifest + gold) and NM_PRIVATE_DIR (checkouts); it is
-# skipped silently when they are unset and is never part of the default run.
-#
-# Sets that need a checkout are fetched first (pinned revisions, idempotent).
-# Windows note: this machine needs CARGO_BUILD_JOBS=2 to avoid an rustc ICE.
+# Output: one summary line per set, in the order given; per-set logs in
+# target/bench-fast/<set>.log.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}"
 export NM_THIRD_PARTY=1
+jobs="${NM_JOBS:-3}"
 
 declare -A MANIFEST=(
   [dev]="tests/third_party/repos.toml"
@@ -40,35 +37,61 @@ declare -A TEST=(
   [holdout-ml2]="third_party_ml2_holdout_gold"
   [holdout-cfg]="third_party_cfg_holdout_gold"
   [holdout-web]="third_party_web_holdout_gold"
-  [private]="third_party_private_gold"
   [concept]="third_party_private_gold"
   [concept-holdout]="third_party_private_gold"
 )
 sets=("$@")
-if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml holdout-ml2 holdout-cfg holdout-web); fi
+if [ ${#sets[@]} -eq 0 ]; then
+  sets=(dev large holdout holdout-c holdout-lang holdout-ml holdout-ml2 holdout-cfg holdout-web)
+fi
+
 for set in "${sets[@]}"; do
-  [ "$set" = concept ] && continue
-  if [ "$set" = private ]; then
-    [ -n "${NM_PRIVATE_SET_DIR:-}" ] || { echo "private: NM_PRIVATE_SET_DIR unset; skipping" >&2; }
-    continue
-  fi
-  if [ "$set" = dev ]; then
-    bash scripts/fetch-third-party.sh >/dev/null
-  else
-    bash scripts/fetch-third-party.sh "${MANIFEST[$set]}" "$set" >/dev/null
-  fi
+  case "$set" in
+    concept) ;;
+    dev) bash scripts/fetch-third-party.sh >/dev/null ;;
+    *) bash scripts/fetch-third-party.sh "${MANIFEST[$set]}" "$set" >/dev/null ;;
+  esac
 done
 
-echo "set                 recall  precision  forbidden  oracle(reachable/strict)"
-for set in "${sets[@]}"; do
-  envs=()
+# Build every needed harness once, optimised; then run the binaries directly.
+tests=()
+for set in "${sets[@]}"; do tests+=(--test "${TEST[$set]}"); done
+cargo test --release -q -p neuromesh-context "${tests[@]}" --no-run 2>/dev/null
+bin_of() {
+  # newest optimised binary for a harness name
+  # absolute: run_set changes directory before executing it
+  ls -t "$root"/target/release/deps/"$1"-*.exe "$root"/target/release/deps/"$1"-* 2>/dev/null \
+    | grep -Ev '\.(d|pdb|exp|lib|rlib)$' | head -1
+}
+
+out="target/bench-fast"
+mkdir -p "$out"
+run_set() {
+  local set="$1" bin
+  bin="$(bin_of "${TEST[$set]}")"
+  local envs=()
   case "$set" in
     concept) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept" NM_PRIVATE_DIR="$root/..") ;;
     concept-holdout) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept-holdout" NM_PRIVATE_DIR="$root/target/third_party/concept-holdout") ;;
   esac
-  line=$(env "${envs[@]}" cargo test -q -p neuromesh-context --test "${TEST[$set]}" -- --nocapture 2>&1 \
-    | grep -E "^third_party" | tail -1 || true)
-  # third_party_x: N gold cases mean recall R precision P forbidden hits F; N task cases reachable A strict S
+  # The harness resolves the workspace from its manifest dir at build time.
+  (cd crates/neuromesh-context && env "${envs[@]}" "$bin" --nocapture >"$root/$out/$set.log" 2>&1 || true)
+}
+
+running=0
+for set in "${sets[@]}"; do
+  run_set "$set" &
+  running=$((running + 1))
+  if [ "$running" -ge "$jobs" ]; then
+    wait -n
+    running=$((running - 1))
+  fi
+done
+wait
+
+echo "set                 recall  precision  forbidden  oracle(reachable/strict)"
+for set in "${sets[@]}"; do
+  line=$(grep -E "^third_party" "$out/$set.log" | tail -1 || true)
   recall=$(echo "$line" | sed -n 's/.*mean recall \([0-9.]*\).*/\1/p')
   prec=$(echo "$line" | sed -n 's/.*precision \([0-9.]*\).*/\1/p')
   forb=$(echo "$line" | sed -n 's/.*forbidden hits \([0-9]*\).*/\1/p')

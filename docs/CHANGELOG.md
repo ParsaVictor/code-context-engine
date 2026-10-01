@@ -4,6 +4,54 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+## 1.1.0 — 2026-10-01
+
+Plain-language questions, the protocol bug and the cold-start latency the upstream author
+reported on 1.0.0 (3 of 7 questions on this repository answered with the wrong file).
+
+### Headline numbers
+
+- New set, plain-language questions on this repository (no identifier in the prompt, 14 q):
+  recall **0.286 → 0.679**.
+- New holdout, the same kind of question on ripgrep 14.1.1 (12 q, gold locked before any run,
+  never tuned on): recall **0.042 → 0.500**. Half the questions still miss; see "Known gaps".
+- The nine existing sets: no recall lost; holdout-web precision 0.608 → 0.643, the rest unchanged.
+- Cold start on a fresh clone of this repository: first answer 3.6 s → 2.6 s (the index
+  build included); later answers 0.1–0.4 s.
+
+### Retrieval
+
+- **Whole-question file ranking** — a question that names no symbol is read against every file's
+  path, defined names, comments and body (field-weighted BM25, Snowball-stemmed). The best file is
+  seeded, plus up to two within 70% of it.
+  Comments are indexed separately: they are the prose closest to how people ask.
+- **A general software thesaurus** (`crates/neuromesh-graph/src/thesaurus.txt`, 49 clusters:
+  limit/cap/max, fade/decay/expire, retry/backoff, …) searches stand-in words at a third of the weight.
+- **English words are not anchors** — "How does this *tool* …" no longer makes a function called
+  `tool` the strongest seed. A lowercase word counts as code only when the prompt marks it
+  (backticks, `word()`, `word!`, `a.word`, `::word`) or it is part of another identifier.
+
+### Fixes
+
+- `neuromesh mcp` wrote the dashboard banner to stdout, the JSON-RPC channel; strict MCP clients broke.
+  It goes to stderr now, and a test spawns the real binary and parses every stdout line.
+- A question that arrived while the first index was being built got `no_seed_resolved` (the gate said
+  "ready" over an empty graph). It now waits for a complete index (up to 120 s,
+  `NEUROMESH_INDEX_WAIT_SECS`), and the index is ready before the optional embedding refresh.
+- `NEUROMESH_NO_BROWSER=1` turns off the first-run dashboard tab.
+
+### Diagnostics
+
+- `NM_TIMING=1` prints index and query stage timings on stderr.
+- `bash scripts/benchmark-holdout.sh concept concept-holdout` runs the two plain-language sets.
+
+### Known gaps
+
+- Plain-language packets are wide (ripgrep holdout precision 0.15): after seeding, graph
+  expansion adds several files.
+- Words the code never spells ("clickable link" for `hyperlink`, "machine-readable" for `json`)
+  still miss; stemming and the thesaurus do not reach them.
+
 ## 1.0.0 — 2026-09-22
 
 The first release of code-context-engine as its own project. Everything below is

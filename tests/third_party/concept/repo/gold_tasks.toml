@@ -1,0 +1,103 @@
+# Concept questions about this repository: plain-language, no identifier in
+# the prompt. Gold written by reading the code, locked before any packet was
+# looked at (2026-09-30). The first four are the upstream author's battery
+# (root_fs_safety, reinforcement, max_files_cap, retry); retry's gold is the
+# provider files because this fork does implement retry/backoff.
+
+[[task]]
+id = "concept_root_fs_safety"
+prompt = "How does this tool prevent indexing dangerous paths like the filesystem root?"
+gold_files = ["crates/neuromesh-index/src/confine.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_reinforcement"
+prompt = "How does a file's importance get reinforced after repeated edits?"
+gold_files = ["crates/neuromesh-graph/src/edge.rs", "crates/neuromesh-graph/src/graph.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_max_files_cap"
+prompt = "How does the system determine the maximum number of files to index automatically?"
+gold_files = ["crates/neuromesh-index/src/walker.rs", "crates/neuromesh-cli/src/commands/mod.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_retry"
+prompt = "Is there retry logic or exponential backoff when calling the AI provider API?"
+gold_files = ["crates/neuromesh-provider/src/anthropic.rs", "crates/neuromesh-provider/src/openai.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_project_identity"
+prompt = "How is a project's identity computed so the same repository always maps to the same id?"
+gold_files = ["crates/neuromesh-core/src/project_id.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_notebooks"
+prompt = "How are Jupyter notebooks turned into something the parser can read?"
+gold_files = ["crates/neuromesh-index/src/notebook.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_token_estimate"
+prompt = "How does the system estimate how many tokens a piece of text costs?"
+gold_files = ["crates/neuromesh-core/src/token.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_fold_bodies"
+prompt = "How does it decide which function bodies to hide and show only as signatures in the context?"
+gold_files = ["crates/neuromesh-context/src/fold.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_unchanged_files"
+prompt = "How does re-indexing skip files that have not changed since last time?"
+gold_files = ["crates/neuromesh-index/src/tracker.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_stdin_framing"
+prompt = "How are incoming protocol messages read and framed from standard input?"
+gold_files = ["crates/neuromesh-mcp/src/stdio.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_provider_choice"
+prompt = "Which part picks the AI provider implementation from the configuration?"
+gold_files = ["crates/neuromesh-provider/src/factory.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_edge_decay"
+prompt = "How do connection weights fade over time when a path is not used?"
+gold_files = ["crates/neuromesh-graph/src/edge.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_path_escape"
+prompt = "How does the indexer stop symlinks from pointing outside the workspace?"
+gold_files = ["crates/neuromesh-index/src/confine.rs"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "concept_file_watch"
+prompt = "How does the server notice a file changed on disk and update the index?"
+gold_files = ["crates/neuromesh-index/src/watcher.rs"]
+forbidden_files = []
+expect_seeds_missed = false

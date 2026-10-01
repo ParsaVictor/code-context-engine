@@ -2,6 +2,7 @@ pub mod activation;
 pub mod concept_index;
 pub mod edge;
 pub mod embeddings;
+pub mod file_rank;
 pub mod graph;
 mod intern;
 pub mod manifest;
@@ -28,6 +29,7 @@ pub use embeddings::{
     sidecar_tier_stats, stem_union_file_hits,
 };
 pub use embeddings::{load_sidecar, EmbeddingIndex, EmbeddingSidecar};
+pub use file_rank::RankedFile;
 pub use graph::{
     node_learning_bonus, path_echoes_symbol, GraphStats, IndexState, NeuralProjectGraph,
     NodeLearningProfile, ProjectIdReconciliation, GRAPH_PARSER_EPOCH,
@@ -39,3 +41,16 @@ pub use query::{
     TraceDirection, TraceHop, TraceResult,
 };
 pub use synapse::{NeuralSpike, StdpConfig, SynapticPlasticityEngine};
+
+/// `NM_TIMING=1`: stage timings on stderr (index stages, rank index build).
+pub fn timing_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NM_TIMING").is_ok_and(|v| v == "1"))
+}
+
+/// Print `[timing] label elapsed` when [`timing_enabled`].
+pub fn timing(label: &str, since: std::time::Instant) {
+    if timing_enabled() {
+        eprintln!("[timing] {label} {:?}", since.elapsed());
+    }
+}

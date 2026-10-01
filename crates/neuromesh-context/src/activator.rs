@@ -173,7 +173,9 @@ impl ContextActivator {
     ) -> ContextView {
         #[cfg(feature = "embeddings")]
         neuromesh_embed::packet_cache_begin();
+        let t_all = std::time::Instant::now();
         let view = self.activate_with_hops(graph, signature, mode, 0);
+        neuromesh_graph::timing("query: activate total", t_all);
         #[cfg(feature = "embeddings")]
         neuromesh_embed::packet_cache_end();
         view
@@ -187,7 +189,10 @@ impl ContextActivator {
         mode: OptimizationMode,
         hops_override: u8,
     ) -> ContextView {
-        self.activate_inner(graph, signature, mode, hops_override)
+        let t_inner = std::time::Instant::now();
+        let view = self.activate_inner(graph, signature, mode, hops_override);
+        neuromesh_graph::timing("query: activate_inner total", t_inner);
+        view
     }
 
     /// L1→L2→L3 cost-aware retrieval with conservative sufficiency early exit.
@@ -310,6 +315,7 @@ impl ContextActivator {
                 OptimizationMode::MaxSavings => 1,
             }
         };
+        let t_q = std::time::Instant::now();
         let mut seed_resolutions = Vec::new();
         let mut seed_energies: HashMap<NodeId, f32> = HashMap::new();
         let mut seed_reasons: HashMap<NodeId, String> = HashMap::new();
@@ -342,6 +348,8 @@ impl ContextActivator {
             is_style_task(signature),
         );
 
+        neuromesh_graph::timing("query: seeds", t_q);
+        let t_q = std::time::Instant::now();
         let scaffold_used = seed_result.scaffold_used;
         let embedding_used = seed_result.embedding_used;
 
@@ -539,6 +547,7 @@ impl ContextActivator {
         } else {
             restrict_selection_to_call_graph(graph, &seed_set, &mut selection);
         }
+        neuromesh_graph::timing("query: neighborhood+select", t_q);
         let app_cfg = neuromesh_core::Config::load();
         if app_cfg.retrieval.engine == neuromesh_core::RetrievalEngine::Hybrid
             && effective_mode == OptimizationMode::Balanced

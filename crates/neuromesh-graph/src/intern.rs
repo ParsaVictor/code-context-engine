@@ -380,6 +380,10 @@ pub(crate) struct GraphData {
     pub word_index: HashMap<String, Vec<NodeId>>,
     /// Distinct body words per file — the document length BM25 normalises by.
     pub body_lengths: HashMap<NodeId, u32>,
+    /// Comment words → files: the prose an author wrote about the code
+    /// (line, block and doc comments, docstrings). Plain-language questions
+    /// match it better than identifiers do — see `file_rank`.
+    pub comment_index: HashMap<String, Vec<NodeId>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -412,6 +416,8 @@ pub(crate) struct GraphSnapshot {
     pub word_index: HashMap<String, Vec<NodeId>>,
     #[serde(default)]
     pub body_lengths: HashMap<NodeId, u32>,
+    #[serde(default)]
+    pub comment_index: HashMap<String, Vec<NodeId>>,
 }
 
 #[derive(Deserialize)]
@@ -582,6 +588,9 @@ pub(crate) fn remove_file_nodes_locked(data: &mut GraphData, path: &Path) {
             list.retain(|existing| existing != id);
         }
         data.body_lengths.remove(id);
+        for list in data.comment_index.values_mut() {
+            list.retain(|existing| existing != id);
+        }
         if let Some(node) = data.mesh.node(id).cloned() {
             unindex_name_keys(data, id, &node.name);
             if let Some(parent) = &node.parent {
@@ -741,6 +750,98 @@ pub(crate) fn is_name_like_literal(s: &str) -> bool {
 /// The distinct words a source file spells: identifiers split into their
 /// parts, prose in comments and strings, 4+ ASCII letters, lowercased. What
 /// a grep for a prompt word would hit, minus the noise of two-letter tokens.
+/// Distinct lowercase words (2+ letters) of the file's comments: `//`, `#`,
+/// `--` line comments (also trailing ones), `/* … */` blocks, and Python
+/// triple-quoted docstrings. Preprocessor lines, Rust attributes and
+/// shebangs are code, not prose. Language-agnostic by design — a comment
+/// marker inside a string occasionally leaks a few words, which is noise
+/// BM25 tolerates.
+pub(crate) fn comment_words(content: &str) -> Vec<String> {
+    let mut text = String::new();
+    let mut in_block = false;
+    let mut in_doc: Option<&str> = None;
+    for line in content.lines() {
+        let t = line.trim_start();
+        if let Some(q) = in_doc {
+            match t.find(q) {
+                Some(end) => {
+                    text.push_str(&t[..end]);
+                    in_doc = None;
+                }
+                None => text.push_str(t),
+            }
+            text.push('\n');
+            continue;
+        }
+        if in_block {
+            match t.find("*/") {
+                Some(end) => {
+                    text.push_str(&t[..end]);
+                    in_block = false;
+                }
+                None => text.push_str(t),
+            }
+            text.push('\n');
+            continue;
+        }
+        if let Some(q) = ["\"\"\"", "'''"].into_iter().find(|q| t.starts_with(q)) {
+            let rest = &t[3..];
+            match rest.find(q) {
+                Some(end) => text.push_str(&rest[..end]),
+                None => {
+                    text.push_str(rest);
+                    in_doc = Some(q);
+                }
+            }
+            text.push('\n');
+            continue;
+        }
+        if t.starts_with("#[")
+            || t.starts_with("#!")
+            || t.starts_with("#include")
+            || t.starts_with("#define")
+            || t.starts_with("#if")
+            || t.starts_with("#endif")
+            || t.starts_with("#pragma")
+            || t.starts_with("#import")
+        {
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix("/*") {
+            match rest.find("*/") {
+                Some(end) => text.push_str(&rest[..end]),
+                None => {
+                    text.push_str(rest);
+                    in_block = true;
+                }
+            }
+            text.push('\n');
+            continue;
+        }
+        if t.starts_with("//") || t.starts_with('#') || t.starts_with("--") {
+            text.push_str(t.trim_start_matches(['/', '#', '-', '!']));
+            text.push('\n');
+            continue;
+        }
+        // Trailing line comment after code.
+        if let Some(pos) = line.find(" // ").or_else(|| line.find(" # ")) {
+            text.push_str(&line[pos + 3..]);
+            text.push('\n');
+        }
+    }
+    let mut seen: HashSet<String> = HashSet::new();
+    for raw in text.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {
+        for part in neuromesh_parser::tokenize_ident(raw) {
+            if part.len() >= 2 && part.chars().all(|c| c.is_ascii_alphabetic()) {
+                seen.insert(part.to_lowercase());
+            }
+        }
+    }
+    let mut words: Vec<String> = seen.into_iter().collect();
+    words.sort();
+    words
+}
+
 pub(crate) fn body_words(content: &str) -> Vec<String> {
     let mut seen: HashSet<String> = HashSet::new();
     for raw in content.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {

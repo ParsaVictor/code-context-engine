@@ -1687,6 +1687,7 @@ class Greeter {
             literal_index: std::collections::HashMap::new(),
             word_index: std::collections::HashMap::new(),
             body_lengths: std::collections::HashMap::new(),
+            comment_index: std::collections::HashMap::new(),
         };
         let bytes = bincode::serialize(&snapshot).expect("serialize");
         std::fs::write(&path, bytes).expect("write");

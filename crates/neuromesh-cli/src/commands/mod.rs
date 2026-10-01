@@ -152,6 +152,9 @@ pub fn spawn_live_sync(
         graph.mark_index_ready();
         return;
     }
+    // Marked before the scan thread is scheduled: until then the gate still
+    // said Ready over an empty graph, and a first question got "no seed".
+    graph.mark_index_indexing();
     let bg_graph = graph.clone();
     let bg_dir = dir.clone();
     let bg_pid = pid.clone();

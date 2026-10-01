@@ -418,6 +418,7 @@ impl McpToolHandler {
                     }
                 }
 
+                let t_tier = std::time::Instant::now();
                 let view =
                     self.activator
                         .activate_tiered(&self.graph, &signature, gate.effective_mode);
@@ -437,7 +438,11 @@ impl McpToolHandler {
                         .record_neural_spike(active.node.id.clone(), false, true);
                 }
 
+                neuromesh_graph::timing("mcp: activate_tiered", t_tier);
                 let elapsed_ms = start_time.elapsed().as_millis() as u64;
+                if neuromesh_graph::timing_enabled() {
+                    eprintln!("[timing] mcp: since tool start {elapsed_ms}ms");
+                }
                 let workspace_tokens = self.graph.total_tokens().max(1);
                 let opt_tokens = view.active_tokens;
                 let seeds_missed = view
@@ -478,6 +483,7 @@ impl McpToolHandler {
                     server_inferred_keywords: server_inferred,
                 };
 
+                let t_s = std::time::Instant::now();
                 self.emit_telemetry(ToolTelemetry {
                     tokens_before: workspace_tokens,
                     tokens_after: opt_tokens,
@@ -491,6 +497,8 @@ impl McpToolHandler {
                     )
                 });
 
+                neuromesh_graph::timing("mcp: telemetry", t_s);
+                let t_s = std::time::Instant::now();
                 Ok({
                     let value = cache_and_build(
                         &self.packet_cache,
@@ -498,6 +506,8 @@ impl McpToolHandler {
                         &build,
                         detail,
                     );
+                    neuromesh_graph::timing("mcp: cache_and_build", t_s);
+                    let t_s = std::time::Instant::now();
                     #[cfg(feature = "embeddings")]
                     {
                         let emb_cfg = Config::load().embeddings;
@@ -524,6 +534,7 @@ impl McpToolHandler {
                             }
                         }
                     }
+                    neuromesh_graph::timing("mcp: semantic cache", t_s);
                     value
                 })
             }
@@ -778,6 +789,9 @@ impl McpToolHandler {
                 let limit = arguments["limit"].as_u64().unwrap_or(20) as usize;
                 let nodes = self.graph.search_symbols(query, limit);
                 let elapsed_ms = start_time.elapsed().as_millis() as u64;
+                if neuromesh_graph::timing_enabled() {
+                    eprintln!("[timing] mcp: since tool start {elapsed_ms}ms");
+                }
 
                 self.emit_telemetry(ToolTelemetry {
                     nodes_after: nodes.len(),
@@ -1094,8 +1108,18 @@ impl McpToolHandler {
         if self.graph.index_state() == IndexState::Ready {
             return Ok(());
         }
-        let state = self.graph.wait_until_indexed(Duration::from_secs(5));
-        if self.graph.stats().total_nodes > 0 || state == IndexState::Ready {
+        // A complete index (a loaded snapshot) answers while a refresh runs.
+        // A graph still filling for the first time does not: a half-linked
+        // graph answers "no seed" for a file it simply has not reached yet.
+        if self.graph.has_complete_index() {
+            return Ok(());
+        }
+        let wait = std::env::var("NEUROMESH_INDEX_WAIT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(120);
+        let state = self.graph.wait_until_indexed(Duration::from_secs(wait));
+        if state == IndexState::Ready {
             return Ok(());
         }
         Err(NeuroMeshError::Config(format!(

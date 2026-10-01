@@ -9,8 +9,8 @@ authors:
     email: 1.parsa.karkooti@gmail.com
 repository-code: https://github.com/ParsaVictor/code-context-engine
 license: MIT
-version: 1.0.0
-date-released: "2026-09-22"
+version: 1.1.0
+date-released: "2026-10-01"
 keywords:
   - model-context-protocol
   - code-retrieval

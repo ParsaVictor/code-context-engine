@@ -134,6 +134,8 @@ struct DerivedIndexes {
     learning_boost: Arc<HashMap<NodeId, f32>>,
     examples_revision: Option<u64>,
     examples_are_core: bool,
+    file_rank_key: Option<(u64, u64)>,
+    file_rank: Arc<crate::file_rank::FileRankIndex>,
 }
 
 #[derive(Clone)]
@@ -147,6 +149,10 @@ pub struct NeuralProjectGraph {
     synaptic_engine: Arc<RwLock<SynapticPlasticityEngine>>,
     physarum_solver: Arc<PhysarumSolver>,
     index_gate: Arc<IndexGate>,
+    /// True once a full index exists (a finished scan, or a loaded snapshot):
+    /// a query may then run while a refresh is in flight. A graph that is
+    /// still filling for the first time is never answered from.
+    complete: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl NeuralProjectGraph {
@@ -165,6 +171,7 @@ impl NeuralProjectGraph {
             ))),
             physarum_solver: Arc::new(PhysarumSolver::new(PhysarumConfig::default())),
             index_gate: Arc::new(IndexGate::new(IndexState::Ready)),
+            complete: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -188,7 +195,13 @@ impl NeuralProjectGraph {
         self.index_gate.set(IndexState::Indexing);
     }
 
+    pub fn has_complete_index(&self) -> bool {
+        self.complete.load(std::sync::atomic::Ordering::Acquire)
+    }
+
     pub fn mark_index_ready(&self) {
+        self.complete
+            .store(true, std::sync::atomic::Ordering::Release);
         self.index_gate.set(IndexState::Ready);
     }
 
@@ -206,6 +219,8 @@ impl NeuralProjectGraph {
     }
 
     pub fn clear(&self, new_project_id: Option<ProjectId>) {
+        self.complete
+            .store(false, std::sync::atomic::Ordering::Release);
         if let Some(new_id) = new_project_id {
             *self.project_id.write() = new_id;
         }
@@ -637,6 +652,17 @@ impl NeuralProjectGraph {
                     .or_default()
                     .push(file_id.clone());
             }
+            if reingested {
+                for list in data.comment_index.values_mut() {
+                    list.retain(|existing| *existing != file_id);
+                }
+            }
+            for word in crate::intern::comment_words(src) {
+                data.comment_index
+                    .entry(word)
+                    .or_default()
+                    .push(file_id.clone());
+            }
         }
         if keep_source {
             if let Some(src) = content {
@@ -713,6 +739,37 @@ impl NeuralProjectGraph {
         });
         ranked.truncate(limit);
         ranked
+    }
+
+    /// Files ranked by field-weighted BM25 (path, defined names, body) over
+    /// the stemmed words of `prompt` — see [`crate::file_rank`].
+    pub fn file_rank(&self, prompt: &str, limit: usize) -> Vec<crate::file_rank::RankedFile> {
+        let terms = crate::file_rank::weighted_query_terms(prompt);
+        if terms.is_empty() {
+            return Vec::new();
+        }
+        self.file_rank_index().rank(&terms, limit)
+    }
+
+    fn file_rank_index(&self) -> Arc<crate::file_rank::FileRankIndex> {
+        let data = self.inner.read();
+        // Structural key only: learning updates bump the node revision on
+        // every query, and rebuilding (stemming the whole vocabulary) per
+        // query is what a cache is for avoiding.
+        let key = (data.generation, data.file_to_nodes.len() as u64);
+        {
+            let cached = self.derived.read();
+            if cached.file_rank_key == Some(key) {
+                return Arc::clone(&cached.file_rank);
+            }
+        }
+        let t0 = std::time::Instant::now();
+        let index = Arc::new(crate::file_rank::FileRankIndex::build(&data));
+        crate::timing("file_rank build", t0);
+        let mut cached = self.derived.write();
+        cached.file_rank_key = Some(key);
+        cached.file_rank = Arc::clone(&index);
+        index
     }
 
     /// How many distinct `words` the body of the file at `path` spells.
@@ -2470,6 +2527,10 @@ impl NeuralProjectGraph {
                 self.enforce_single_project();
                 self.inner.write().parser_epoch = GRAPH_PARSER_EPOCH;
                 let _ = self.save_persisted(workspace);
+                // The graph answers questions from here on; embeddings are an
+                // optional extra a query does not wait for (a cold MiniLM
+                // refresh held every first question for seconds).
+                self.mark_index_ready();
                 #[cfg(feature = "embeddings")]
                 {
                     let emb = neuromesh_core::Config::load().embeddings;
@@ -2480,7 +2541,6 @@ impl NeuralProjectGraph {
                         );
                     }
                 }
-                self.mark_index_ready();
             }
             Err(_) => self.mark_index_failed(),
         }
@@ -2526,6 +2586,7 @@ impl NeuralProjectGraph {
                 }
             }
         }
+        let t0 = std::time::Instant::now();
         let parsed: Vec<_> = scanned
             .par_iter()
             .filter_map(|(file, content)| {
@@ -2541,11 +2602,18 @@ impl NeuralProjectGraph {
                 Some((file, ast, content.as_str()))
             })
             .collect();
+        crate::timing("parse", t0);
+        let t0 = std::time::Instant::now();
         for (file, ast, content) in parsed {
             self.ingest_file_keep(file, &ast, Some(content), keep_source);
         }
+        crate::timing("ingest", t0);
+        let t0 = std::time::Instant::now();
         self.apply_manifest_hints(scanned);
         self.finalize_links();
+        crate::timing("manifest+links", t0);
+        // Built now, not on the first question that needs it.
+        let _ = self.file_rank_index();
         if !keep_source {
             self.inner.write().source_overlay.clear();
         }
@@ -2589,7 +2657,7 @@ impl NeuralProjectGraph {
         let snapshot = {
             let data = self.inner.read();
             GraphSnapshot {
-                version: 3,
+                version: 4,
                 nodes: data
                     .mesh
                     .nodes()
@@ -2611,6 +2679,7 @@ impl NeuralProjectGraph {
                 literal_index: data.literal_index.clone(),
                 word_index: data.word_index.clone(),
                 body_lengths: data.body_lengths.clone(),
+                comment_index: data.comment_index.clone(),
             }
         };
         if snapshot_structurally_unchanged(path, &snapshot) {
@@ -2660,6 +2729,7 @@ impl NeuralProjectGraph {
                 literal_index: HashMap::new(),
                 word_index: HashMap::new(),
                 body_lengths: HashMap::new(),
+                comment_index: HashMap::new(),
             });
             return Ok(true);
         }
@@ -2683,6 +2753,7 @@ impl NeuralProjectGraph {
         data.literal_index = snapshot.literal_index;
         data.word_index = snapshot.word_index;
         data.body_lengths = snapshot.body_lengths;
+        data.comment_index = snapshot.comment_index;
         if snapshot.workspace_root.is_some() {
             data.workspace_root = snapshot.workspace_root;
         }
@@ -2692,6 +2763,10 @@ impl NeuralProjectGraph {
         }
         data.source_overlay.clear();
         rebuild_indexes(&mut data);
+        drop(data);
+        self.complete
+            .store(true, std::sync::atomic::Ordering::Release);
+        let _ = self.file_rank_index();
     }
 
     pub fn apply_stdp_on_path(&self, node_ids: &[NodeId]) {
