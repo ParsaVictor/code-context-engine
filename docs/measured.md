@@ -156,6 +156,8 @@ map of the whole repository, not to answer one question, and it shows.
 | holdout-lang (os-lib, cli, Flux.jl) | 1.000 / 0.589 | **0.933 / 0.933** | 1.000 / 0.333 | 0.400 / 0.080 ¹ |
 | concept-holdout (ripgrep, plain language) | 0.500 / 0.156 | 0.250 / 0.333 | 0.500 / **0.222** | 0.042 / 0.017 |
 | concept-holdout2 (click, plain language) | **0.958 / 0.342** | 0.417 / 0.500 | 0.750 / 0.306 | 0.333 / 0.067 |
+| concept-holdout, ours **+ jina-code** | **0.667 / 0.347** | | | |
+| concept-holdout2, ours **+ jina-code** | **0.958 / 0.439** | | | |
 
 Where we stand, plainly: on questions that name code, the engine gets every gold file at a
 precision no fixed cut of BM25 reaches on three of four holdouts. On holdout-lang the single top
@@ -166,3 +168,12 @@ repository, which helps every method.
 
 ¹ Aider's tree-sitter query for Julia fails to load (`Invalid node type: module`); Flux.jl's
 five questions are left out of its row.
+
+**With the optional code-aware model** (`neuromesh install embed jina-code`,
+`NEUROMESH_EMBED_MODEL=jina_code_v2`): plain-language questions fuse the lexical file ranking with
+the model's file vectors. Same build, model loaded, fusion off → on: ripgrep 0.500 / 0.156 →
+0.667 / 0.347, click 0.958 / 0.342 → 0.958 / 0.439, this repository 0.679 / 0.404 → 0.786 / 0.429.
+The fusion weights (0.6 lexical / 0.4 dense) were set from the literature before the run, not fitted
+to these sets; both holdouts had been run before (ripgrep several times while the lexical ranker was
+built), so read them as dev-adjacent, not blind. MiniLM fused the same way lowered every set (ripgrep
+0.375, this repository 0.607) and is never fused.

@@ -33,7 +33,26 @@ pub const MINILM_MULTILINGUAL_Q: EmbedModelSpec = EmbedModelSpec {
     ],
 };
 
-pub static CATALOG: &[EmbedModelSpec] = &[MINILM_MULTILINGUAL_Q];
+/// jinaai/jina-embeddings-v2-base-code, int8 ONNX (768-d): trained on code
+/// and its documentation. Fused with the lexical ranking for plain-language
+/// questions it lifts the ripgrep holdout from 0.500 to 0.667 recall
+/// (`docs/measured.md`); MiniLM, a general paraphrase model, lowered it.
+pub const JINA_CODE_V2: EmbedModelSpec = EmbedModelSpec {
+    id: "jina-code-v2",
+    dir_name: "jina-code-v2",
+    label: "Jina embeddings v2 base code, int8 (768-dim, code-aware, ~160 MB)",
+    aliases: &["jina", "jina-code", "jina_code", "jina_code_v2"],
+    hf_base: "https://huggingface.co/jinaai/jina-embeddings-v2-base-code/resolve/main",
+    files: &[
+        "onnx/model_quantized.onnx",
+        TOKENIZER_NAME,
+        "config.json",
+        "special_tokens_map.json",
+        "tokenizer_config.json",
+    ],
+};
+
+pub static CATALOG: &[EmbedModelSpec] = &[MINILM_MULTILINGUAL_Q, JINA_CODE_V2];
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct InstallOptions {
@@ -86,11 +105,18 @@ pub fn model_install_dir(spec: &EmbedModelSpec) -> PathBuf {
 }
 
 pub fn is_model_installed(spec: &EmbedModelSpec) -> bool {
-    model_dir_ready(&model_install_dir(spec))
+    spec_ready(spec, &model_install_dir(spec))
 }
 
-fn model_dir_ready(dir: &Path) -> bool {
-    dir.join(ONNX_NAME).is_file() && dir.join(TOKENIZER_NAME).is_file()
+/// Local file name of a spec entry: `onnx/model_quantized.onnx` is saved
+/// as `model_quantized.onnx` next to the tokenizer.
+fn local_name(name: &str) -> &str {
+    name.rsplit('/').next().unwrap_or(name)
+}
+
+/// Every file of the spec is on disk.
+fn spec_ready(spec: &EmbedModelSpec, dir: &Path) -> bool {
+    spec.files.iter().all(|f| dir.join(local_name(f)).is_file())
 }
 
 pub fn list_installed() -> Vec<(EmbedModelSpec, PathBuf)> {
@@ -98,7 +124,7 @@ pub fn list_installed() -> Vec<(EmbedModelSpec, PathBuf)> {
         .iter()
         .filter_map(|spec| {
             let dir = model_install_dir(spec);
-            if model_dir_ready(&dir) {
+            if spec_ready(spec, &dir) {
                 Some((*spec, dir))
             } else {
                 None
@@ -147,9 +173,9 @@ fn install_model_inner(
     let dest = model_install_dir(spec);
     std::fs::create_dir_all(&dest)?;
 
-    if !opts.force && model_dir_ready(&dest) {
+    if !opts.force && spec_ready(spec, &dest) {
         if !opts.quiet {
-            eprintln!("MiniLM already installed at {}", dest.display());
+            eprintln!("{} already installed at {}", spec.id, dest.display());
         }
         return Ok(dest);
     }
@@ -160,43 +186,63 @@ fn install_model_inner(
         .map_err(|e| ModelInstallError::Download(e.to_string()))?;
 
     for name in spec.files {
-        let out = dest.join(name);
+        let local = local_name(name);
+        let out = dest.join(local);
         if !opts.force && out.is_file() {
             if !opts.quiet {
-                eprintln!("  skip {name} (exists)");
+                eprintln!("  skip {local} (exists)");
             }
             continue;
         }
         let url = format!("{}/{}", spec.hf_base, name);
         if !opts.quiet {
-            eprintln!("  fetch {name}…");
+            eprintln!("  fetch {local}…");
         }
-        let response = client
-            .get(&url)
-            .send()
-            .map_err(|e| ModelInstallError::Download(format!("{name}: {e}")))?;
-        if !response.status().is_success() {
-            return Err(ModelInstallError::Download(format!(
-                "{name}: HTTP {}",
-                response.status()
-            )));
+        // A slow or flaky link drops large files mid-body: retry the whole
+        // file a few times before giving up (the .download temp never
+        // becomes the real file unless it arrived complete).
+        let mut last_err = String::new();
+        let mut bytes = None;
+        for attempt in 1..=3 {
+            let result = client
+                .get(&url)
+                .send()
+                .map_err(|e| e.to_string())
+                .and_then(|r| {
+                    if r.status().is_success() {
+                        r.bytes().map_err(|e| e.to_string())
+                    } else {
+                        Err(format!("HTTP {}", r.status()))
+                    }
+                });
+            match result {
+                Ok(b) => {
+                    bytes = Some(b);
+                    break;
+                }
+                Err(e) => {
+                    if !opts.quiet {
+                        eprintln!("  {local}: attempt {attempt} failed ({e})");
+                    }
+                    last_err = e;
+                }
+            }
         }
-        let bytes = response
-            .bytes()
-            .map_err(|e| ModelInstallError::Download(format!("{name}: {e}")))?;
-        let tmp = dest.join(format!(".{name}.download"));
+        let bytes =
+            bytes.ok_or_else(|| ModelInstallError::Download(format!("{local}: {last_err}")))?;
+        let tmp = dest.join(format!(".{local}.download"));
         std::fs::write(&tmp, &bytes)?;
         std::fs::rename(&tmp, &out)?;
     }
 
-    if !model_dir_ready(&dest) {
+    if !spec_ready(spec, &dest) {
         return Err(ModelInstallError::Download(
             "install incomplete after download".into(),
         ));
     }
 
     if !opts.quiet {
-        eprintln!("MiniLM installed at {}", dest.display());
+        eprintln!("{} installed at {}", spec.id, dest.display());
     }
     Ok(dest)
 }

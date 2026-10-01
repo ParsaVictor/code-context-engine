@@ -1011,7 +1011,14 @@ fn push_ranked_file_seeds(
     if best.matched < 2 {
         return false;
     }
-    let top = best.score;
+    // With an embedding sidecar loaded, meaning joins the lexical ranking
+    // (the lexical gate above still decides whether to seed at all).
+    #[cfg(feature = "embeddings")]
+    let ranked: Vec<neuromesh_graph::RankedFile> = fuse_with_embeddings(graph, prompt, ranked)
+        .into_iter()
+        .filter(|r| names_low || !crate::selector::is_noise_path(&r.path))
+        .collect();
+    let top = ranked[0].score;
     let picks: Vec<&neuromesh_graph::RankedFile> = ranked
         .iter()
         .take(3)
@@ -1067,6 +1074,80 @@ fn push_ranked_file_seeds(
         sink.push(graph, prompt, rel, energy, "body");
     }
     true
+}
+
+/// Lexical file ranking fused with the embedding file tier, when a code-aware
+/// model's sidecar is loaded: a word the code never spells (a question about
+/// "shrinking pictures" for `resize_image`) reaches a file through
+/// meaning; a word it does spell keeps
+/// its lexical weight. Convex combination of min-max normalised scores
+/// (lexical 0.6, dense 0.4) — it keeps score ratios meaningful for the
+/// runner-up rule, which reciprocal-rank fusion flattens (Bruch et al. 2023,
+/// "An Analysis of Fusion Functions for Hybrid Retrieval").
+#[cfg(feature = "embeddings")]
+fn fuse_with_embeddings(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    lexical: Vec<neuromesh_graph::RankedFile>,
+) -> Vec<neuromesh_graph::RankedFile> {
+    const DEPTH: usize = 50;
+    const W_LEX: f32 = 0.6;
+    const W_DENSE: f32 = 0.4;
+    let index = graph.embedding_index();
+    if !index.is_loaded() || lexical.is_empty() {
+        return lexical;
+    }
+    // A loaded sidecar means embeddings are in use, whatever the config
+    // default says (the query must be embedded with the same model).
+    let mut cfg = neuromesh_core::Config::load().embeddings;
+    cfg.enabled = true;
+    // Only a code-aware model earns a vote: MiniLM, a general paraphrase
+    // model, lowered every plain-language set it was fused into.
+    if cfg.model != neuromesh_core::EmbeddingModelId::JinaCodeV2 {
+        return lexical;
+    }
+    let Ok(query) = neuromesh_embed::embed_query_cached(&cfg, prompt) else {
+        return lexical;
+    };
+    let dense = index.file_ann_search(&query, DEPTH, 0.0);
+    if dense.is_empty() {
+        return lexical;
+    }
+    let lex_max = lexical[0].score.max(f32::EPSILON);
+    let (d_min, d_max) = dense.iter().fold((f32::MAX, f32::MIN), |(lo, hi), (_, s)| {
+        (lo.min(*s), hi.max(*s))
+    });
+    let d_span = (d_max - d_min).max(f32::EPSILON);
+    let mut fused: std::collections::HashMap<NodeId, f32> = std::collections::HashMap::new();
+    for r in lexical.iter().take(DEPTH) {
+        *fused.entry(r.id.clone()).or_insert(0.0) += W_LEX * r.score / lex_max;
+    }
+    for (id, s) in &dense {
+        *fused.entry(id.clone()).or_insert(0.0) += W_DENSE * (s - d_min) / d_span;
+    }
+    let mut out: Vec<neuromesh_graph::RankedFile> = fused
+        .into_iter()
+        .filter_map(|(id, score)| {
+            let lex = lexical.iter().find(|r| r.id == id);
+            let path = match lex {
+                Some(r) => r.path.clone(),
+                None => graph.get_node(&id)?.file_path,
+            };
+            Some(neuromesh_graph::RankedFile {
+                id,
+                path,
+                score,
+                matched: lex.map(|r| r.matched).unwrap_or(0),
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    out
 }
 
 pub(crate) fn push_body_word_seeds(
