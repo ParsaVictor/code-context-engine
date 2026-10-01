@@ -26,6 +26,8 @@ not the project's number.** Only the holdout rows are.
 | holdout-web (30 q) | fastify/demo (Fastify API), shadcn-ui/taxonomy (Next.js app router) | dev-class for the web domain (fixed on since session 13; 10 blind questions added in G4 scored 0.58 before fixes) | **0.917** | **0.643** | **0** | — |
 | **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.587** | **0** | — |
 | concept (14 q) | this repository, plain-language questions (no identifier in the prompt) | dev-class (written 2026-09-30 from the upstream author's report, tuned on in session 16) | 0.679 | 0.392 | 0 | — || **concept-holdout** (12 q) | ripgrep 14.1.1 (Rust), plain-language questions | never tuned on; gold locked before any run; 1.0.0 scored recall **0.042** | **0.500** | **0.152** | **0** | — |
+| **concept-holdout** (12 q) | ripgrep 14.1.1 (Rust), plain-language questions | never tuned on; gold locked before any run; 1.0.0 scored recall **0.042** | **0.500** | **0.156** | **0** | — |
+| **concept-holdout2** (12 q) | click 8.1.7 (Python, 16 source files), plain-language questions | never tuned on; gold locked before the single run (2026-10-01) | **0.958** | **0.342** | **0** | — |
 
 - **recall / precision** are file-level against a hand-written gold (`gold_files`) per question.
   A forbidden file in the packet zeroes that question's precision.
@@ -135,3 +137,32 @@ caller counts, and every ranked candidate with its score breakdown — the tooli
 112 gold tasks, 15 repositories, both binaries on the same machine and day, scored by file name from each engine's `optimize` output (`scripts/compare-baseline.sh`; raw rows in `baseline-vs-fork-2026-09-21.txt`). Baseline recall 0.735 / precision 0.206 / 12 forbidden; fork 0.938 / 0.633 / 7. Baseline has no parser for Scala, R, Julia (recall 0 there), skips `.sh`/`.ps1`/`.ipynb`, and answers config questions at 0.5–0.75 recall. Where the baseline already worked (Go, Python), recall is equal and precision is ~3× higher. Both are weak on the Fastify + Next.js set (0.65 recall).
 
 Claude Code session A/B (`claude -p`, Sonnet, same task): Django 3.5k files — plain 8 turns / 233k context tokens / $0.239, with the engine 5 turns / 129k / $0.204; fastify/demo 68 files — 244k / $0.408 vs 194k / $0.391. The engine only shrinks the code-context share of a session; system prompt and tool schemas are re-read every turn.
+
+## Against outside baselines (2026-10-01)
+
+Same gold, same checkouts, `python scripts/compare_baselines.py <gold> <checkout> --aider`.
+Our engine ships a packet of variable size; the baselines are cut at k files.
+**bm25** is plain file-level BM25 over the source text (what a search box does).
+**aider-repomap** is Aider 0.86.2's own `RepoMap.get_ranked_tags` — PageRank over
+definition/reference tags, personalised by the identifiers and file names the question
+mentions, the same inputs Aider derives from a chat message. It was built to give a model a
+map of the whole repository, not to answer one question, and it shows.
+
+| set | ours recall / precision | bm25 R@1 / P@1 | bm25 R@3 / P@3 | aider R@5 / P@5 |
+|---|---|---|---|---|
+| holdout-2 (gin, torchvision) | **1.000 / 0.700** | 0.675 / 0.700 | 0.950 / 0.333 | 0.475 / 0.110 |
+| holdout-c (libuv, fmt) | **1.000 / 0.589** | 0.594 / 0.625 | 0.938 / 0.334 | 0.406 / 0.087 |
+| holdout-ml2 (peft, keras-hub) | **1.000 / 0.632** | 0.400 / 0.700 | 0.683 / 0.400 | 0.167 / 0.080 |
+| holdout-lang (os-lib, cli, Flux.jl) | 1.000 / 0.589 | **0.933 / 0.933** | 1.000 / 0.333 | 0.400 / 0.080 ¹ |
+| concept-holdout (ripgrep, plain language) | 0.500 / 0.156 | 0.250 / 0.333 | 0.500 / **0.222** | 0.042 / 0.017 |
+| concept-holdout2 (click, plain language) | **0.958 / 0.342** | 0.417 / 0.500 | 0.750 / 0.306 | 0.333 / 0.067 |
+
+Where we stand, plainly: on questions that name code, the engine gets every gold file at a
+precision no fixed cut of BM25 reaches on three of four holdouts. On holdout-lang the single top
+BM25 file is right 93% of the time, so our wider packet costs precision there. On plain-language
+questions the picture splits: level with BM25 on ripgrep (12 crates, terse names), ahead of it
+on click (recall 0.958 at precision 0.342 against 0.750 at 0.306 for three files) — a small
+repository, which helps every method.
+
+¹ Aider's tree-sitter query for Julia fails to load (`Invalid node type: module`); Flux.jl's
+five questions are left out of its row.

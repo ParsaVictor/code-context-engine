@@ -1,0 +1,86 @@
+# Locked 2026-10-01 before any engine run on click. Plain-language questions only;
+# gold from reading the source (grep-checked).
+
+[[task]]
+id = "click_tab_completion"
+prompt = "How does it produce the scripts that let a shell complete commands when the user presses tab?"
+gold_files = ["src/click/shell_completion.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_wrap_help"
+prompt = "How is long help text wrapped to fit the width of the terminal?"
+gold_files = ["src/click/formatting.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_progress"
+prompt = "How can a program show a progress indicator while it works through many items?"
+gold_files = ["src/click/_termui_impl.py", "src/click/termui.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_value_types"
+prompt = "How is a value typed on the command line converted into a number, a file or one of several allowed words?"
+gold_files = ["src/click/types.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_test_runner"
+prompt = "How can a test run a command and capture what it printed?"
+gold_files = ["src/click/testing.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_open_editor"
+prompt = "How does it open the user's text editor so they can write a longer message?"
+gold_files = ["src/click/_termui_impl.py", "src/click/termui.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_text_color"
+prompt = "How is color added to text printed to the terminal?"
+gold_files = ["src/click/termui.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_decorators"
+prompt = "How does decorating a function turn it into a command with options attached?"
+gold_files = ["src/click/decorators.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_unknown_option"
+prompt = "What happens when the user passes an option the program does not know, and where is that error defined?"
+gold_files = ["src/click/exceptions.py", "src/click/parser.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_windows_console"
+prompt = "How does output to the Windows console deal with unicode characters?"
+gold_files = ["src/click/_winconsole.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_find_subcommand"
+prompt = "How does a group of commands find the sub command the user typed?"
+gold_files = ["src/click/core.py"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "click_env_values"
+prompt = "How can option values come from environment variables instead of the command line?"
+gold_files = ["src/click/core.py"]
+forbidden_files = []
+expect_seeds_missed = false

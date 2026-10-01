@@ -417,9 +417,23 @@ impl CoverageReport {
             .filter(|s| s.resolved_id.is_some())
             .map(|s| s.query.clone())
             .collect();
+        // A guess the server made itself (a prose word, an alias, a lone
+        // token) that resolved nowhere — or was dropped for a better seed —
+        // is not something the question named: it is not "missing", and an
+        // agent told to search for `stem:tool` only wastes a call.
+        const GUESS: &[&str] = &[
+            "stem:",
+            "concept:",
+            "alias_code:",
+            "alias_gap_fill:",
+            "token:",
+            "fallback:",
+            "inferred_keyword:",
+        ];
         let seeds_missed: Vec<String> = seeds
             .iter()
             .filter(|s| s.resolved_id.is_none())
+            .filter(|s| !GUESS.iter().any(|g| s.query.starts_with(g)))
             .map(|s| s.query.clone())
             .collect();
         let claim = if seeds_hit.is_empty() {

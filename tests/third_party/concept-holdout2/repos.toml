@@ -1,0 +1,10 @@
+# Second plain-language holdout (2026-10-01): questions with no identifier,
+# on a Python library nobody tuned on. Gold written from the source before
+# any engine run (G1: gold files checked by grep); run once.
+#
+#   click — pallets/click 8.1.7: command-line interface library
+
+[[repo]]
+name = "click"
+url = "https://github.com/pallets/click"
+rev = "874ca2bc1c30d93a4ac6e36a15ed685eafe89097"

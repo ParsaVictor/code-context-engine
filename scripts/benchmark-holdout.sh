@@ -29,6 +29,7 @@ declare -A MANIFEST=(
   [holdout-cfg]="tests/third_party/holdout-cfg/repos.toml"
   [holdout-web]="tests/third_party/holdout-web/repos.toml"
   [concept-holdout]="tests/third_party/concept-holdout/repos.toml"
+  [concept-holdout2]="tests/third_party/concept-holdout2/repos.toml"
 )
 declare -A TEST=(
   [dev]="third_party_gold"
@@ -43,6 +44,7 @@ declare -A TEST=(
   [private]="third_party_private_gold"
   [concept]="third_party_private_gold"
   [concept-holdout]="third_party_private_gold"
+  [concept-holdout2]="third_party_private_gold"
 )
 sets=("$@")
 if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml holdout-ml2 holdout-cfg holdout-web); fi
@@ -65,6 +67,7 @@ for set in "${sets[@]}"; do
   case "$set" in
     concept) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept" NM_PRIVATE_DIR="$root/..") ;;
     concept-holdout) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept-holdout" NM_PRIVATE_DIR="$root/target/third_party/concept-holdout") ;;
+    concept-holdout2) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept-holdout2" NM_PRIVATE_DIR="$root/target/third_party/concept-holdout2") ;;
   esac
   line=$(env "${envs[@]}" cargo test -q -p neuromesh-context --test "${TEST[$set]}" -- --nocapture 2>&1 \
     | grep -E "^third_party" | tail -1 || true)
