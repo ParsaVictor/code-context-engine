@@ -1504,3 +1504,48 @@ forbidden_files = ["src/directive/clipboard.js", "src/views/profile/UserCard.vue
         );
     }
 }
+
+/// Packet files, best first. By default the highest activation of any node
+/// in the file orders them. For a long report (an issue with a traceback),
+/// that order follows whichever identifiers the report happened to name, so
+/// it is fused (reciprocal rank, k = 60) with the whole-question file
+/// ranking, which reads the report as one text.
+pub fn packet_file_order(
+    graph: &neuromesh_graph::NeuralProjectGraph,
+    prompt: &str,
+    view: &ContextView,
+) -> Vec<String> {
+    let mut best: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+    for n in &view.active_nodes {
+        let p = n.node.file_path.to_string_lossy().replace('\\', "/");
+        let e = best.entry(p).or_insert(f32::MIN);
+        *e = e.max(n.activation_score);
+    }
+    let mut by_activation: Vec<(String, f32)> = best.into_iter().collect();
+    by_activation.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let order: Vec<String> = by_activation.into_iter().map(|(p, _)| p).collect();
+    if prompt.split_whitespace().count() < 60 {
+        return order;
+    }
+    let ranked: std::collections::HashMap<String, usize> = graph
+        .file_rank(prompt, 400)
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (r.path.to_string_lossy().replace('\\', "/"), i))
+        .collect();
+    const K: f32 = 60.0;
+    const LEX_WEIGHT: f32 = 2.0;
+    let mut fused: Vec<(String, f32)> = order
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let lex = ranked
+                .get(p)
+                .map(|r| LEX_WEIGHT / (K + *r as f32 + 1.0))
+                .unwrap_or(0.0);
+            (p.clone(), 1.0 / (K + i as f32 + 1.0) + lex)
+        })
+        .collect();
+    fused.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    fused.into_iter().map(|(p, _)| p).collect()
+}

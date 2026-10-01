@@ -70,6 +70,7 @@ plain-language ones — at 97–99% fewer tokens than the workspace.
 | Lexical-relevance gate on packet fill | recall 0.679 → 0.643, precision flat | extra files are seeds, not fills |
 | Precision tuning on dev sets (twice) | gains did not transfer to holdouts | overfitting to dev; why C1 exists |
 | Aider RepoMap as a question→file retriever | R@5 0.04–0.48 | built as a whole-repo map, not a retriever |
+| Cross-encoder rerank (jina-reranker-v1-turbo-en) on top of jina-code fusion | ripgrep 0.667/0.347 → 0.375/0.215; click 0.958/0.439 → 0.917/0.550; self 0.786/0.429 → 0.857/0.500 | English-text reranker; precision up, recall collapses on the true holdout. Code-trained v2 reranker queued |
 
 ## 5. What a top-venue paper still needs (honest gap list)
 
@@ -101,3 +102,19 @@ methodology) once items 1–5 are done.
 - Cross-encoder reranking (jina-reranker-v1-turbo, the Continue/Cody pattern) on top of C5, aimed at
   precision on plain-language packets (F92).
 - SWE-bench Lite file localisation run (item 5.1) — the first step toward a top-venue paper.
+
+## 8. SWE-bench Lite file localisation (in progress, 2026-10-01)
+
+First 61 instances (flask, requests, seaborn, xarray, pylint, sphinx, astropy partial), v1.1.0+ lexical
+engine, issue text as the query, gold = the one file the reference patch edits:
+
+| method | hit@1 | hit@3 | hit@5 | whole packet |
+|---|---|---|---|---|
+| ours (packet, best-first) | 0.180 | 0.328 | 0.410 | 0.492 (4.5 files, ~9.4k tokens) |
+| plain BM25 over the checkout | 0.295 | 0.525 | 0.639 | — |
+
+Finding: on long issue reports (tracebacks, code snippets) the identifier-seeding pipeline scatters
+across many anchors and fills the packet with the wrong files (including test fixtures); reading the
+whole text (BM25) does better. This is the first standard-benchmark result and it is a weakness —
+the next engine work targets it (whole-question ranking for long reports, traceback file paths as
+anchors). Published reference points to beat: Agentless and LocAgent file-level Acc@k (LLM-based).

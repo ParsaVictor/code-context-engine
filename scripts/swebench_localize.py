@@ -101,6 +101,9 @@ def main():
                     ours_hit=hit(files, gold),
                     **{f"ours_hit@{k}": hit(files, gold, k) for k in (1, 3, 5)},
                 )
+                ranked = pkt.get("ranked_paths") or []
+                if ranked:
+                    rec.update(**{f"bm25f_hit@{k}": hit(ranked, gold, k) for k in (1, 3, 5, 10)})
                 bm = Bm25(dest, repo_files(dest)).rank(row["problem_statement"])
                 rec.update(**{f"bm25_hit@{k}": hit(bm, gold, k) for k in (1, 3, 5, 10)})
             except Exception as e:  # recorded, not fatal: one bad checkout must not stop the run
