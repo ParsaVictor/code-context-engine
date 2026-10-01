@@ -1026,6 +1026,15 @@ fn push_ranked_file_seeds(
             .map(|r| r.score)
             .unwrap_or(0.0)
     };
+    // A plain-language question (no file path, no identifier but prose
+    // words) has one piece of evidence: the whole-question ranking. A word
+    // that matched a symbol elsewhere is a guess the ranking already
+    // weighed, so every guess outside the picks gives way.
+    let plain = {
+        let anchors = neuromesh_parser::extract_prompt_anchors(prompt);
+        anchors.file_hints.is_empty()
+            && anchors.identifiers.iter().all(|i| is_prose_word(prompt, i))
+    };
     let weaker: Vec<NodeId> = sink
         .resolutions()
         .iter()
@@ -1034,7 +1043,7 @@ fn push_ranked_file_seeds(
         .filter(|id| {
             graph.get_node(id).is_some_and(|n| {
                 !picks.iter().any(|p| p.path == n.file_path)
-                    && score_of(&n.file_path) < top * GUESS_FLOOR
+                    && (plain || score_of(&n.file_path) < top * GUESS_FLOOR)
             })
         })
         .collect();

@@ -182,6 +182,9 @@ const DOC_FOLD_MIN_LINES: usize = 3;
 /// The signature may run over several lines; the docstring is the first
 /// non-blank line after the line that ends the signature (`:` for Python).
 fn docstring_block(lines: &[&str], start: usize, end: usize) -> Option<(usize, usize)> {
+    // A span can end past the file (a stale or rounded line range): clamp,
+    // never index past the last line.
+    let end = end.min(lines.len().checked_sub(1)?);
     let mut i = start;
     // skip the signature: through the first line ending with `:`
     while i <= end && !lines[i].trim_end().ends_with(':') {
@@ -766,6 +769,11 @@ impl CodeSkeletonizer {
             }
             for (span, is_exon, score) in items {
                 let start = span.start_line.saturating_sub(1).min(lines.len());
+                if start >= lines.len() {
+                    // A span past the end of the file (stale line range):
+                    // nothing to show, and indexing it panicked the query.
+                    continue;
+                }
                 let end = span.end_line.min(lines.len()).saturating_sub(1).max(start);
                 if is_exon {
                     // An open body keeps its code; a long docstring inside it
