@@ -149,6 +149,10 @@ pub struct NeuralProjectGraph {
     synaptic_engine: Arc<RwLock<SynapticPlasticityEngine>>,
     physarum_solver: Arc<PhysarumSolver>,
     index_gate: Arc<IndexGate>,
+    /// True once a full index exists (a finished scan, or a loaded snapshot):
+    /// a query may then run while a refresh is in flight. A graph that is
+    /// still filling for the first time is never answered from.
+    complete: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl NeuralProjectGraph {
@@ -167,6 +171,7 @@ impl NeuralProjectGraph {
             ))),
             physarum_solver: Arc::new(PhysarumSolver::new(PhysarumConfig::default())),
             index_gate: Arc::new(IndexGate::new(IndexState::Ready)),
+            complete: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -190,7 +195,13 @@ impl NeuralProjectGraph {
         self.index_gate.set(IndexState::Indexing);
     }
 
+    pub fn has_complete_index(&self) -> bool {
+        self.complete.load(std::sync::atomic::Ordering::Acquire)
+    }
+
     pub fn mark_index_ready(&self) {
+        self.complete
+            .store(true, std::sync::atomic::Ordering::Release);
         self.index_gate.set(IndexState::Ready);
     }
 
@@ -208,6 +219,8 @@ impl NeuralProjectGraph {
     }
 
     pub fn clear(&self, new_project_id: Option<ProjectId>) {
+        self.complete
+            .store(false, std::sync::atomic::Ordering::Release);
         if let Some(new_id) = new_project_id {
             *self.project_id.write() = new_id;
         }
@@ -750,7 +763,9 @@ impl NeuralProjectGraph {
                 return Arc::clone(&cached.file_rank);
             }
         }
+        let t0 = std::time::Instant::now();
         let index = Arc::new(crate::file_rank::FileRankIndex::build(&data));
+        crate::timing("file_rank build", t0);
         let mut cached = self.derived.write();
         cached.file_rank_key = Some(key);
         cached.file_rank = Arc::clone(&index);
@@ -2512,6 +2527,10 @@ impl NeuralProjectGraph {
                 self.enforce_single_project();
                 self.inner.write().parser_epoch = GRAPH_PARSER_EPOCH;
                 let _ = self.save_persisted(workspace);
+                // The graph answers questions from here on; embeddings are an
+                // optional extra a query does not wait for (a cold MiniLM
+                // refresh held every first question for seconds).
+                self.mark_index_ready();
                 #[cfg(feature = "embeddings")]
                 {
                     let emb = neuromesh_core::Config::load().embeddings;
@@ -2522,7 +2541,6 @@ impl NeuralProjectGraph {
                         );
                     }
                 }
-                self.mark_index_ready();
             }
             Err(_) => self.mark_index_failed(),
         }
@@ -2568,6 +2586,7 @@ impl NeuralProjectGraph {
                 }
             }
         }
+        let t0 = std::time::Instant::now();
         let parsed: Vec<_> = scanned
             .par_iter()
             .filter_map(|(file, content)| {
@@ -2583,11 +2602,18 @@ impl NeuralProjectGraph {
                 Some((file, ast, content.as_str()))
             })
             .collect();
+        crate::timing("parse", t0);
+        let t0 = std::time::Instant::now();
         for (file, ast, content) in parsed {
             self.ingest_file_keep(file, &ast, Some(content), keep_source);
         }
+        crate::timing("ingest", t0);
+        let t0 = std::time::Instant::now();
         self.apply_manifest_hints(scanned);
         self.finalize_links();
+        crate::timing("manifest+links", t0);
+        // Built now, not on the first question that needs it.
+        let _ = self.file_rank_index();
         if !keep_source {
             self.inner.write().source_overlay.clear();
         }
@@ -2737,6 +2763,10 @@ impl NeuralProjectGraph {
         }
         data.source_overlay.clear();
         rebuild_indexes(&mut data);
+        drop(data);
+        self.complete
+            .store(true, std::sync::atomic::Ordering::Release);
+        let _ = self.file_rank_index();
     }
 
     pub fn apply_stdp_on_path(&self, node_ids: &[NodeId]) {

@@ -41,3 +41,16 @@ pub use query::{
     TraceDirection, TraceHop, TraceResult,
 };
 pub use synapse::{NeuralSpike, StdpConfig, SynapticPlasticityEngine};
+
+/// `NM_TIMING=1`: stage timings on stderr (index stages, rank index build).
+pub fn timing_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NM_TIMING").is_ok_and(|v| v == "1"))
+}
+
+/// Print `[timing] label elapsed` when [`timing_enabled`].
+pub fn timing(label: &str, since: std::time::Instant) {
+    if timing_enabled() {
+        eprintln!("[timing] {label} {:?}", since.elapsed());
+    }
+}

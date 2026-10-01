@@ -240,6 +240,12 @@ fn terms_of(text: &str, st: &Stemmer, keep_stopwords: bool) -> Vec<String> {
     out
 }
 
+/// Stemmed content words of any text (a symbol name, a doc summary),
+/// stopwords dropped — comparable with [`query_terms`].
+pub fn text_terms(text: &str) -> Vec<String> {
+    terms_of(text, &stemmer(), false)
+}
+
 /// Query terms, stemmed and deduplicated in prompt order.
 pub fn query_terms(prompt: &str) -> Vec<String> {
     weighted_query_terms(prompt)

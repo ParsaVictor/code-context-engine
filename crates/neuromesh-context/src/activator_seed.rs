@@ -1052,12 +1052,75 @@ fn push_ranked_file_seeds(
             buffers.reasons.remove(id);
         }
     }
+    let q_terms: std::collections::HashSet<String> =
+        neuromesh_graph::file_rank::query_terms(prompt)
+            .into_iter()
+            .collect();
     for (pos, r) in picks.iter().enumerate() {
         let energy = signal_weight(config, SignalKind::PathHint, pos + 1);
+        // A large file is addressed by the part of it the question is about:
+        // seeding all of a 40k-token file ships it whole (a 200 KB packet
+        // and a 20 s answer). Its best-matching definitions stand in for it.
+        if let Some(symbols) = big_file_symbols(graph, &r.id, &r.path, &q_terms) {
+            for (id, name) in symbols {
+                sink.insert(id, energy, format!("body:{name}"), None, None);
+            }
+            continue;
+        }
         let rel = r.path.to_string_lossy().replace('\\', "/");
         sink.push(graph, prompt, rel, energy, "body");
     }
     true
+}
+
+/// Above this a ranked file is seeded by its definitions, not whole.
+const BIG_FILE_TOKENS: usize = 8_000;
+
+/// For a file over [`BIG_FILE_TOKENS`]: up to three definitions whose name
+/// and doc summary share the most stemmed words with the question (at least
+/// one). `None` for a small file, or when no definition matches — then the
+/// file is seeded whole as before.
+fn big_file_symbols(
+    graph: &NeuralProjectGraph,
+    file_id: &NodeId,
+    path: &std::path::Path,
+    q_terms: &std::collections::HashSet<String>,
+) -> Option<Vec<(NodeId, String)>> {
+    let file = graph.get_node(file_id)?;
+    if file.token_cost <= BIG_FILE_TOKENS {
+        return None;
+    }
+    let mut scored: Vec<(usize, usize, NodeId, String)> = graph
+        .nodes_in_file(path)
+        .into_iter()
+        .filter(|n| n.node_type != neuromesh_core::NodeType::File)
+        .filter_map(|n| {
+            let mut text = n.name.clone();
+            if let Some(doc) = &n.doc_summary {
+                text.push(' ');
+                text.push_str(doc);
+            }
+            let words: std::collections::HashSet<String> =
+                neuromesh_graph::file_rank::text_terms(&text)
+                    .into_iter()
+                    .collect();
+            let hits = words.intersection(q_terms).count();
+            (hits > 0).then_some((hits, n.token_cost, n.id, n.name))
+        })
+        .collect();
+    if scored.is_empty() {
+        return None;
+    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then(a.3.cmp(&b.3)));
+    let best = scored[0].0;
+    Some(
+        scored
+            .into_iter()
+            .filter(|s| s.0 == best || s.0 + 1 >= best.max(2))
+            .take(3)
+            .map(|(_, _, id, name)| (id, name))
+            .collect(),
+    )
 }
 
 pub(crate) fn push_body_word_seeds(

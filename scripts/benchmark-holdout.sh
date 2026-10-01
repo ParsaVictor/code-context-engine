@@ -4,6 +4,7 @@
 #
 #   bash scripts/benchmark-holdout.sh            # all sets
 #   bash scripts/benchmark-holdout.sh holdout    # one set: dev|large|holdout|holdout-c|holdout-lang|holdout-ml|holdout-ml2|holdout-cfg|private
+#   bash scripts/benchmark-holdout.sh concept concept-holdout   # plain-language sets (not in the default run)
 #
 # "private" is the phase-5b holdout on a repository that is not in this tree:
 # set NM_PRIVATE_SET_DIR (manifest + gold) and NM_PRIVATE_DIR (checkouts); it is
@@ -27,6 +28,7 @@ declare -A MANIFEST=(
   [holdout-ml2]="tests/third_party/holdout-ml2/repos.toml"
   [holdout-cfg]="tests/third_party/holdout-cfg/repos.toml"
   [holdout-web]="tests/third_party/holdout-web/repos.toml"
+  [concept-holdout]="tests/third_party/concept-holdout/repos.toml"
 )
 declare -A TEST=(
   [dev]="third_party_gold"
@@ -39,10 +41,13 @@ declare -A TEST=(
   [holdout-cfg]="third_party_cfg_holdout_gold"
   [holdout-web]="third_party_web_holdout_gold"
   [private]="third_party_private_gold"
+  [concept]="third_party_private_gold"
+  [concept-holdout]="third_party_private_gold"
 )
 sets=("$@")
 if [ ${#sets[@]} -eq 0 ]; then sets=(dev large holdout holdout-c holdout-lang holdout-ml holdout-ml2 holdout-cfg holdout-web); fi
 for set in "${sets[@]}"; do
+  [ "$set" = concept ] && continue
   if [ "$set" = private ]; then
     [ -n "${NM_PRIVATE_SET_DIR:-}" ] || { echo "private: NM_PRIVATE_SET_DIR unset; skipping" >&2; }
     continue
@@ -56,7 +61,12 @@ done
 
 echo "set                 recall  precision  forbidden  oracle(reachable/strict)"
 for set in "${sets[@]}"; do
-  line=$(cargo test -q -p neuromesh-context --test "${TEST[$set]}" -- --nocapture 2>&1 \
+  envs=()
+  case "$set" in
+    concept) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept" NM_PRIVATE_DIR="$root/..") ;;
+    concept-holdout) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept-holdout" NM_PRIVATE_DIR="$root/target/third_party/concept-holdout") ;;
+  esac
+  line=$(env "${envs[@]}" cargo test -q -p neuromesh-context --test "${TEST[$set]}" -- --nocapture 2>&1 \
     | grep -E "^third_party" | tail -1 || true)
   # third_party_x: N gold cases mean recall R precision P forbidden hits F; N task cases reachable A strict S
   recall=$(echo "$line" | sed -n 's/.*mean recall \([0-9.]*\).*/\1/p')
