@@ -4,6 +4,31 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ## Unreleased
 
+### Retrieval
+
+- **Optional code-aware embeddings** — `neuromesh install embed jina-code` fetches Jina embeddings v2
+  base code (int8 ONNX, ~160 MB); select it with `NEUROMESH_EMBED_MODEL=jina_code_v2` (or
+  `embeddings.model` in the config). For plain-language questions the lexical file ranking is then
+  fused with the model's file vectors (convex combination, lexical 0.6 / dense 0.4). Measured with the
+  model loaded, fusion off → on: ripgrep holdout 0.500 / 0.156 → **0.667 / 0.347**, click holdout
+  0.958 / 0.342 → 0.958 / **0.439**, this repository 0.679 / 0.404 → 0.786 / 0.429. MiniLM is never
+  fused: it lowered every plain-language set. Without the model nothing changes.
+- **Plain-language questions trust the whole-question ranking** — word-by-word guesses outside its
+  picks are dropped.
+
+### Fixes
+
+- A symbol whose line range starts past the end of its file no longer panics packet rendering.
+- Each fold is listed once per file (it was repeated once per seed).
+- Guesses the server made itself (a prose word, an alias) are no longer reported as missing seeds, so
+  coverage does not say `partial` and send the agent to search for them.
+- `neuromesh install embed` retries a dropped download up to three times.
+
+### Measured
+
+- `docs/measured.md`: outside baselines (plain BM25, Aider's RepoMap) on five holdouts, and a second
+  plain-language holdout (click 8.1.7, 0.958 / 0.342 without embeddings).
+
 ## 1.1.0 — 2026-10-01
 
 Plain-language questions, the protocol bug and the cold-start latency the upstream author

@@ -306,6 +306,11 @@ impl Config {
         }
         if let Ok(raw) = std::env::var("NEUROMESH_EMBED_MODEL") {
             if let Some(model) = crate::EmbeddingModelId::parse(&raw) {
+                if model != self.embeddings.model {
+                    // Another model's width: 768-d vectors cut to MiniLM's 384
+                    // are not what the model was trained to produce.
+                    self.embeddings.matryoshka_dim = model.default_matryoshka_dim();
+                }
                 self.embeddings.model = model;
             }
         }

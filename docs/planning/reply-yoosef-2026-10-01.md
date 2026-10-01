@@ -29,7 +29,16 @@ Yours are plain language. So we wrote two new sets, with gold committed before a
 |---|---|---|
 | concept (this repo, 14 q) | 0.286 | **0.679** |
 | concept-holdout (ripgrep, 12 q, never tuned on) | 0.042 | **0.500** |
+| concept-holdout2 (click 8.1.7, 12 q, written and run once after 1.1.0) | — | **0.958** (precision 0.342) |
 | the nine existing sets | — | no recall lost; precision unchanged or better |
+
+Against outside baselines on the same gold (`scripts/compare_baselines.py`): plain file-level
+BM25 cut at three files gets 0.500 / 0.222 on ripgrep (level with us on recall, better on
+precision) and 0.750 / 0.306 on click (we are ahead on both). Aider's RepoMap, used the way
+Aider feeds it a chat message, reaches 0.042 and 0.333 at five files: it maps a repository, it
+does not answer a question. On the code-naming holdouts we keep recall 1.000 at precision
+0.59–0.70, which no fixed BM25 cut reaches, except holdout-lang where BM25's single top file is
+right 93% of the time. Full table: `docs/measured.md`.
 
 Honest gaps: half the ripgrep questions still miss. Most use words the code never spells ("clickable
 link" vs `hyperlink`, "machine-readable" vs `json`). Plain-language packets are also wide

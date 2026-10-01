@@ -6,6 +6,9 @@ pub enum EmbeddingModelId {
     Gemma300mQ4,
     #[default]
     MiniLmMultilingualQ,
+    /// jinaai/jina-embeddings-v2-base-code: trained on code and its docs
+    /// (768-d). Downloaded by fastembed on first use (~640 MB).
+    JinaCodeV2,
 }
 
 impl EmbeddingModelId {
@@ -14,6 +17,7 @@ impl EmbeddingModelId {
             "gemma300m_q4" | "gemma300m-q4" | "embeddinggemma300m_q4" | "gemma" => {
                 Some(Self::Gemma300mQ4)
             }
+            "jina_code_v2" | "jina-code-v2" | "jina_code" | "jina-code" => Some(Self::JinaCodeV2),
             "minilm_multilingual_q" | "minilm-multilingual-q" | "minilm" => {
                 Some(Self::MiniLmMultilingualQ)
             }
@@ -25,6 +29,7 @@ impl EmbeddingModelId {
         match self {
             Self::Gemma300mQ4 => "gemma300m_q4",
             Self::MiniLmMultilingualQ => "minilm_multilingual_q",
+            Self::JinaCodeV2 => "jina_code_v2",
         }
     }
 
@@ -32,6 +37,7 @@ impl EmbeddingModelId {
         match self {
             Self::Gemma300mQ4 => 256,
             Self::MiniLmMultilingualQ => 384,
+            Self::JinaCodeV2 => 768,
         }
     }
 }

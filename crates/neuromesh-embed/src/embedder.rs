@@ -83,6 +83,7 @@ pub fn format_query_for_model(model: EmbeddingModelId, prompt: &str) -> String {
     match model {
         EmbeddingModelId::Gemma300mQ4 => format_query_gemma(prompt),
         EmbeddingModelId::MiniLmMultilingualQ => format_query_minilm(prompt),
+        EmbeddingModelId::JinaCodeV2 => prompt.trim().to_string(),
     }
 }
 
@@ -95,6 +96,7 @@ pub fn format_document_for_model(
 ) -> String {
     match model {
         EmbeddingModelId::Gemma300mQ4 => format_document_gemma(title, kind, signature, doc),
+        EmbeddingModelId::JinaCodeV2 => format_document_minilm(title, kind, signature, doc),
         EmbeddingModelId::MiniLmMultilingualQ => {
             format_document_minilm(title, kind, signature, doc)
         }
@@ -115,6 +117,38 @@ fn try_init_text_embedding(
             }
             try_load_bundled_minilm(config.model, config.intra_threads)
                 .map_err(|e| EmbedderError::Init(format!("{e}. {}", install_hint())))
+        }
+        EmbeddingModelId::JinaCodeV2 => {
+            // Loaded from plain files, not fastembed's hf-hub cache (its
+            // symlinks fail on Windows without developer mode):
+            // <models>/jina-code-v2/{model_quantized.onnx, tokenizer*.json, …}
+            // from huggingface.co/jinaai/jina-embeddings-v2-base-code.
+            let dir = crate::model_install::default_models_root().join("jina-code-v2");
+            let read = |name: &str| {
+                std::fs::read(dir.join(name)).map_err(|e| {
+                    EmbedderError::Init(format!(
+                        "jina_code_v2: {} missing ({e})",
+                        dir.join(name).display()
+                    ))
+                })
+            };
+            let user_model = fastembed::UserDefinedEmbeddingModel::new(
+                read("model_quantized.onnx")?,
+                fastembed::TokenizerFiles {
+                    tokenizer_file: read("tokenizer.json")?,
+                    config_file: read("config.json")?,
+                    special_tokens_map_file: read("special_tokens_map.json")?,
+                    tokenizer_config_file: read("tokenizer_config.json")?,
+                },
+            )
+            .with_pooling(fastembed::Pooling::Mean)
+            .with_quantization(fastembed::QuantizationMode::Dynamic);
+            let mut opts = fastembed::InitOptionsUserDefined::default();
+            if let Some(n) = config.intra_threads {
+                opts = opts.with_intra_threads(n);
+            }
+            TextEmbedding::try_new_from_user_defined(user_model, opts)
+                .map_err(|e| EmbedderError::Init(format!("jina_code_v2: {e}")))
         }
         EmbeddingModelId::Gemma300mQ4 => Err(EmbedderError::Init(format!(
             "gemma300m_q4 is not installable yet; use MiniLM ({}). {}",

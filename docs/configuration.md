@@ -111,8 +111,16 @@ Sidecar v4/v5 requires `neuromesh embed rebuild` after upgrading to v0.9.0.
 neuromesh doctor --embed              # sidecar status + model install check
 neuromesh doctor --embed --bench      # p50/p95 embed latency (model required)
 neuromesh install embed minilm        # download MiniLM Q (hybrid/deep prerequisite)
+neuromesh install embed jina-code     # code-aware model (~160 MB), see below
 neuromesh embed prefetch              # warm installed MiniLM
 ```
+
+**Code-aware embeddings (recommended for plain-language questions).** With
+`NEUROMESH_EMBED_MODEL=jina_code_v2` (or `"embeddings": {"model": "jina_code_v2"}`) and the model
+installed, the background embedding build uses Jina embeddings v2 base code, and a question that names
+no identifier is ranked by the lexical file ranking fused with the model's file vectors. Measured on
+the ripgrep plain-language holdout: recall 0.500 → 0.667, precision 0.156 → 0.347
+(`docs/measured.md`). MiniLM is not fused (it made those questions worse).
 
 Release tarballs ship the binary only; install MiniLM before hybrid/deep.
 
