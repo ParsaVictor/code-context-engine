@@ -52,6 +52,19 @@ def checkout(clone, commit, dest):
     raise RuntimeError(last)
 
 
+def remove_worktrees(repos, work):
+    """Delete the scratch worktrees a run left (a checkout of django is ~100 MB
+    and every shard keeps one per repository)."""
+    if not os.path.isdir(work):
+        return
+    for name in os.listdir(work):
+        dest = os.path.abspath(os.path.join(work, name))
+        clone = os.path.abspath(os.path.join(repos, name))
+        subprocess.run(["git", "-C", clone, "worktree", "remove", "--force", dest], capture_output=True)
+        shutil.rmtree(dest, ignore_errors=True)
+        subprocess.run(["git", "-C", clone, "worktree", "prune"], capture_output=True)
+
+
 def run_packet(binary, workspace, query):
     home = tempfile.mkdtemp(prefix="nmhome-")
     env = dict(os.environ, NEUROMESH_HOME=home, NEUROMESH_NO_BROWSER="1", PWD=workspace)
@@ -75,6 +88,18 @@ def hit(files, gold, k=None):
 
 
 def main():
+    try:
+        _main()
+    finally:
+        args = _ARGS.get("args")
+        if args is not None:
+            remove_worktrees(args.repos, args.work)
+
+
+_ARGS = {}
+
+
+def _main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--repos", required=True)
@@ -86,6 +111,7 @@ def main():
     ap.add_argument("--shard", default="", help="i/n: this process takes every n-th instance starting at i")
     ap.add_argument("--work", default=os.path.join(tempfile.gettempdir(), "swe-wt"))
     args = ap.parse_args()
+    _ARGS["args"] = args
 
     rows = json.load(open(args.data, encoding="utf-8"))
     if args.only:
@@ -121,6 +147,10 @@ def main():
                     ours_hit=hit(files, gold),
                     **{f"ours_hit@{k}": hit(files, gold, k) for k in (1, 3, 5)},
                 )
+                loc = pkt.get("localization") or []
+                if loc:
+                    rec["loc_files"] = loc
+                    rec.update(**{f"loc_hit@{k}": hit(loc, gold, k) for k in (1, 3, 5, 10)})
                 ranked = pkt.get("ranked_paths") or []
                 if ranked:
                     rec.update(**{f"bm25f_hit@{k}": hit(ranked, gold, k) for k in (1, 3, 5, 10)})

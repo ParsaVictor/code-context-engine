@@ -49,3 +49,13 @@ rayon = "1.11"
 anyhow = "1.0"
 bincode = "1.3"
 notify = "8.2"
+
+# Debug builds (cargo test / clippy) with full debuginfo grew target/debug to
+# 43 GB on Windows: every source change leaves new multi-hundred-MB test
+# binaries and .pdb files behind. Line tables keep panics' file:line;
+# dependencies need none.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

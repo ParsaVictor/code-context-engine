@@ -113,6 +113,19 @@ pub fn graph_for_checkout(
         .unwrap_or_else(|e| panic!("{name}: scan failed: {e}"));
     graph.ingest_workspace(&scanned);
     if let Some(path) = &cache_path {
+        // The key changes with every edit to the graph crates, so snapshots
+        // of the same checkout under older code hashes are never read again
+        // (76 django snapshots, 6.7 GB, had piled up): keep only this one.
+        if let (Some(dir), Some(rev)) = (path.parent(), checkout_rev(repo)) {
+            let prefix = format!("{name}-{rev}-");
+            for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let stale = entry.file_name().to_string_lossy().starts_with(&prefix)
+                    && entry.path() != *path;
+                if stale {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
         if let Err(e) = graph.save_to(path) {
             eprintln!("index cache: could not write {}: {e}", path.display());
         }
