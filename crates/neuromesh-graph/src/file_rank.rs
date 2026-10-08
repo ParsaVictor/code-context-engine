@@ -214,17 +214,20 @@ pub(crate) struct FileRankIndex {
     avg_body_len: f32,
 }
 
-fn stemmer() -> Stemmer {
+pub(crate) fn stemmer() -> Stemmer {
     Stemmer::create(Algorithm::English)
 }
 
 /// Lowercase, split identifiers into words, drop short/non-alphabetic
 /// pieces and stopwords, stem.
-fn terms_of(text: &str, st: &Stemmer, keep_stopwords: bool) -> Vec<String> {
+pub(crate) fn terms_of(text: &str, st: &Stemmer, keep_stopwords: bool) -> Vec<String> {
     let mut out = Vec::new();
     for raw in text.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {
         if raw.is_empty() {
             continue;
+        }
+        for code in raw.split('_').filter(|p| is_code_token(p)) {
+            out.push(code.to_ascii_lowercase());
         }
         for part in neuromesh_parser::tokenize_ident(raw) {
             let w = part.to_lowercase();
@@ -238,6 +241,19 @@ fn terms_of(text: &str, st: &Stemmer, keep_stopwords: bool) -> Vec<String> {
         }
     }
     out
+}
+
+/// `L031`, `LT02`, `E501`, `W0611`, `utf8`, `int64`: letters then digits, the
+/// way linters, encodings and widths are named. Word splitting drops the
+/// digits, which threw away the one term a report about rule L031 shares
+/// with `rules/L031.py` (SWE-bench dev, sqlfluff). Kept whole, unstemmed.
+fn is_code_token(s: &str) -> bool {
+    let letters = s.bytes().take_while(u8::is_ascii_alphabetic).count();
+    let digits = s.len() - letters;
+    (1..=4).contains(&letters)
+        && (1..=5).contains(&digits)
+        && s.len() >= 3
+        && s.bytes().skip(letters).all(|b| b.is_ascii_digit())
 }
 
 /// Stemmed content words of any text (a symbol name, a doc summary),
@@ -263,6 +279,7 @@ const SYNONYM_WEIGHT: f32 = 0.35;
 /// [`SYNONYM_WEIGHT`]): a question word in a cluster also searches the
 /// rest of its cluster.
 pub fn weighted_query_terms(prompt: &str) -> Vec<(String, f32)> {
+    let prompt = &neuromesh_parser::strip_issue_boilerplate(prompt);
     let st = stemmer();
     let mut out: Vec<(String, f32)> = Vec::new();
     let mut seen = HashSet::new();

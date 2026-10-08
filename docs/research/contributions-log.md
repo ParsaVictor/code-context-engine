@@ -118,3 +118,107 @@ across many anchors and fills the packet with the wrong files (including test fi
 whole text (BM25) does better. This is the first standard-benchmark result and it is a weakness —
 the next engine work targets it (whole-question ranking for long reports, traceback file paths as
 anchors). Published reference points to beat: Agentless and LocAgent file-level Acc@k (LLM-based).
+
+### 8.1 Session 17 (2026-10-08): protocol, reference points, first full test-split number
+
+**Protocol.** Tuning set = SWE-bench *dev* split (225 issues; pvlib, pydicom, sqlfluff, astroid,
+pyvista, marshmallow — no repository shared with Lite test). Iteration subset `dev-fast` = first 10
+instances per dev repository by id (59). Holdout = SWE-bench Lite *test* (300). The 24 Lite-test
+instances from flask/requests/seaborn/xarray/pylint that session 16 tuned issue mode on are
+dev-class and reported separately. Metric = file-level Acc@k as in LocAgent (all gold files in the
+top k).
+
+**Published reference points** (LocAgent, arXiv 2503.09089, Table 4; SWE-bench Lite, file level):
+
+| method | Acc@1 | Acc@3 | Acc@5 |
+|---|---|---|---|
+| BM25 | 38.69 | 51.82 | 61.68 |
+| Jina-Code-v2 (embedding) | 43.43 | 71.17 | 80.29 |
+| CodeRankEmbed (embedding) | 52.55 | 77.74 | 84.67 |
+| Agentless (Claude-3.5) | 72.63 | 79.20 | 79.56 |
+| SWE-agent (Claude-3.5) | 77.37 | 87.23 | 90.15 |
+| LocAgent (Claude-3.5) | 77.74 | 91.97 | 94.16 |
+
+**Lite test, v1.1.0 + issue mode (#131), single run, 237 of 276 non-dev instances** (39 lost to
+git worktree lock contention between harness shards, re-run separately):
+
+| | hit@1 | hit@3 | hit@5 | packet |
+|---|---|---|---|---|
+| ours (packet order) | 0.344 | 0.506 | 0.534 | 0.538 |
+| ours BM25F ranking alone | 0.259 | 0.470 | 0.571 | — |
+| plain BM25 (our implementation) | 0.295 | 0.506 | 0.578 | — |
+
+Honest reading: on real issues the engine is level with BM25 and well below dense retrievers and
+LLM agents. Hit@5 ≈ packet recall because the packet holds 1–5 files: Acc@5 is capped by packet
+size, which motivates a separate localisation list (packet first, then ranked runners-up).
+
+**Dense retrieval cost (measured, negative for local-first use).** Jina-Code-v2 (int8 ONNX, CPU,
+6 threads, loaded machine) embedded astroid's 3,364 function/class chunks (256 tokens) in 1,314 s
+— 2.6 chunks/s. At ~70 GFLOP per 256-token chunk for a 137–161M encoder, whole-repository chunk
+embedding of django (~40k chunks) is hours on a laptop CPU. The published embedding numbers above
+are bought with GPU-scale compute; a local engine has to get there lexically/structurally or embed
+only a candidate short list.
+
+### 8.2 Index speed (C10)
+
+`NM_TIMING=1` on a django checkout (3.5k files) located the cold-start delay the upstream author
+reported: `finalize_links` was 147 s of a ~200 s first packet. Causes and fixes (#132):
+
+| stage | before | after | cause |
+|---|---|---|---|
+| resolve_file_hint | 84 s | 2 s | every hint normalised every path (4.7k × 3.5k) |
+| imported_files_of | 22 s | 0.3 s | neighbour walk per relation; now once per file per pass |
+| call resolution | 58 s | 7 s | same (file, name) resolved repeatedly; memoised per pass |
+| scan | 16 s | 3 s | serial canonicalize (root re-canonicalised per file) + serial reads |
+| whole cold packet | 3m20s | 26 s | |
+
+Same graph: the nine sets and three concept sets did not move. Paper use: indexing cost table
+(item 5.6) and the claim that a structural index is cheap enough to build per checkout.
+
+### 8.3 Issue-mode ranking on SWE-bench dev (session 17, dev-class)
+
+`dev-fast` = 59 issues (10 per dev repository), paired runs, file-level Acc@k (all gold files in
+top k; dev issues average 1.9 gold files, so numbers sit below Lite's single-file ones). 95% bootstrap
+CI on 57 issues is about ±0.12, so only differences of ~0.05+ that repeat across k are read as real.
+
+| run | change | Acc@1 | Acc@3 | Acc@5 | Acc@10 |
+|---|---|---|---|---|---|
+| plain BM25 (file) | — | 0.175 | 0.386 | 0.474 | 0.526 |
+| a (v1.1 + #131 + #132) | packet order | 0.246 | 0.421 | 0.456 | — |
+| b | + issue boilerplate stripped, code tokens (`L031`), localisation list (packet, then ranked runners-up, tests/docs last) | 0.211 | 0.456 | 0.544 | 0.667 |
+| c | b + real body term frequency in BM25F | 0.193 | 0.439 | 0.509 | 0.649 |
+| **d** | b + definition-level BM25 (title ×3), RRF with the list | **0.263** | **0.509** | **0.596** | **0.719** |
+| e | d + the same fusion choosing the long-report seeds | = d | = d | = d | = d |
+
+Prototype first (Python, `scripts/research/lex_variants.py`): definition-level BM25 with the title
+counted three times, fused by RRF with b's list, gave 0.298/0.544/0.614/0.702 — the engine port (d)
+reproduces it within noise. Kept: b, d (C11, C12). Rejected with numbers: c (body tf; also lowered
+nothing on the twelve sets but did not help), e (no change).
+
+Failure classes read on dev (sqlfluff): rule codes `L031`/`LT02` dropped by every word tokenizer
+(ours and BM25) although the gold file is `rules/L031.py`; issue-template scaffolding ("Search before
+asking", "found no similar issues", "Code of Conduct", links) ranked `CODE_OF_CONDUCT.md` and the CLI
+module; test fixtures (`.sql`) entering the list. All three are generic, not sqlfluff-specific.
+
+Twelve sets unchanged with d (dev 0.938, large 0.675, holdout 0.700, holdout-c 0.589, holdout-lang
+0.589, holdout-ml 0.478, holdout-ml2 0.632, holdout-cfg 0.767, holdout-web 0.917/0.643, concept
+0.679/0.398, concept-holdout 0.500/0.156, concept-holdout2 0.958/0.342).
+
+### 8.4 Cross-encoder reranker v2 (jina-reranker-v2, int8 ONNX, 278M) — split verdict
+
+Rerank of the engine's top-10 localisation list, file digest = path + signature/doc lines
+(`scripts/research/rerank_test.py`, `rerank_swe.py`):
+
+| set | first stage R@3 | reranker alone | 50/50 blend |
+|---|---|---|---|
+| ripgrep plain-language (holdout, 12 q) | 0.208 | 0.583 | 0.667 |
+| click plain-language (holdout, 12 q) | 0.750 | 0.958 | 0.792 |
+| this repo plain-language (dev, 14 q) | 0.643 | 0.679 | 0.643 |
+| SWE-bench dev-fast issues (59), Acc@3 | 0.492 | 0.373 | 0.458 |
+
+v1-turbo on ripgrep: 0.458 alone, 0.583 blend. Latency on issues: 8.0 s p50 / 14.5 s p90 for 10
+pairs on CPU. Verdict: a code-trained cross-encoder orders *short plain-language questions* better
+than lexical ranking on all three sets, and hurts on *long issue reports* (truncated 512-token query
+loses the report's specifics; the first stage already reads the whole report). The earlier v1
+rejection (§4) was a different experiment — it changed packet *content* (recall collapsed); this one
+only reorders. Paper: the query-length split is a finding in itself.

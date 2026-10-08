@@ -41,6 +41,9 @@ struct PacketJsonOut {
     /// Repository-relative paths, best first (highest activation of any
     /// node in the file): what an evaluation needs for hit@k.
     selected_paths: Vec<String>,
+    /// Packet files, then the next source files of the whole-question ranking
+    /// (20 deep): where to look, best first.
+    localization: Vec<String>,
     /// The whole-question file ranking (BM25F), top 10, for evaluation.
     ranked_paths: Vec<String>,
     identifiers: Vec<String>,
@@ -96,6 +99,7 @@ pub fn execute(args: &[String]) -> Result<()> {
     neuromesh_graph::timing("activate_tiered", started);
 
     let selected_paths = neuromesh_context::gold::packet_file_order(&graph, &prompt, &view);
+    let localization = neuromesh_context::gold::localization_order(&graph, &prompt, &view, 20);
     let mut files: Vec<String> = packet_file_names(&view).into_iter().collect();
     files.sort();
     let reduction = if workspace_tokens > 0 {
@@ -125,6 +129,7 @@ pub fn execute(args: &[String]) -> Result<()> {
         selected_files_count: files.len(),
         selected_files: files.clone(),
         selected_paths,
+        localization,
         ranked_paths: graph
             .file_rank(&prompt, 10)
             .into_iter()

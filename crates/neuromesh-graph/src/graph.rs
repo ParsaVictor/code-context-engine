@@ -140,6 +140,8 @@ struct DerivedIndexes {
     file_rank_key: Option<(u64, u64)>,
     file_rank: Arc<crate::file_rank::FileRankIndex>,
     file_hint_revision: Option<u64>,
+    chunk_rank_key: Option<(u64, u64)>,
+    chunk_rank: Arc<crate::chunk_rank::ChunkRankIndex>,
     file_hint_table: Arc<Vec<(String, Vec<NodeId>)>>,
 }
 
@@ -761,6 +763,73 @@ impl NeuralProjectGraph {
             return Vec::new();
         }
         self.file_rank_index().rank(&terms, limit)
+    }
+
+    /// Files ranked by their best definition for a long report — see
+    /// [`crate::chunk_rank`]. Builds the definition index from the sources on
+    /// first use.
+    pub fn chunk_rank(&self, prompt: &str, limit: usize) -> Vec<crate::file_rank::RankedFile> {
+        let mut end = prompt.len().min(32 * 1024);
+        while !prompt.is_char_boundary(end) {
+            end -= 1;
+        }
+        self.chunk_rank_index().rank(&prompt[..end], limit)
+    }
+
+    fn chunk_rank_index(&self) -> Arc<crate::chunk_rank::ChunkRankIndex> {
+        let (key, files) = {
+            let data = self.inner.read();
+            let key = (data.generation, data.file_to_nodes.len() as u64);
+            {
+                let cached = self.derived.read();
+                if cached.chunk_rank_key == Some(key) {
+                    return Arc::clone(&cached.chunk_rank);
+                }
+            }
+            let mut files = Vec::new();
+            for (path, ids) in &data.file_to_nodes {
+                if neuromesh_core::is_low_priority_source_path(path) {
+                    continue;
+                }
+                let mut file_id = None;
+                let mut spans = Vec::new();
+                for id in ids {
+                    let Some(node) = data.mesh.node(id) else {
+                        continue;
+                    };
+                    if node.node_type == NodeType::File {
+                        file_id = Some(id.clone());
+                    } else if let Some(r) = &node.line_range {
+                        if r.end > r.start {
+                            spans.push(r.clone());
+                        }
+                    }
+                }
+                if let Some(id) = file_id {
+                    files.push((id, path.clone(), spans));
+                }
+            }
+            (key, files)
+        };
+        let t0 = std::time::Instant::now();
+        let sources: Vec<crate::chunk_rank::ChunkSource> = files
+            .into_par_iter()
+            .filter_map(|(id, path, spans)| {
+                let source = self.read_source(&path)?;
+                Some(crate::chunk_rank::ChunkSource {
+                    id,
+                    path,
+                    source,
+                    spans,
+                })
+            })
+            .collect();
+        let index = Arc::new(crate::chunk_rank::ChunkRankIndex::build(sources));
+        crate::timing("chunk_rank build", t0);
+        let mut cached = self.derived.write();
+        cached.chunk_rank_key = Some(key);
+        cached.chunk_rank = Arc::clone(&index);
+        index
     }
 
     fn file_rank_index(&self) -> Arc<crate::file_rank::FileRankIndex> {

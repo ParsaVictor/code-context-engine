@@ -32,5 +32,7 @@ pub use identifiers::{
     stem_search_queries, tokenize_camel_chunk, tokenize_ident, PromptAnchors,
 };
 pub use semantic::{SemanticTypeExtractor, SemanticTypeMap, TypeDefinition};
-pub use text_normalize::{normalize_keyword, normalize_prompt_tokens, normalize_unicode};
+pub use text_normalize::{
+    normalize_keyword, normalize_prompt_tokens, normalize_unicode, strip_issue_boilerplate,
+};
 pub use types::{AstAnalysisResult, ParsedImport, ParsedRelationship, ParsedSymbol};
