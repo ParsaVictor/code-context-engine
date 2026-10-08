@@ -41,6 +41,8 @@ struct PacketJsonOut {
     /// Repository-relative paths, best first (highest activation of any
     /// node in the file): what an evaluation needs for hit@k.
     selected_paths: Vec<String>,
+    /// The whole-question file ranking (BM25F), top 10, for evaluation.
+    ranked_paths: Vec<String>,
     identifiers: Vec<String>,
     seeds_missed: Vec<String>,
     seed_resolution: Option<neuromesh_core::SeedResolutionTelemetry>,
@@ -90,15 +92,7 @@ pub fn execute(args: &[String]) -> Result<()> {
     let view = activator.activate_tiered(&graph, &signature, OptimizationMode::Balanced);
     let latency_ms = started.elapsed().as_millis() as u64;
 
-    let mut best: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
-    for n in &view.active_nodes {
-        let p = n.node.file_path.to_string_lossy().replace('\\', "/");
-        let e = best.entry(p).or_insert(f32::MIN);
-        *e = e.max(n.activation_score);
-    }
-    let mut selected_paths: Vec<(String, f32)> = best.into_iter().collect();
-    selected_paths.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    let selected_paths: Vec<String> = selected_paths.into_iter().map(|(p, _)| p).collect();
+    let selected_paths = neuromesh_context::gold::packet_file_order(&graph, &prompt, &view);
     let mut files: Vec<String> = packet_file_names(&view).into_iter().collect();
     files.sort();
     let reduction = if workspace_tokens > 0 {
@@ -128,6 +122,11 @@ pub fn execute(args: &[String]) -> Result<()> {
         selected_files_count: files.len(),
         selected_files: files.clone(),
         selected_paths,
+        ranked_paths: graph
+            .file_rank(&prompt, 10)
+            .into_iter()
+            .map(|r| r.path.to_string_lossy().replace('\\', "/"))
+            .collect(),
         identifiers: signature.identifiers.clone(),
         seeds_missed,
         seed_resolution: view.seed_resolution_telemetry.clone(),

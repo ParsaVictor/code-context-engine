@@ -1150,6 +1150,47 @@ fn fuse_with_embeddings(
     out
 }
 
+/// Words from which a prompt reads as a report (an issue with a traceback,
+/// a pasted snippet) rather than a question.
+const LONG_REPORT_WORDS: usize = 60;
+
+/// A long report names many identifiers — frames of a traceback, names in a
+/// pasted snippet, the reporter's own code — and each one seeds where it
+/// resolves, so the packet fills with whatever the report happened to
+/// mention. Read as a whole, the same text points at the file it is about
+/// (SWE-bench Lite: the whole-question ranking alone puts the edited file
+/// first 36% of the time against 12% for the anchor-seeded packet). Its best
+/// file, and the runner-up within 70%, join the anchors; nothing is pruned.
+fn push_long_report_seeds(
+    graph: &NeuralProjectGraph,
+    prompt: &str,
+    config: &SeedResolutionConfig,
+    names_low: bool,
+    sink: &mut SeedSink<'_, '_, '_>,
+) {
+    if prompt.split_whitespace().count() < LONG_REPORT_WORDS {
+        return;
+    }
+    let ranked: Vec<neuromesh_graph::RankedFile> = graph
+        .file_rank(prompt, 50)
+        .into_iter()
+        .filter(|r| names_low || !crate::selector::is_noise_path(&r.path))
+        .collect();
+    let Some(top) = ranked.first().map(|r| r.score) else {
+        return;
+    };
+    for (pos, r) in ranked
+        .iter()
+        .take(2)
+        .filter(|r| r.score >= top * 0.7)
+        .enumerate()
+    {
+        let energy = signal_weight(config, SignalKind::PathHint, pos + 1);
+        let rel = r.path.to_string_lossy().replace('\\', "/");
+        sink.push(graph, prompt, rel, energy, "body");
+    }
+}
+
 pub(crate) fn push_body_word_seeds(
     graph: &NeuralProjectGraph,
     prompt: &str,
@@ -1175,6 +1216,7 @@ pub(crate) fn push_body_word_seeds(
             })
     });
     if anchored {
+        push_long_report_seeds(graph, prompt, config, names_low, sink);
         return;
     }
     if push_ranked_file_seeds(graph, prompt, config, names_low, sink) {
