@@ -2,6 +2,7 @@ use crate::hasher::ContentHasher;
 use crate::tracker::{FileFingerprint, IndexedFile, SourceLanguage};
 use chrono::{DateTime, Utc};
 use neuromesh_core::{ProjectId, Result};
+use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -313,10 +314,12 @@ impl ProjectWalker {
             ..ScanReport::default()
         };
 
-        let mut candidates: Vec<(PathBuf, PathBuf, u64, DateTime<Utc>)> = Vec::new();
-
+        // The walk itself is serial and cheap; the per-file work (a
+        // canonicalize for the symlink-escape check, metadata) runs in
+        // parallel and keeps walk order. On Windows the serial version spent
+        // 16 s of a django index here.
         let walk_root = self.root_path.clone();
-        for entry in WalkDir::new(&self.root_path)
+        let files: Vec<PathBuf> = WalkDir::new(&self.root_path)
             .max_depth(10)
             .follow_links(false)
             .into_iter()
@@ -325,42 +328,55 @@ impl ProjectWalker {
                 !Self::is_ignored_keeping_examples(rel, true)
             })
             .filter_map(|e| e.ok())
-        {
-            if !entry.file_type().is_file() {
-                continue;
-            }
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| entry.path().to_path_buf())
+            .collect();
 
-            let full_path = entry.path().to_path_buf();
-            if crate::confine::path_escapes_workspace(&full_path, &self.root_path) {
-                continue;
-            }
-            let relative_path = match full_path.strip_prefix(&self.root_path) {
-                Ok(p) => p.to_path_buf(),
-                Err(_) => full_path.clone(),
-            };
-
-            let metadata = match fs::metadata(&full_path) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-
-            if metadata.len() > self.size_cap_for(&relative_path) {
-                continue;
-            }
-
-            let language = SourceLanguage::from_path(&relative_path);
-            if language == SourceLanguage::Unknown {
-                if let Some(ext) = reportable_unknown_extension(&relative_path) {
-                    *report.skipped_by_extension.entry(ext).or_insert(0) += 1;
+        enum Probe {
+            Keep(PathBuf, PathBuf, u64, DateTime<Utc>),
+            Unknown(Option<String>),
+            Skip,
+        }
+        let Ok(canonical_root) = self.root_path.canonicalize() else {
+            return Ok(report);
+        };
+        let probes: Vec<Probe> = files
+            .into_par_iter()
+            .map(|full_path| {
+                if crate::confine::path_escapes_canonical_root(&full_path, &canonical_root) {
+                    return Probe::Skip;
                 }
-                continue;
+                let relative_path = match full_path.strip_prefix(&self.root_path) {
+                    Ok(p) => p.to_path_buf(),
+                    Err(_) => full_path.clone(),
+                };
+                let metadata = match fs::metadata(&full_path) {
+                    Ok(m) => m,
+                    Err(_) => return Probe::Skip,
+                };
+                if metadata.len() > self.size_cap_for(&relative_path) {
+                    return Probe::Skip;
+                }
+                let language = SourceLanguage::from_path(&relative_path);
+                if language == SourceLanguage::Unknown {
+                    return Probe::Unknown(reportable_unknown_extension(&relative_path));
+                }
+                let last_modified: DateTime<Utc> = metadata
+                    .modified()
+                    .map(|t| t.into())
+                    .unwrap_or_else(|_| Utc::now());
+                Probe::Keep(relative_path, full_path, metadata.len(), last_modified)
+            })
+            .collect();
+        let mut candidates: Vec<(PathBuf, PathBuf, u64, DateTime<Utc>)> = Vec::new();
+        for probe in probes {
+            match probe {
+                Probe::Keep(rel, full, len, mtime) => candidates.push((rel, full, len, mtime)),
+                Probe::Unknown(Some(ext)) => {
+                    *report.skipped_by_extension.entry(ext).or_insert(0) += 1
+                }
+                Probe::Unknown(None) | Probe::Skip => {}
             }
-
-            let last_modified: DateTime<Utc> = metadata
-                .modified()
-                .map(|t| t.into())
-                .unwrap_or_else(|_| Utc::now());
-            candidates.push((relative_path, full_path, metadata.len(), last_modified));
         }
 
         // `examples/` walked but not yet admitted: it stays out when the repository
@@ -419,6 +435,7 @@ impl ProjectWalker {
             candidates.truncate(cap);
         }
 
+        let mut to_read = Vec::new();
         for (relative_path, full_path, byte_size, last_modified) in candidates {
             let rel = relative_path.to_string_lossy().replace('\\', "/");
             report.present.push(rel.clone());
@@ -428,24 +445,27 @@ impl ProjectWalker {
                     continue;
                 }
             }
-
-            let content = match crate::notebook::read_source_text(&full_path) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-
-            let hash = ContentHasher::hash_str(&content);
-            let indexed_file = IndexedFile::new(
-                self.project_id.clone(),
-                relative_path,
-                full_path,
-                &content,
-                hash,
-                byte_size,
-                last_modified,
-            );
-            report.files.push((indexed_file, content));
+            to_read.push((relative_path, full_path, byte_size, last_modified));
         }
+        // Read and hash in parallel, in candidate order.
+        let read: Vec<(IndexedFile, String)> = to_read
+            .into_par_iter()
+            .filter_map(|(relative_path, full_path, byte_size, last_modified)| {
+                let content = crate::notebook::read_source_text(&full_path).ok()?;
+                let hash = ContentHasher::hash_str(&content);
+                let indexed_file = IndexedFile::new(
+                    self.project_id.clone(),
+                    relative_path,
+                    full_path,
+                    &content,
+                    hash,
+                    byte_size,
+                    last_modified,
+                );
+                Some((indexed_file, content))
+            })
+            .collect();
+        report.files.extend(read);
 
         Ok(report)
     }

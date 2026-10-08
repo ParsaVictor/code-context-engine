@@ -30,6 +30,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+static HINT_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static HINT_N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Bump when parser/linker output changes; older snapshots re-parse on load.
 pub const GRAPH_PARSER_EPOCH: u32 = 3;
 
@@ -136,6 +139,8 @@ struct DerivedIndexes {
     examples_are_core: bool,
     file_rank_key: Option<(u64, u64)>,
     file_rank: Arc<crate::file_rank::FileRankIndex>,
+    file_hint_revision: Option<u64>,
+    file_hint_table: Arc<Vec<(String, Vec<NodeId>)>>,
 }
 
 #[derive(Clone)]
@@ -819,10 +824,39 @@ impl NeuralProjectGraph {
                 rest.push(rel);
             }
         }
+        let timing = crate::timing_enabled();
+        let mut spent: HashMap<String, (usize, std::time::Duration)> = HashMap::new();
+        let mut imp_time = std::time::Duration::ZERO;
+        let mut calls_source = std::time::Duration::ZERO;
+        let mut source_memo: HashMap<(PathBuf, String), Option<NodeId>> = HashMap::new();
+        #[allow(clippy::type_complexity)]
+        let mut target_memo: HashMap<
+            (PathBuf, String, Option<String>),
+            Option<(NodeId, EdgeConfidence)>,
+        > = HashMap::new();
+        let mut calls_ranked = std::time::Duration::ZERO;
+        let mut import_scope: HashMap<NodeId, Arc<HashSet<PathBuf>>> = HashMap::new();
         for rel in imports.into_iter().chain(rest) {
+            let t_rel = timing.then(std::time::Instant::now);
+            let kind = rel.relationship;
             let file_id =
                 NodeId::from_file_path(&rel.source_file.to_string_lossy().replace('\\', "/"));
-            let imported_files = self.imported_files_of(&file_id);
+            // Only calls and artifact edges read the import scope, and every
+            // import edge is linked before them, so one set per file holds for
+            // the whole pass (django: 22 s of neighbour walks per relation).
+            let imported_files =
+                if matches!(rel.relationship, EdgeType::Imports | EdgeType::DependsOn) {
+                    Arc::new(HashSet::new())
+                } else {
+                    Arc::clone(
+                        import_scope
+                            .entry(file_id.clone())
+                            .or_insert_with(|| Arc::new(self.imported_files_of(&file_id))),
+                    )
+                };
+            if let Some(t) = t_rel {
+                imp_time += t.elapsed();
+            }
 
             let linked = match rel.relationship {
                 EdgeType::Imports => {
@@ -876,11 +910,24 @@ impl NeuralProjectGraph {
                     // when the name is shared (`POST` in every `route.ts`) and
                     // hung the edge off the file, so the route's callees never
                     // reached the seed (F81).
-                    let source = self
-                        .resolve_api_in_file(&rel.source_symbol, &source_file)
-                        .or_else(|| self.resolve_in_file(&rel.source_symbol, &source_file))
-                        .or_else(|| self.resolve_unique(&rel.source_symbol, Some(&source_file)))
+                    // Nodes do not change during a pass (only edges are
+                    // added), so both ends of a call are a function of their
+                    // names: a test file calling `assertEqual` 900 times
+                    // resolves it once (django: 18 s of 22 s of linking).
+                    let source = source_memo
+                        .entry((rel.source_file.clone(), rel.source_symbol.clone()))
+                        .or_insert_with(|| {
+                            self.resolve_api_in_file(&rel.source_symbol, &source_file)
+                                .or_else(|| self.resolve_in_file(&rel.source_symbol, &source_file))
+                                .or_else(|| {
+                                    self.resolve_unique(&rel.source_symbol, Some(&source_file))
+                                })
+                        })
+                        .clone()
                         .unwrap_or_else(|| file_id.clone());
+                    if let Some(t) = t_rel {
+                        calls_source += t.elapsed();
+                    }
                     // Overlay templates (`hello` → `theme/default/hello.twig`) must
                     // bind the file before the stem can steal another symbol.
                     // Inbound relink stores the callee's source path as a hint;
@@ -891,6 +938,29 @@ impl NeuralProjectGraph {
                         .filter(|hint| template_stem_hint(hint, &rel.target_symbol))
                         .and_then(|hint| self.resolve_file_hint(hint))
                         .filter(|target| *target != source);
+                    let t_ranked = timing.then(std::time::Instant::now);
+                    let ranked_call = if hinted_file.is_some() {
+                        None
+                    } else {
+                        target_memo
+                            .entry((
+                                rel.source_file.clone(),
+                                rel.target_symbol.clone(),
+                                rel.receiver_hint.clone(),
+                            ))
+                            .or_insert_with(|| {
+                                self.resolve_call_ranked(
+                                    &rel.target_symbol,
+                                    &rel.source_file,
+                                    &imported_files,
+                                    rel.receiver_hint.as_deref(),
+                                )
+                            })
+                            .clone()
+                    };
+                    if let Some(t) = t_ranked {
+                        calls_ranked += t.elapsed();
+                    }
                     if let Some(target) = hinted_file {
                         self.add_edge_with_confidence(
                             source,
@@ -899,18 +969,10 @@ impl NeuralProjectGraph {
                             EdgeConfidence::Likely,
                         );
                         true
-                    } else if let Some((target, confidence)) = self
-                        .resolve_call_ranked(
-                            &rel.target_symbol,
-                            &rel.source_file,
-                            &imported_files,
-                            rel.receiver_hint.as_deref(),
-                        )
-                        .filter(|(target, _)| {
-                            self.same_language_family(target, &rel.source_file)
-                                && !self.is_config_node(target)
-                        })
-                    {
+                    } else if let Some((target, confidence)) = ranked_call.filter(|(target, _)| {
+                        self.same_language_family(target, &rel.source_file)
+                            && !self.is_config_node(target)
+                    }) {
                         if target != source {
                             self.add_edge_with_confidence(
                                 source,
@@ -1128,8 +1190,25 @@ impl NeuralProjectGraph {
                 }
             };
 
+            if let Some(t) = t_rel {
+                let e = spent.entry(format!("{kind:?}")).or_default();
+                e.0 += 1;
+                e.1 += t.elapsed();
+            }
             if !linked && rel.relationship != EdgeType::Calls {
                 leftover.push(rel);
+            }
+        }
+        if timing {
+            eprintln!("[timing] links imported_files_of {imp_time:?}");
+            eprintln!("[timing] links calls: source {calls_source:?} ranked {calls_ranked:?}");
+            eprintln!(
+                "[timing] links resolve_file_hint n={} {:?}",
+                HINT_N.load(std::sync::atomic::Ordering::Relaxed),
+                std::time::Duration::from_nanos(HINT_NS.load(std::sync::atomic::Ordering::Relaxed))
+            );
+            for (kind, (n, d)) in &spent {
+                eprintln!("[timing] links {kind} n={n} {d:?}");
             }
         }
 
@@ -1729,30 +1808,77 @@ impl NeuralProjectGraph {
     }
 
     pub fn resolve_file_hint(&self, hint: &str) -> Option<NodeId> {
+        let t0 = std::time::Instant::now();
+        let r = self.resolve_file_hint_inner(hint);
+        if crate::timing_enabled() {
+            HINT_NS.fetch_add(
+                t0.elapsed().as_nanos() as u64,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            HINT_N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        r
+    }
+
+    /// Every indexed path, normalized once, with its file-node ids — the
+    /// table `resolve_file_hint` scans. Rebuilt only when nodes change, so
+    /// linking a workspace no longer normalizes every path once per import
+    /// (django: 4.7k hints x 3.5k paths was 84 s of a 147 s index).
+    fn file_hint_table(&self) -> Arc<Vec<(String, Vec<NodeId>)>> {
         let data = self.inner.read();
+        let revision = data.mesh.node_revision();
+        {
+            let cached = self.derived.read();
+            if cached.file_hint_revision == Some(revision) {
+                return Arc::clone(&cached.file_hint_table);
+            }
+        }
+        let table: Vec<(String, Vec<NodeId>)> = data
+            .file_to_nodes
+            .iter()
+            .map(|(path, ids)| {
+                let files = ids
+                    .iter()
+                    .filter(|id| {
+                        data.mesh
+                            .node(id)
+                            .is_some_and(|n| n.node_type == NodeType::File)
+                    })
+                    .cloned()
+                    .collect();
+                (normalize_path_hint(&path.to_string_lossy()), files)
+            })
+            .collect();
+        drop(data);
+        let table = Arc::new(table);
+        let mut derived = self.derived.write();
+        derived.file_hint_revision = Some(revision);
+        derived.file_hint_table = Arc::clone(&table);
+        table
+    }
+
+    fn resolve_file_hint_inner(&self, hint: &str) -> Option<NodeId> {
+        let table = self.file_hint_table();
         let hint_norm = normalize_path_hint(hint);
         let path_like = looks_like_file_path_hint(hint);
+        let slash_hint = format!("/{hint_norm}");
+        // `path_hint_matches` on an already-normalized path.
+        let parts: Vec<&str> = hint_norm
+            .split([':', '/', '.'])
+            .filter(|part| part.len() > 2)
+            .collect();
         let mut matches = Vec::new();
-        for (path, ids) in &data.file_to_nodes {
-            let path_s = normalize_path_hint(&path.to_string_lossy());
+        for (path_s, ids) in table.iter() {
             let ok = if path_like {
-                path_s == hint_norm
-                    || path_s.ends_with(&format!("/{hint_norm}"))
+                path_s == &hint_norm
+                    || path_s.ends_with(&slash_hint)
                     || path_s.ends_with(&hint_norm)
             } else {
-                path_hint_matches(path, hint)
+                !hint_norm.is_empty()
+                    && (path_s.contains(&hint_norm) || parts.iter().any(|p| path_s.contains(p)))
             };
-            if !ok {
-                continue;
-            }
-            for id in ids {
-                if data
-                    .mesh
-                    .node(id)
-                    .is_some_and(|n| n.node_type == NodeType::File)
-                {
-                    matches.push(id.clone());
-                }
+            if ok {
+                matches.extend(ids.iter().cloned());
             }
         }
         if matches.len() == 1 {
@@ -1764,21 +1890,14 @@ impl NeuralProjectGraph {
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string())
             {
-                for (path, ids) in &data.file_to_nodes {
-                    let path_s = normalize_path_hint(&path.to_string_lossy());
-                    if path_s.ends_with(&format!("/{stem}"))
+                let slash_stem = format!("/{stem}");
+                let slash_stem_dot = format!("/{stem}.");
+                for (path_s, ids) in table.iter() {
+                    if path_s.ends_with(&slash_stem)
                         || path_s.ends_with(&stem)
-                        || path_s.contains(&format!("/{stem}."))
+                        || path_s.contains(&slash_stem_dot)
                     {
-                        for id in ids {
-                            if data
-                                .mesh
-                                .node(id)
-                                .is_some_and(|n| n.node_type == NodeType::File)
-                            {
-                                matches.push(id.clone());
-                            }
-                        }
+                        matches.extend(ids.iter().cloned());
                     }
                 }
             }
@@ -1787,6 +1906,7 @@ impl NeuralProjectGraph {
             return matches.into_iter().next();
         }
         if path_like && matches.len() > 1 {
+            let data = self.inner.read();
             let suffix: Vec<NodeId> = matches
                 .into_iter()
                 .filter(|id| {
@@ -2617,8 +2737,10 @@ impl NeuralProjectGraph {
         crate::timing("ingest", t0);
         let t0 = std::time::Instant::now();
         self.apply_manifest_hints(scanned);
+        crate::timing("manifest", t0);
+        let t0 = std::time::Instant::now();
         self.finalize_links();
-        crate::timing("manifest+links", t0);
+        crate::timing("links", t0);
         // Built now, not on the first question that needs it.
         let _ = self.file_rank_index();
         if !keep_source {
@@ -3755,6 +3877,29 @@ fn narrow_exact_case(data: &GraphData, ids: Vec<NodeId>, name: &str) -> (Vec<Nod
 }
 
 fn same_file_path(path: &Path, hint: &str) -> bool {
+    // Every way of matching below ends both sides on the same last segment,
+    // so differing file names settle it without allocating: `resolve_in_file`
+    // runs this over every `__init__` in django for every call it links.
+    let hint_last = hint.rsplit(['/', '\\']).next().unwrap_or(hint);
+    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+        if name.is_ascii() && hint_last.is_ascii() {
+            let fold = |x: u8| {
+                if x == b'-' {
+                    b'_'
+                } else {
+                    x.to_ascii_lowercase()
+                }
+            };
+            let same = name.len() == hint_last.len()
+                && name
+                    .bytes()
+                    .zip(hint_last.bytes())
+                    .all(|(a, b)| fold(a) == fold(b));
+            if !same {
+                return false;
+            }
+        }
+    }
     let path = normalize_path_hint(&path.to_string_lossy());
     let hint = normalize_path_hint(hint);
     if path.is_empty() || hint.is_empty() {

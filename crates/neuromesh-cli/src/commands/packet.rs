@@ -75,7 +75,9 @@ pub fn execute(args: &[String]) -> Result<()> {
         project_id.clone(),
         FileCapArg::Unspecified,
     );
+    let t0 = Instant::now();
     let scanned = walker.scan().unwrap_or_default();
+    neuromesh_graph::timing("scan", t0);
 
     let graph = Arc::new(NeuralProjectGraph::new(project_id.clone()));
     let _ = graph.load_persisted(&current_dir);
@@ -91,6 +93,7 @@ pub fn execute(args: &[String]) -> Result<()> {
     let started = Instant::now();
     let view = activator.activate_tiered(&graph, &signature, OptimizationMode::Balanced);
     let latency_ms = started.elapsed().as_millis() as u64;
+    neuromesh_graph::timing("activate_tiered", started);
 
     let selected_paths = neuromesh_context::gold::packet_file_order(&graph, &prompt, &view);
     let mut files: Vec<String> = packet_file_names(&view).into_iter().collect();
