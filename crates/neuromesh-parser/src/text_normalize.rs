@@ -109,7 +109,10 @@ mod tests {
         assert!(!out.contains("Search before asking"));
         assert!(!out.contains("similar issues"));
         assert!(!out.contains("describe the bug"));
-        assert_eq!(strip_issue_boilerplate("### short question"), "### short question");
+        assert_eq!(
+            strip_issue_boilerplate("### short question"),
+            "### short question"
+        );
     }
 
     #[test]
