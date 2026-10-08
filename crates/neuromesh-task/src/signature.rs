@@ -1,6 +1,7 @@
 use neuromesh_core::{TaskIntent, TaskRisk, TaskSignature};
 use neuromesh_parser::{
     extract_embedded_code_tokens, extract_prompt_anchors, is_imperative_verb, normalize_unicode,
+    strip_issue_boilerplate,
 };
 use uuid::Uuid;
 
@@ -8,7 +9,7 @@ pub struct TaskSignatureExtractor;
 
 impl TaskSignatureExtractor {
     pub fn extract(prompt: &str) -> TaskSignature {
-        let prompt = normalize_unicode(prompt);
+        let prompt = strip_issue_boilerplate(&normalize_unicode(prompt));
         let lower = prompt.to_lowercase();
         let anchors = extract_prompt_anchors(&prompt);
         let embedded = extract_embedded_code_tokens(&prompt);

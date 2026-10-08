@@ -1045,6 +1045,67 @@ pub fn packet_file_order(
     fused.into_iter().map(|(p, _)| p).collect()
 }
 
+/// Where to look, best first, `k` deep: the packet's files in
+/// [`packet_file_order`], then the whole-question ranking's next source files
+/// (tests, docs and examples left out). A packet is 1–5 files; a localisation
+/// list ("which file does this issue need changed?", file-level Acc@k as
+/// SWE-bench localisation papers report it) needs more candidates than the
+/// packet ships, and the runners-up are the files an agent should open next.
+pub fn localization_order(
+    graph: &neuromesh_graph::NeuralProjectGraph,
+    prompt: &str,
+    view: &ContextView,
+    k: usize,
+) -> Vec<String> {
+    // A packet may carry a test, a fixture or a doc page as context; where to
+    // change code is a source file, so those go last.
+    let (mut out, aside): (Vec<String>, Vec<String>) = packet_file_order(graph, prompt, view)
+        .into_iter()
+        .partition(|p| !crate::selector::is_noise_path(std::path::Path::new(p)));
+    let mut seen: std::collections::HashSet<String> =
+        out.iter().chain(aside.iter()).cloned().collect();
+    for r in graph.file_rank(prompt, 4 * k.max(10)) {
+        if out.len() >= k {
+            break;
+        }
+        if crate::selector::is_noise_path(&r.path) {
+            continue;
+        }
+        let p = r.path.to_string_lossy().replace('\\', "/");
+        if seen.insert(p.clone()) {
+            out.push(p);
+        }
+    }
+    // A long report also votes definition by definition: reciprocal-rank
+    // fusion (k = 60, equal weight) of this list with the definition-level
+    // ranking (SWE-bench dev-fast, 57 issues: Acc@1 0.211 → 0.298, @5 0.544
+    // → 0.614 in the prototype).
+    if prompt.split_whitespace().count() >= neuromesh_parser::text_normalize::REPORT_WORDS {
+        const K: f32 = 60.0;
+        let by_def: Vec<String> = graph
+            .chunk_rank(prompt, 4 * k.max(10))
+            .into_iter()
+            .filter(|r| !crate::selector::is_noise_path(&r.path))
+            .map(|r| r.path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        let mut fused: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
+        for list in [&out, &by_def] {
+            for (i, p) in list.iter().enumerate() {
+                *fused.entry(p.clone()).or_insert(0.0) += 1.0 / (K + i as f32 + 1.0);
+            }
+        }
+        let mut order: Vec<(String, f32)> = fused.into_iter().collect();
+        order.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        out = order
+            .into_iter()
+            .map(|(p, _)| p)
+            .take(k.max(out.len()))
+            .collect();
+    }
+    out.extend(aside);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

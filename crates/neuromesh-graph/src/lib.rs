@@ -1,4 +1,5 @@
 pub mod activation;
+mod chunk_rank;
 pub mod concept_index;
 pub mod edge;
 pub mod embeddings;
