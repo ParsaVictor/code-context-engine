@@ -125,7 +125,13 @@ pub fn path_escapes_workspace(full_path: &Path, root: &Path) -> bool {
     let Ok(root) = root.canonicalize() else {
         return true;
     };
-    let root = strip_verbatim_prefix(&root);
+    path_escapes_canonical_root(full_path, &root)
+}
+
+/// [`path_escapes_workspace`] with `root` already canonicalized — a scan
+/// checks thousands of files against one root.
+pub fn path_escapes_canonical_root(full_path: &Path, root: &Path) -> bool {
+    let root = strip_verbatim_prefix(root);
     match full_path.canonicalize() {
         Ok(canon) => !is_path_within(&strip_verbatim_prefix(&canon), &root),
         Err(_) => fs::symlink_metadata(full_path)

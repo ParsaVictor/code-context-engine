@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 from compare_baselines import Bm25, repo_files  # noqa: E402
@@ -31,13 +32,24 @@ def gold_files(patch):
 
 
 def checkout(clone, commit, dest):
-    if os.path.isdir(dest):
-        subprocess.run(["git", "-C", clone, "worktree", "remove", "--force", dest], capture_output=True)
-        shutil.rmtree(dest, ignore_errors=True)
-    subprocess.run(["git", "-C", clone, "worktree", "prune"], capture_output=True)
-    r = subprocess.run(["git", "-C", clone, "worktree", "add", "--detach", dest, commit], capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(r.stderr.strip()[-300:])
+    """Fresh worktree of `commit` at `dest`. Parallel shards share one clone and
+    git's worktree bookkeeping takes locks, so a failed add is retried (39 of the
+    first 276 test-split instances were lost to that, not to the engine)."""
+    clone, dest = os.path.abspath(clone), os.path.abspath(dest)
+    last = ""
+    for attempt in range(5):
+        if os.path.isdir(dest):
+            subprocess.run(["git", "-C", clone, "worktree", "remove", "--force", dest], capture_output=True)
+            shutil.rmtree(dest, ignore_errors=True)
+        subprocess.run(["git", "-C", clone, "worktree", "prune"], capture_output=True)
+        r = subprocess.run(["git", "-C", clone, "worktree", "add", "--detach", dest, commit],
+                           capture_output=True, text=True)
+        ok = subprocess.run(["git", "-C", dest, "rev-parse", "HEAD"], capture_output=True, text=True)
+        if r.returncode == 0 and ok.stdout.strip().startswith(commit[:12]):
+            return
+        last = r.stderr.strip()[-300:]
+        time.sleep(3 + 5 * attempt)
+    raise RuntimeError(last)
 
 
 def run_packet(binary, workspace, query):

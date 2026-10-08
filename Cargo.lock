@@ -1921,6 +1921,7 @@ dependencies = [
  "dirs",
  "neuromesh-core",
  "notify",
+ "rayon",
  "serde",
  "serde_json",
  "tokio",
