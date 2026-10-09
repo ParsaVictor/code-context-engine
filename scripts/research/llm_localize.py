@@ -102,6 +102,8 @@ def main():
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--issue-chars", type=int, default=6000)
     ap.add_argument("--subset", default="")
+    ap.add_argument("--shuffle", action="store_true",
+                    help="list candidates alphabetically, hiding the engine's order from the model")
     args = ap.parse_args()
     rows = {r["instance_id"]: r for r in json.load(open(args.data, encoding="utf-8"))}
     keep = None
@@ -123,8 +125,9 @@ def main():
                 checkout(os.path.join(args.repos, name), row["base_commit"], dest)
                 cands = r["loc_files"][: args.top]
                 issue = strip_boilerplate(row["problem_statement"])[: args.issue_chars]
+                shown = sorted(cands) if args.shuffle else cands
                 prompt = PROMPT.format(issue=issue, k=args.k,
-                                       skeletons="\n\n".join(skeleton(dest, c) for c in cands))
+                                       skeletons="\n\n".join(skeleton(dest, c) for c in shown))
                 t0 = time.time()
                 try:
                     answer, usage = chat(args.endpoint, prompt)

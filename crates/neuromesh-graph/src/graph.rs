@@ -776,6 +776,21 @@ impl NeuralProjectGraph {
         self.chunk_rank_index().rank(&prompt[..end], limit)
     }
 
+    /// Definitions (functions, methods, classes) ranked for a long report —
+    /// the function-level counterpart of [`Self::chunk_rank`].
+    pub fn rank_definitions(
+        &self,
+        prompt: &str,
+        limit: usize,
+    ) -> Vec<crate::chunk_rank::RankedDefinition> {
+        let mut end = prompt.len().min(32 * 1024);
+        while !prompt.is_char_boundary(end) {
+            end -= 1;
+        }
+        self.chunk_rank_index()
+            .rank_definitions(&prompt[..end], limit)
+    }
+
     fn chunk_rank_index(&self) -> Arc<crate::chunk_rank::ChunkRankIndex> {
         let (key, files) = {
             let data = self.inner.read();
@@ -793,6 +808,7 @@ impl NeuralProjectGraph {
                 }
                 let mut file_id = None;
                 let mut spans = Vec::new();
+                let mut names = Vec::new();
                 for id in ids {
                     let Some(node) = data.mesh.node(id) else {
                         continue;
@@ -802,11 +818,15 @@ impl NeuralProjectGraph {
                     } else if let Some(r) = &node.line_range {
                         if r.end > r.start {
                             spans.push(r.clone());
+                            names.push(match &node.parent {
+                                Some(p) if !p.is_empty() => format!("{p}.{}", node.name),
+                                _ => node.name.clone(),
+                            });
                         }
                     }
                 }
                 if let Some(id) = file_id {
-                    files.push((id, path.clone(), spans));
+                    files.push((id, path.clone(), spans, names));
                 }
             }
             (key, files)
@@ -814,13 +834,14 @@ impl NeuralProjectGraph {
         let t0 = std::time::Instant::now();
         let sources: Vec<crate::chunk_rank::ChunkSource> = files
             .into_par_iter()
-            .filter_map(|(id, path, spans)| {
+            .filter_map(|(id, path, spans, names)| {
                 let source = self.read_source(&path)?;
                 Some(crate::chunk_rank::ChunkSource {
                     id,
                     path,
                     source,
                     spans,
+                    names,
                 })
             })
             .collect();
