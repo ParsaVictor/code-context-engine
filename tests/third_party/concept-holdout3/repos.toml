@@ -1,0 +1,11 @@
+# Third plain-language holdout (2026-10-09): written to confirm the
+# cross-encoder reorder (jina-reranker-v2) on a repository and language
+# (Go) that no plain-language decision has looked at. Gold written from
+# reading the source before any engine run; locked by this commit.
+#
+#   cobra — spf13/cobra v1.8.1: Go CLI framework, 14 source files + doc/
+
+[[repo]]
+name = "cobra"
+url = "https://github.com/spf13/cobra"
+rev = "e94f6d0dd9a5e5738dca6bce03c4b1207ffbc0ec"

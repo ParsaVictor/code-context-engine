@@ -1,0 +1,86 @@
+# Locked 2026-10-09 before any engine run on cobra. Plain-language
+# questions only; gold from reading the source (grep-checked).
+
+[[task]]
+id = "cobra_did_you_mean"
+prompt = "When a user mistypes a subcommand, how does it come up with the did-you-mean suggestions?"
+gold_files = ["command.go", "cobra.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_explorer_launch"
+prompt = "What happens on Windows when the program is started by double-clicking it in Explorer?"
+gold_files = ["command_win.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_flags_together"
+prompt = "How can I require that two flags are always given together, or forbid using them at the same time?"
+gold_files = ["flag_groups.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_positional_count"
+prompt = "How are the positional arguments a command accepts checked, for example requiring an exact number of them?"
+gold_files = ["args.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_fish"
+prompt = "How is the tab-completion script for the fish shell produced?"
+gold_files = ["fish_completions.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_man_pages"
+prompt = "How does it generate Unix manual pages for the commands?"
+gold_files = ["doc/man_docs.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_hint_messages"
+prompt = "Where are the extra hint messages shown under completion suggestions handled, and how can a user turn them off through an environment variable?"
+gold_files = ["active_help.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_offer_completions"
+prompt = "How does it work out which completions to offer while the user is typing a command line?"
+gold_files = ["completions.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_powershell"
+prompt = "How is completion supported in PowerShell?"
+gold_files = ["powershell_completions.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_markdown_docs"
+prompt = "How can it write a documentation page in Markdown for every command?"
+gold_files = ["doc/md_docs.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_find_subcommand"
+prompt = "How does it walk the tree of commands to figure out which subcommand the arguments refer to?"
+gold_files = ["command.go"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "cobra_zsh"
+prompt = "How are completions for zsh generated?"
+gold_files = ["zsh_completions.go"]
+forbidden_files = []
+expect_seeds_missed = false

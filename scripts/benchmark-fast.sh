@@ -27,6 +27,8 @@ declare -A MANIFEST=(
   [holdout-web]="tests/third_party/holdout-web/repos.toml"
   [concept-holdout]="tests/third_party/concept-holdout/repos.toml"
   [concept-holdout2]="tests/third_party/concept-holdout2/repos.toml"
+  [concept-holdout3]="tests/third_party/concept-holdout3/repos.toml"
+  [concept-holdout4]="tests/third_party/concept-holdout4/repos.toml"
 )
 declare -A TEST=(
   [dev]="third_party_gold"
@@ -41,6 +43,8 @@ declare -A TEST=(
   [concept]="third_party_private_gold"
   [concept-holdout]="third_party_private_gold"
   [concept-holdout2]="third_party_private_gold"
+  [concept-holdout3]="third_party_private_gold"
+  [concept-holdout4]="third_party_private_gold"
 )
 sets=("$@")
 if [ ${#sets[@]} -eq 0 ]; then
@@ -76,6 +80,8 @@ run_set() {
     concept) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept" NM_PRIVATE_DIR="$root/..") ;;
     concept-holdout) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept-holdout" NM_PRIVATE_DIR="$root/target/third_party/concept-holdout") ;;
     concept-holdout2) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept-holdout2" NM_PRIVATE_DIR="$root/target/third_party/concept-holdout2") ;;
+    concept-holdout3) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept-holdout3" NM_PRIVATE_DIR="$root/target/third_party/concept-holdout3") ;;
+    concept-holdout4) envs=(NM_PRIVATE_SET_DIR="$root/tests/third_party/concept-holdout4" NM_PRIVATE_DIR="$root/target/third_party/concept-holdout4") ;;
   esac
   # The harness resolves the workspace from its manifest dir at build time.
   (cd crates/neuromesh-context && env "${envs[@]}" "$bin" --nocapture >"$root/$out/$set.log" 2>&1 || true)

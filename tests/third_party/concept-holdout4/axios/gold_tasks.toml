@@ -1,0 +1,86 @@
+# Locked 2026-10-09 before any engine run on axios. Plain-language
+# questions only; gold from reading the source (grep-checked).
+
+[[task]]
+id = "ax_status_success"
+prompt = "How does it decide whether a response with a given status code counts as a success or a failure?"
+gold_files = ["lib/core/settle.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_merge_options"
+prompt = "How are two sets of request options combined when a call overrides the instance defaults?"
+gold_files = ["lib/core/mergeConfig.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_cancel_token"
+prompt = "How can a request that is already in flight be cancelled with a token?"
+gold_files = ["lib/cancel/CancelToken.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_hooks"
+prompt = "How do the hooks that run before a request is sent or after a response arrives get registered and removed?"
+gold_files = ["lib/core/InterceptorManager.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_cookies"
+prompt = "In the browser, how does it read and write cookies?"
+gold_files = ["lib/helpers/cookies.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_same_origin"
+prompt = "How does it check whether the request URL is on the same origin as the current page?"
+gold_files = ["lib/helpers/isURLSameOrigin.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_speed"
+prompt = "How is the transfer speed measured for progress reporting?"
+gold_files = ["lib/helpers/speedometer.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_data_uri"
+prompt = "How does it turn a data: URI into a buffer or a blob?"
+gold_files = ["lib/helpers/fromDataURI.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_parse_headers"
+prompt = "How are raw response header lines parsed into an object, and what happens with duplicate headers?"
+gold_files = ["lib/helpers/parseHeaders.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_pick_transport"
+prompt = "How does it pick which transport to use: the browser XHR, fetch, or the Node http module?"
+gold_files = ["lib/adapters/adapters.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_node_redirects"
+prompt = "How does it follow redirects and decompress gzip responses when running in Node?"
+gold_files = ["lib/adapters/http.js"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "ax_nested_form"
+prompt = "How are nested form field names like foo[x][y] turned into a JSON object?"
+gold_files = ["lib/helpers/formDataToJSON.js"]
+forbidden_files = []
+expect_seeds_missed = false

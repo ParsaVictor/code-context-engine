@@ -119,7 +119,10 @@ class AiderRank:
 
 def score(ranked, gold, k):
     top = [f.replace("\\", "/") for f in ranked[:k]]
-    hits = sum(1 for g in gold if any(t.endswith(g) for t in top))
+    # On a path-segment boundary: `zsh_completions.go` is not `completions.go`
+    # (plain `endswith` counted it, inflating BM25 on repositories with
+    # root-level files — cobra R@3 0.958 was really lower).
+    hits = sum(1 for g in gold if any(t == g or t.endswith("/" + g) for t in top))
     return hits / len(gold), (hits / len(top) if top else 0.0)
 
 

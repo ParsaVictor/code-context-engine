@@ -262,3 +262,35 @@ sharding overlapped when a resumed run started (now hash sharding).
 Paper next: (1) head-to-head on LocAgent's exact 274-instance subset; (2) an LLM stage over
 `where_to_look` (Agentless-style file choice) to measure Acc@1 at a fraction of agent tokens;
 (3) ablation table from §8.3 on the holdout (one run per component removed).
+
+### 8.6 Plain-language questions: two fresh holdouts, reranker verdict, list fusion (2026-10-09)
+
+Two new holdouts, gold written from source and committed before any run: **concept-holdout3**
+(spf13/cobra v1.8.1, Go, 12 q) and **concept-holdout4** (axios v1.7.7, JavaScript, 12 q).
+
+Cross-encoder (jina-reranker-v2) on cobra, run once: R@3 of the localisation list 0.792 → **0.708**
+(engine), 0.625 (pure rerank). It had helped ripgrep and click (§8.4) — it does not generalise.
+**Rejected**; code kept on branch `phase-o/rerank-v2` only. This is the holdout principle catching a
+result two looked-at sets suggested.
+
+Short-question list fusion (S1): the localisation list for a short question is now the RRF of the
+packet order and the whole-question ranking (a packet's activation order puts hub files like
+cobra's `command.go` first). R@3, decided on four sets that had been looked at:
+
+| set | before | S1 | S2 (+definition ranking) | BM25 R@3 |
+|---|---|---|---|---|
+| ripgrep | 0.208 | **0.500** | 0.417 | 0.500 |
+| click | 0.750 | **0.917** | 0.917 | 0.750 |
+| this repo | 0.643 | 0.643 | 0.643 | 0.357 |
+| cobra (looked at after its single run) | 0.792 | **0.875** | 0.792 | 0.875 |
+| **axios (fresh, run once)** | 0.833 | 0.833 | — | 0.583 |
+
+Kept S1: gains on three sets, no loss anywhere, neutral on the fresh holdout (so the gain is
+dev-class until another holdout confirms it). Packets are unchanged (list order only); fourteen sets
+unchanged; packet recall/precision on the new sets: cobra 0.833/0.357, axios 0.667/0.528.
+
+**Evaluation bug found and fixed:** the Python baselines matched gold by plain `endswith`, so a gold
+`completions.go` was "found" by `zsh_completions.go`. Only sets with root-level gold files are
+affected: cobra BM25 R@3 is 0.875, not the 0.958 first printed. Re-run on every published set
+(holdout-2/c/ml2/lang, ripgrep, click, this repo): identical numbers. SWE-bench Lite has no root-level
+gold file (dev: 4 of 225, Verified: 1 of 500), and the Rust gold harness matches bare names exactly.

@@ -95,7 +95,8 @@ def run_packet(binary, workspace, query):
 def hit(files, gold, k=None):
     top = files if k is None else files[:k]
     top = [f.replace("\\", "/") for f in top]
-    return int(all(any(t.endswith(g) or g.endswith(t) for t in top) for g in gold))
+    same = lambda t, g: t == g or t.endswith("/" + g) or g.endswith("/" + t)  # noqa: E731
+    return int(all(any(same(t, g) for t in top) for g in gold))
 
 
 def main():
