@@ -421,44 +421,6 @@ fn def_depth() -> usize {
         .unwrap_or(20)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_packet_flags() {
-        let args = vec![
-            "--json".into(),
-            "--engine".into(),
-            "hybrid".into(),
-            "--keywords".into(),
-            "Session,redirect".into(),
-            "--expansion".into(),
-            "retry,HTTPAdapter".into(),
-            "--query".into(),
-            "How does redirect work?".into(),
-        ];
-        let parsed = parse_args(&args).unwrap();
-        assert!(parsed.json);
-        assert_eq!(parsed.engine, Some(RetrievalEngine::Hybrid));
-        assert_eq!(parsed.keywords, vec!["Session", "redirect"]);
-        assert_eq!(parsed.expansion, vec!["retry", "HTTPAdapter"]);
-        assert_eq!(parsed.query.as_deref(), Some("How does redirect work?"));
-    }
-
-    #[test]
-    fn positional_prompt_when_no_query_flag() {
-        let args = vec![
-            "--json".into(),
-            "Where".into(),
-            "is".into(),
-            "HTTPAdapter.send?".into(),
-        ];
-        let parsed = parse_args(&args).unwrap();
-        assert_eq!(parsed.query.as_deref(), Some("Where is HTTPAdapter.send?"));
-    }
-}
-
 /// Definition lists under research settings, only when `NM_DIAG=1` (one run
 /// measures several variants on the same checkouts).
 fn diag_definitions(
@@ -530,4 +492,42 @@ fn diag_definitions(
             })
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_packet_flags() {
+        let args = vec![
+            "--json".into(),
+            "--engine".into(),
+            "hybrid".into(),
+            "--keywords".into(),
+            "Session,redirect".into(),
+            "--expansion".into(),
+            "retry,HTTPAdapter".into(),
+            "--query".into(),
+            "How does redirect work?".into(),
+        ];
+        let parsed = parse_args(&args).unwrap();
+        assert!(parsed.json);
+        assert_eq!(parsed.engine, Some(RetrievalEngine::Hybrid));
+        assert_eq!(parsed.keywords, vec!["Session", "redirect"]);
+        assert_eq!(parsed.expansion, vec!["retry", "HTTPAdapter"]);
+        assert_eq!(parsed.query.as_deref(), Some("How does redirect work?"));
+    }
+
+    #[test]
+    fn positional_prompt_when_no_query_flag() {
+        let args = vec![
+            "--json".into(),
+            "Where".into(),
+            "is".into(),
+            "HTTPAdapter.send?".into(),
+        ];
+        let parsed = parse_args(&args).unwrap();
+        assert_eq!(parsed.query.as_deref(), Some("Where is HTTPAdapter.send?"));
+    }
 }

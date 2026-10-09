@@ -524,7 +524,7 @@ fusion clears it only at func Acc@1, a metric the bar does not name, so it is no
 ### 8.16 Fifth plain-language holdout: jsoup (Java), run once (2026-10-10)
 
 `concept-holdout5`: jhy/jsoup 1.18.1, 12 plain-language questions, gold written from the source
-and committed (`2b9f4a3`) before any engine run. Purpose fixed in advance: confirm the
+and committed (`2b9f4a3` on the pushed branch, `b86026c` after rebase) before any engine run. Purpose fixed in advance: confirm the
 short-question list fusion (S1, §8.6), which had been decided on looked-at sets and was only
 neutral on axios. Run once with three binaries chosen beforehand (v1.2.0 = before S1, v1.3.0 =
 S1, the v1.4 candidate) and BM25:
