@@ -1,0 +1,11 @@
+# Fourth plain-language holdout (2026-10-09), JavaScript: written to confirm
+# the short-question list fusion decided on ripgrep/click/this repo/cobra.
+# Gold written from reading the source before any engine run; locked by
+# this commit.
+#
+#   axios — axios/axios v1.7.7: HTTP client for the browser and Node
+
+[[repo]]
+name = "axios"
+url = "https://github.com/axios/axios"
+rev = "5b8a826771b77ab30081d033fdba9ef3b90e439a"
