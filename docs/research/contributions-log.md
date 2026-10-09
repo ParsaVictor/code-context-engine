@@ -222,3 +222,43 @@ than lexical ranking on all three sets, and hurts on *long issue reports* (trunc
 loses the report's specifics; the first stage already reads the whole report). The earlier v1
 rejection (§4) was a different experiment — it changed packet *content* (recall collapsed); this one
 only reorders. Paper: the query-length split is a finding in itself.
+
+Further rejected on dev-fast (session 17, numbers vs d = 0.254/0.492/0.576/0.695, 59 issues):
+
+| idea | Acc@1 | Acc@3 | Acc@5 | Acc@10 | verdict |
+|---|---|---|---|---|---|
+| data/CI files (`.yml`, `.json`, `.toml`…) moved behind code in the list | = | = | = | = | no effect, not kept |
+| graph neighbours of the top three files as a third RRF vote, equal weight (LocAgent-style expansion) | 0.136 | 0.373 | 0.525 | 0.661 | rejected |
+| same, weight 0.25 | 0.136 | 0.475 | 0.576 | 0.678 | rejected |
+
+Graph expansion pulls in hubs the top files call (base classes, utils) ahead of the edited module;
+LocAgent gets value from the graph through an LLM choosing which edges to follow, not from a
+blind neighbour vote.
+
+### 8.5 Holdout: SWE-bench Lite test, one run (2026-10-09, binary main d6854b6 = v1.2.0 engine)
+
+| | Acc@1 | Acc@3 | Acc@5 | Acc@10 |
+|---|---|---|---|---|
+| **ours, strict holdout (276; excludes the 24 session-16 dev-class instances)** | **0.486** [0.43,0.55] | **0.710** [0.65,0.76] | **0.750** [0.70,0.80] | **0.804** |
+| ours, all 300 | 0.473 | 0.703 | 0.747 | 0.810 |
+| ours, packet order only (276) | 0.366 | 0.536 | 0.558 | – |
+| plain BM25 (276) | 0.301 | 0.507 | 0.587 | 0.721 |
+| ours before session 17 (v1.1 + #131, packet, 258) | 0.337 | 0.504 | 0.535 | – |
+
+Cost: CPU only, no LLM, no embeddings; p50 2.8 s / p90 11.4 s per issue *including a cold index of
+the checkout*; packet p50 11.1k tokens.
+
+Reading against LocAgent Table 4 (different filtered subset — context, not a head-to-head): above
+Jina-Code-v2 at @1 (0.486 vs 0.434), equal at @3 (0.710 vs 0.712), below at @5 (0.750 vs 0.803);
+below CodeRankEmbed everywhere; at @5 level with Agentless+GPT-4o (0.750 vs 0.745) and below every
+LLM method at @1. Dev → holdout transfer: the gain over BM25 on dev (+0.09/+0.14/+0.17 @1/3/5) held
+on holdout (+0.19/+0.20/+0.16) — no sign of overfitting to the dev split.
+
+Harness lessons (for the paper's reproducibility section): blobless clones need network at checkout
+time; Windows MAX_PATH broke 14 scikit-learn checkouts under a deep temp path (fixed with a short
+work dir); worktree re-creation per instance made the run IO-bound (now reused); positional
+sharding overlapped when a resumed run started (now hash sharding).
+
+Paper next: (1) head-to-head on LocAgent's exact 274-instance subset; (2) an LLM stage over
+`where_to_look` (Agentless-style file choice) to measure Acc@1 at a fraction of agent tokens;
+(3) ablation table from §8.3 on the holdout (one run per component removed).

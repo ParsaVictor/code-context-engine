@@ -47,6 +47,36 @@ tuning sets, whose golds *do* want the neighbours — see `docs/planning/stage5-
 (F36′, F46, F47). Per-language, the gap is widest on flat package namespaces (R: 0.24) and
 narrowest where a question names one object (Scala: 0.80).
 
+## SWE-bench Lite file localisation (2026-10-09, v1.2.0, single holdout run)
+
+Question = the issue text as filed; gold = the files the reference patch edits; metric = file-level
+Acc@k (every gold file in the top k), as LocAgent reports it. The engine's list is `localization` in
+`neuromesh packet --json` (`where_to_look` over MCP). No LLM, no embeddings, CPU only; p50 2.8 s per
+issue including a cold index of the checkout.
+
+Tuning used only the SWE-bench **dev** split (225 issues, six other repositories). Lite test was run
+once with the release binary. The 24 Lite instances from flask/requests/seaborn/xarray/pylint were
+looked at in session 16 and are excluded from the strict row.
+
+| Lite test | Acc@1 | Acc@3 | Acc@5 | Acc@10 |
+|---|---|---|---|---|
+| **this engine, strict holdout (276)** | **0.486** | **0.710** | **0.750** | **0.804** |
+| this engine, all 300 | 0.473 | 0.703 | 0.747 | 0.810 |
+| plain BM25 over the checkout (276) | 0.301 | 0.507 | 0.587 | 0.721 |
+| 1.1.0 + issue mode, packet order (258, session 16) | 0.337 | 0.504 | 0.535 | – |
+
+95% bootstrap intervals for the strict row: @1 [0.43, 0.55], @3 [0.65, 0.76], @5 [0.70, 0.80].
+
+Published reference points (LocAgent, arXiv 2503.09089, Table 4; their filtered Lite subset, not the
+same instances, so read as context): BM25 0.387 / 0.518 / 0.617; Jina-Code-v2 embeddings 0.434 /
+0.712 / 0.803; CodeRankEmbed 0.526 / 0.777 / 0.847; Agentless with GPT-4o 0.672 / 0.745 / 0.745,
+with Claude-3.5 0.726 / 0.792 / 0.796; LocAgent with Claude-3.5 0.777 / 0.920 / 0.942. LLM agents
+remain ahead at Acc@1; the engine is an LLM-free first stage they can start from.
+
+SWE-bench dev (tuning set, 225): plain BM25 0.160 / 0.347 / 0.427 / 0.538 → 0.249 / 0.484 / 0.600 /
+0.680. Raw results: `swebench/results-final-test.jsonl` (outside the repository); harness
+`scripts/swebench_localize.py`, scoring `scripts/research/eval_loc.py`.
+
 ## Speed (same machine, same hour, release binary without embeddings)
 
 ultralytics, 931 files: index ≈3.6 s; one question end-to-end p50 ≈0.70 s (n=10, cold process each
