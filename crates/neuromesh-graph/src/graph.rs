@@ -825,8 +825,18 @@ impl NeuralProjectGraph {
                         }
                     }
                 }
+                // A definition is a container when another one in the file
+                // names it as its parent (a class with methods): it votes for
+                // its file but is left out of the function-level list.
+                let parents: HashSet<&str> = ids
+                    .iter()
+                    .filter_map(|id| data.mesh.node(id))
+                    .filter_map(|n| n.parent.as_deref())
+                    .collect();
+                let containers: Vec<bool> =
+                    names.iter().map(|n| parents.contains(n.as_str())).collect();
                 if let Some(id) = file_id {
-                    files.push((id, path.clone(), spans, names));
+                    files.push((id, path.clone(), spans, names, containers));
                 }
             }
             (key, files)
@@ -834,7 +844,7 @@ impl NeuralProjectGraph {
         let t0 = std::time::Instant::now();
         let sources: Vec<crate::chunk_rank::ChunkSource> = files
             .into_par_iter()
-            .filter_map(|(id, path, spans, names)| {
+            .filter_map(|(id, path, spans, names, containers)| {
                 let source = self.read_source(&path)?;
                 Some(crate::chunk_rank::ChunkSource {
                     id,
@@ -842,6 +852,7 @@ impl NeuralProjectGraph {
                     source,
                     spans,
                     names,
+                    containers,
                 })
             })
             .collect();
