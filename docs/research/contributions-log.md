@@ -330,3 +330,34 @@ SWE-bench dev, 50 single-file issues name the gold file in their text, yet only 
   reproduces the prototype exactly (0.271/0.525/0.576/0.695). Fourteen sets unchanged.
 - **Error-message grep** (`error_grep_prior.py`): fires on 15 of 225 dev issues, fixes 2 (+0.009
   @1). Small and positive; not shipped.
+
+### 8.9 Local LLM stage (D1, Agentless-style) — pilot on a laptop CPU
+
+Setup: llama.cpp b11172 (official release), Qwen2.5-Coder-3B-Instruct Q4_K_M (official GGUF,
+sha256 verified), one call per issue over the engine's top-10 localisation candidates with a
+signature skeleton of each (`scripts/research/llm_localize.py`): ~2.2k prompt tokens per issue
+(Agentless sends the repository structure). Hardware: Ryzen 5 7530U (6 cores), no discrete GPU;
+the Vulkan iGPU path was slower than CPU (18 vs 20 prompt tok/s) → ~105 s per issue.
+
+Pilot, 15 random dev-fast issues, candidates in engine order: Acc@1/3/5 0.200/0.467/0.600 →
+identical. The 3B model returns the list in the order shown (position bias). Next: candidates in
+alphabetical order (`--shuffle`).
+
+Shuffle variant (candidates alphabetical, same 15 issues): Acc@1/3/5 0.200/0.467/0.600 →
+**0.067/0.400/0.600**. Without the engine's order the 3B model judges worse than the lexical +
+structural ranking; with it, it copies it. **Rejected** for a 3B model on CPU: the LLM stage needs a
+stronger judge (an API model, or a 7B fine-tuned one as LocAgent's Qwen2.5-7B(ft) at 0.708 Acc@1),
+which this laptop runs at ~5 min per issue. Finding for the paper: the engine's ranking already
+beats a small local LLM as a judge, so the LLM budget is better spent on a strong model at one call
+per issue over `where_to_look` than on a local small one.
+
+### 8.10 Function-level output (C14)
+
+`chunk_rank` already scores definitions; `packet --json` now lists them for a report
+(`definitions`: path, `Class.method`, lines; 20 deep, `NM_DEFINITIONS` for research runs).
+Function gold = innermost function containing a removed line / insertion point of the reference
+patch at the base commit (`scripts/research/func_eval.py`, LocAgent's metric: all edited
+functions in the top k). dev-fast (48 issues with function gold): func Acc@1/5/10/20
+0.062/0.229/0.292/0.396 (raw definition ranking, no file prior). Reference (LocAgent Table 4, Lite,
+function level Acc@5/@10): BM25 0.318/0.369, CodeRankEmbed 0.518/0.588, Agentless+Claude 0.588,
+LocAgent+Claude 0.734/0.774. File-prior orderings (`func_hier.py`) pending the full-dev run.

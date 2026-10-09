@@ -44,6 +44,10 @@ struct PacketJsonOut {
     /// Packet files, then the next source files of the whole-question ranking
     /// (20 deep): where to look, best first.
     localization: Vec<String>,
+    /// For a long report: definitions ranked by the report (path, name,
+    /// lines), 20 deep — function-level localisation.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    definitions: Vec<neuromesh_graph::RankedDefinition>,
     /// The whole-question file ranking (BM25F), top 10, for evaluation.
     ranked_paths: Vec<String>,
     identifiers: Vec<String>,
@@ -130,6 +134,19 @@ pub fn execute(args: &[String]) -> Result<()> {
         selected_files: files.clone(),
         selected_paths,
         localization,
+        definitions: if prompt.split_whitespace().count()
+            >= neuromesh_parser::text_normalize::REPORT_WORDS
+        {
+            graph
+                .rank_definitions(&prompt, def_depth())
+                .into_iter()
+                .filter(|d| {
+                    !neuromesh_context::selector::is_noise_path(std::path::Path::new(&d.path))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        },
         ranked_paths: graph
             .file_rank(&prompt, 10)
             .into_iter()
@@ -395,6 +412,15 @@ fn apply_client_signals(signature: &mut TaskSignature, args: &PacketArgs) {
     let enabled =
         engine == RetrievalEngine::Fast && Config::load().seed_resolution.effective_auto_extract();
     apply_auto_extract_keywords(signature, prompt, enabled);
+}
+
+/// How many ranked definitions `packet --json` lists for a report
+/// (`NM_DEFINITIONS`, default 20; research runs ask for more).
+fn def_depth() -> usize {
+    std::env::var("NM_DEFINITIONS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20)
 }
 
 #[cfg(test)]

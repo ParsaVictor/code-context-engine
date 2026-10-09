@@ -162,6 +162,8 @@ def _main():
                     ours_hit=hit(files, gold),
                     **{f"ours_hit@{k}": hit(files, gold, k) for k in (1, 3, 5)},
                 )
+                if pkt.get("definitions"):
+                    rec["definitions"] = pkt["definitions"]
                 loc = pkt.get("localization") or []
                 if loc:
                     rec["loc_files"] = loc
