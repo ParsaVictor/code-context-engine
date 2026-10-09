@@ -70,17 +70,19 @@ tokens, definition-level BM25 with title ×3, RRF with the packet order → `whe
 
 † LocAgent Table 4, their 274-instance subset (head-to-head on the same subset: TODO).
 
-### 5.2 SWE-bench dev (225) and Verified (500, TODO)
+### 5.2 SWE-bench dev (225) and Verified (496 of 500)
 
 dev: BM25 0.160/0.347/0.427/0.538 → engine 0.249/0.484/0.600/0.680 (Acc@1/3/5/10).
+Verified (v1.2.0, run once): BM25 0.216/0.391/0.490/0.641 → engine 0.405/0.669/0.732/0.804; on the
+403 Verified issues not in Lite: 0.194/0.372/0.476/0.620 → 0.392/0.655/0.727/0.809.
 
-### 5.3 Ablation (Lite holdout) — TODO (runs in progress)
+### 5.3 Ablation (Lite holdout, 276)
 
 | removed | Acc@1 | Acc@3 | Acc@5 |
 |---|---|---|---|
 | nothing | 0.486 | 0.710 | 0.750 |
-| report hygiene + code tokens | TODO | | |
-| definition-level ranking | TODO | | |
+| report hygiene + code tokens | 0.467 | 0.707 | 0.743 |
+| definition-level ranking | 0.388 | 0.569 | 0.652 |
 | localisation list (packet order only) | 0.366 | 0.536 | 0.558 |
 
 ### 5.4 Plain-language holdouts (R@3)

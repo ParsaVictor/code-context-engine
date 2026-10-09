@@ -514,15 +514,27 @@ impl McpToolHandler {
                         >= neuromesh_parser::text_normalize::REPORT_WORDS
                     {
                         if let Some(obj) = value.as_object_mut() {
-                            obj.insert(
-                                "where_to_look".into(),
-                                json!(neuromesh_context::gold::localization_order(
-                                    &self.graph,
-                                    &task_desc,
-                                    &view,
-                                    10
-                                )),
+                            let files = neuromesh_context::gold::localization_order(
+                                &self.graph,
+                                &task_desc,
+                                &view,
+                                10,
                             );
+                            // The functions inside those files to read first
+                            // (`path:Class.method Lx-Ly`), five deep.
+                            let functions: Vec<String> = neuromesh_context::gold::definition_order(
+                                &self.graph,
+                                &task_desc,
+                                &files,
+                                5,
+                            )
+                            .into_iter()
+                            .map(|d| format!("{}:{} L{}-L{}", d.path, d.name, d.lines.0, d.lines.1))
+                            .collect();
+                            obj.insert("where_to_look".into(), json!(files));
+                            if !functions.is_empty() {
+                                obj.insert("functions_to_look".into(), json!(functions));
+                            }
                         }
                     }
                     neuromesh_graph::timing("mcp: cache_and_build", t_s);

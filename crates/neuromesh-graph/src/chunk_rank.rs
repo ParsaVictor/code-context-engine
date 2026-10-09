@@ -36,6 +36,9 @@ pub(crate) struct ChunkSource {
     pub spans: Vec<std::ops::Range<usize>>,
     /// The definition each span is (`Class.method`), same order as `spans`.
     pub names: Vec<String>,
+    /// Whether each span holds other definitions (a class): it still votes
+    /// for its file, but a function-level list names what is inside it.
+    pub containers: Vec<bool>,
 }
 
 /// One definition ranked for a report: where it is and how well it matched.
@@ -48,11 +51,10 @@ pub struct RankedDefinition {
 }
 
 /// A file's chunks as term counts, before they are numbered.
-type FileChunks = (
-    NodeId,
-    PathBuf,
-    Vec<(HashMap<String, u16>, String, usize, usize)>,
-);
+type FileChunks = (NodeId, PathBuf, Vec<(HashMap<String, u16>, Label)>);
+
+/// A chunk's definition name, first and last line, and whether it is a container.
+type Label = (String, usize, usize, bool);
 
 #[derive(Default)]
 pub(crate) struct ChunkRankIndex {
@@ -62,7 +64,7 @@ pub(crate) struct ChunkRankIndex {
     avg_len: f32,
     post: HashMap<String, Vec<(u32, u16)>>,
     /// Per chunk: definition name (`<head>` for the file head) and lines.
-    label: Vec<(String, usize, usize)>,
+    label: Vec<Label>,
 }
 
 impl ChunkRankIndex {
@@ -79,10 +81,15 @@ impl ChunkRankIndex {
                 };
                 let path_terms = terms_of(&stem_path, &st, true);
                 let lines: Vec<&str> = f.source.lines().collect();
-                let head = (1..HEAD_LINES.min(lines.len()), "<head>".to_string());
+                let head = (1..HEAD_LINES.min(lines.len()), ("<head>".to_string(), true));
                 let mut chunks = Vec::new();
-                let named = f.spans.iter().cloned().zip(f.names.iter().cloned());
-                for (span, name) in std::iter::once(head).chain(named) {
+                let named = f.spans.iter().cloned().zip(
+                    f.names
+                        .iter()
+                        .cloned()
+                        .zip(f.containers.iter().copied().chain(std::iter::repeat(false))),
+                );
+                for (span, (name, container)) in std::iter::once(head).chain(named) {
                     let start = span.start.max(1) - 1;
                     let end = span.end.min(lines.len()).min(start + MAX_CHUNK_LINES);
                     if start >= end {
@@ -97,7 +104,7 @@ impl ChunkRankIndex {
                         *c = c.saturating_add(1);
                     }
                     if !counts.is_empty() {
-                        chunks.push((counts, name, start + 1, end));
+                        chunks.push((counts, (name, start + 1, end, container)));
                     }
                 }
                 (f.id, f.path, chunks)
@@ -107,10 +114,10 @@ impl ChunkRankIndex {
         for (id, path, chunks) in per_file {
             let file = idx.files.len() as u32;
             idx.files.push((id, path));
-            for (counts, name, start, end) in chunks {
+            for (counts, label) in chunks {
                 let chunk = idx.file_of.len() as u32;
                 idx.file_of.push(file);
-                idx.label.push((name, start, end));
+                idx.label.push(label);
                 idx.len.push(counts.values().map(|&c| c as u32).sum());
                 for (t, c) in counts {
                     idx.post.entry(t).or_default().push((chunk, c));
@@ -122,19 +129,21 @@ impl ChunkRankIndex {
         idx
     }
 
-    /// Definitions by score for `prompt`, best first (file heads left out).
+    /// Functions and methods by score for `prompt`, best first. File heads and
+    /// containers (a class) are left out: on SWE-bench dev a class body outranked
+    /// the method the patch edits (func Acc@5 0.268 -> 0.311 without them).
     pub(crate) fn rank_definitions(&self, prompt: &str, limit: usize) -> Vec<RankedDefinition> {
         let mut scored: Vec<(u32, f32)> = self
             .scores(prompt)
             .into_iter()
-            .filter(|(c, _)| self.label[*c as usize].0 != "<head>")
+            .filter(|(c, _)| !self.label[*c as usize].3)
             .collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         scored
             .into_iter()
             .take(limit)
             .map(|(c, score)| {
-                let (name, start, end) = &self.label[c as usize];
+                let (name, start, end, _) = &self.label[c as usize];
                 RankedDefinition {
                     path: self.files[self.file_of[c as usize] as usize]
                         .1
@@ -231,6 +240,7 @@ mod tests {
             path: PathBuf::from(path),
             source: source.to_string(),
             names: spans.iter().map(|s| format!("def_{}", s.start)).collect(),
+            containers: vec![false; spans.len()],
             spans,
         }
     }
