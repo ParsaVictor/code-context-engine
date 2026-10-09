@@ -30,7 +30,8 @@ def norm(f):
 
 def acc(lst, gold, k):
     top = [norm(f) for f in lst[:k]]
-    return int(all(any(t.endswith(g) or g.endswith(t) for t in top) for g in gold))
+    same = lambda t, g: t == g or t.endswith("/" + g) or g.endswith("/" + t)  # noqa: E731
+    return int(all(any(same(t, g) for t in top) for g in gold))
 
 
 def rrf(a, b, k=60):

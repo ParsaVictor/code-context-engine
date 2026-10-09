@@ -1080,10 +1080,15 @@ pub fn localization_order(
     // fusion (k = 60, equal weight) of this list with the definition-level
     // ranking (SWE-bench dev-fast, 57 issues: Acc@1 0.211 → 0.298, @5 0.544
     // → 0.614 in the prototype).
-    if prompt.split_whitespace().count() >= neuromesh_parser::text_normalize::REPORT_WORDS {
+    let long = prompt.split_whitespace().count() >= neuromesh_parser::text_normalize::REPORT_WORDS;
+    {
         const K: f32 = 60.0;
-        let by_def: Vec<String> = graph
-            .chunk_rank(prompt, 4 * k.max(10))
+        let ranked = if long {
+            graph.chunk_rank(prompt, 4 * k.max(10))
+        } else {
+            graph.file_rank(prompt, 4 * k.max(10))
+        };
+        let by_def: Vec<String> = ranked
             .into_iter()
             .filter(|r| !crate::selector::is_noise_path(&r.path))
             .map(|r| r.path.to_string_lossy().replace('\\', "/"))
