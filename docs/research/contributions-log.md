@@ -222,3 +222,15 @@ than lexical ranking on all three sets, and hurts on *long issue reports* (trunc
 loses the report's specifics; the first stage already reads the whole report). The earlier v1
 rejection (§4) was a different experiment — it changed packet *content* (recall collapsed); this one
 only reorders. Paper: the query-length split is a finding in itself.
+
+Further rejected on dev-fast (session 17, numbers vs d = 0.254/0.492/0.576/0.695, 59 issues):
+
+| idea | Acc@1 | Acc@3 | Acc@5 | Acc@10 | verdict |
+|---|---|---|---|---|---|
+| data/CI files (`.yml`, `.json`, `.toml`…) moved behind code in the list | = | = | = | = | no effect, not kept |
+| graph neighbours of the top three files as a third RRF vote, equal weight (LocAgent-style expansion) | 0.136 | 0.373 | 0.525 | 0.661 | rejected |
+| same, weight 0.25 | 0.136 | 0.475 | 0.576 | 0.678 | rejected |
+
+Graph expansion pulls in hubs the top files call (base classes, utils) ahead of the edited module;
+LocAgent gets value from the graph through an LLM choosing which edges to follow, not from a
+blind neighbour vote.

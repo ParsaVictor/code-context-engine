@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 
 sys.path.insert(0, os.path.dirname(__file__))
 from compare_baselines import Bm25, repo_files  # noqa: E402
@@ -36,6 +37,16 @@ def checkout(clone, commit, dest):
     git's worktree bookkeeping takes locks, so a failed add is retried (39 of the
     first 276 test-split instances were lost to that, not to the engine)."""
     clone, dest = os.path.abspath(clone), os.path.abspath(dest)
+    # An existing worktree is moved to the commit in place: only files that
+    # differ are rewritten. Re-creating a django worktree per instance (6k
+    # files through the virus scanner) made a run IO-bound at minutes each.
+    if os.path.isdir(os.path.join(dest, ".git")) or os.path.isfile(os.path.join(dest, ".git")):
+        r = subprocess.run(["git", "-C", dest, "checkout", "--force", "--detach", commit],
+                           capture_output=True, text=True)
+        subprocess.run(["git", "-C", dest, "clean", "-ffdxq"], capture_output=True)
+        ok = subprocess.run(["git", "-C", dest, "rev-parse", "HEAD"], capture_output=True, text=True)
+        if r.returncode == 0 and ok.stdout.strip().startswith(commit[:12]):
+            return
     last = ""
     for attempt in range(5):
         if os.path.isdir(dest):
@@ -125,7 +136,10 @@ def _main():
     todo = [r for r in rows if r["instance_id"] not in done]
     if args.shard:
         i, n = (int(x) for x in args.shard.split("/"))
-        todo = todo[i::n]
+        # By a stable hash of the id, not by position in what is left: shards
+        # that start while another run is still writing the same files would
+        # otherwise see different leftovers and overlap.
+        todo = [r for r in todo if zlib.crc32(r["instance_id"].encode()) % n == i]
     if args.limit:
         todo = todo[: args.limit]
     os.makedirs(args.work, exist_ok=True)

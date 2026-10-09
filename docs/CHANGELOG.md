@@ -2,7 +2,35 @@
 
 All notable user-facing changes live here. The README stays a product guide, not a version diary.
 
-## Unreleased
+## 1.2.0 — 2026-10-09
+
+### Bug reports and issues
+
+- **Where to look next** — for a pasted issue or bug report (60+ words) `get_context_packet` adds
+  `where_to_look`: the packet's files, then the next source files, best first (tests, docs and
+  fixtures last). `neuromesh packet --json` has the same list as `localization`. A packet holds 1–5
+  files; the file to change is in the top 10 far more often.
+- **Definition-level ranking for reports** — a report is also read definition by definition (file
+  head + every function/class span the index recorded, title counted three times) and fused with the
+  whole-file ranking.
+- **Report hygiene** — issue-template scaffolding (HTML comments, links, checklists, section headings)
+  no longer counts as words of the report; code-like tokens (`L031`, `E501`, `utf8`) are kept whole.
+- Measured on SWE-bench (file-level Acc@1/3/5/10, all gold files in the top k), tuned on the
+  SWE-bench *dev* split only: dev (225 issues) 0.160/0.347/0.427/0.538 with plain BM25 →
+  **0.249/0.484/0.600/0.680**; holdout: see `docs/measured.md`.
+
+### Speed
+
+- **Cold index of a large repository ~8× faster** — django (3.5k files): first packet 3m20s → 26 s.
+  Link resolution no longer rescans every path per import hint or every neighbour per call (147 s →
+  10 s); the file walk checks and reads files in parallel (16 s → 3 s). Same graph.
+
+### Housekeeping
+
+- Debug builds keep line tables only (target/debug had reached 43 GB on Windows); the benchmark
+  index cache deletes superseded snapshots.
+
+## 1.1.x follow-ups (released with 1.2.0)
 
 ### Retrieval
 

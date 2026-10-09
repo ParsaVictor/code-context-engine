@@ -500,12 +500,31 @@ impl McpToolHandler {
                 neuromesh_graph::timing("mcp: telemetry", t_s);
                 let t_s = std::time::Instant::now();
                 Ok({
-                    let value = cache_and_build(
+                    let mut value = cache_and_build(
                         &self.packet_cache,
                         &self.graph.project_id().0,
                         &build,
                         detail,
                     );
+                    // A long report (an issue, a bug template) gets the ranked
+                    // files to open next: the packet ships 1-5, the file to
+                    // change is in the top 10 far more often (SWE-bench dev:
+                    // 0.72 at 10 vs 0.48 for the packet).
+                    if task_desc.split_whitespace().count()
+                        >= neuromesh_parser::text_normalize::REPORT_WORDS
+                    {
+                        if let Some(obj) = value.as_object_mut() {
+                            obj.insert(
+                                "where_to_look".into(),
+                                json!(neuromesh_context::gold::localization_order(
+                                    &self.graph,
+                                    &task_desc,
+                                    &view,
+                                    10
+                                )),
+                            );
+                        }
+                    }
                     neuromesh_graph::timing("mcp: cache_and_build", t_s);
                     let t_s = std::time::Instant::now();
                     #[cfg(feature = "embeddings")]
