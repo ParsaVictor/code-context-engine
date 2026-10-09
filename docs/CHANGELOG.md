@@ -2,6 +2,36 @@
 
 All notable user-facing changes live here. The README stays a product guide, not a version diary.
 
+## 1.3.0 — 2026-10-09
+
+### Bug reports and issues
+
+- **Files a report names vote** — traceback frames (deepest first) and paths or unique file names in
+  the text join `where_to_look`. SWE-bench dev (225): Acc@1 0.249 → 0.298.
+- **Functions to look at** — a pasted report also gets `functions_to_look` (five,
+  `path:Class.method Lx-Ly`): the definition ranking fused with the file ranking, classes left out
+  (their methods are listed instead). SWE-bench dev, function level Acc@1/5/10 0.137/0.268/0.337 →
+  0.175/0.323/0.402. `packet --json` has the same list as `definitions`.
+- File level on SWE-bench dev with everything since 1.2.0: Acc@1/3/5/10 0.249/0.484/0.600/0.680 →
+  0.308/0.527/0.621/0.692.
+
+### Plain-language questions
+
+- The localisation list of a short question fuses the packet order with the whole-question ranking
+  (hub files no longer come first): R@3 ripgrep 0.208 → 0.500, click 0.750 → 0.917, cobra 0.792 →
+  0.875; a fresh holdout (axios) unchanged at 0.833 (BM25 0.583).
+
+### Fixes
+
+- The MCP server exits when the client closes stdin (it stayed alive as an orphan process).
+- No dashboard tab is opened for a workspace the server will not index (it showed an empty graph).
+
+### Measured
+
+- SWE-bench Verified (500, 1.2.0 engine, run once): Acc@1/3/5/10 0.405/0.669/0.732/0.804 vs plain
+  BM25 0.216/0.391/0.490/0.641. Ablation table and two new plain-language holdouts (cobra, axios) in
+  `docs/measured.md` and `docs/research/contributions-log.md`.
+
 ## 1.2.0 — 2026-10-09
 
 ### Bug reports and issues
