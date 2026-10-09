@@ -25,9 +25,12 @@ not the project's number.** Only the holdout rows are.
 | **holdout-cfg** | lightning-hydra-template (Hydra YAML), detr (argparse) | D-4 gold; F55 (session 12) + F71/F72 (session 13) tuned on it — dev-class for config questions | **1.000** | **0.767** | **0** | — |
 | holdout-web (30 q) | fastify/demo (Fastify API), shadcn-ui/taxonomy (Next.js app router) | dev-class for the web domain (fixed on since session 13; 10 blind questions added in G4 scored 0.58 before fixes) | **0.917** | **0.643** | **0** | — |
 | **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.587** | **0** | — |
-| concept (14 q) | this repository, plain-language questions (no identifier in the prompt) | dev-class (written 2026-09-30 from the upstream author's report, tuned on in session 16) | 0.679 | 0.392 | 0 | — || **concept-holdout** (12 q) | ripgrep 14.1.1 (Rust), plain-language questions | never tuned on; gold locked before any run; 1.0.0 scored recall **0.042** | **0.500** | **0.152** | **0** | — |
+| concept (14 q) | this repository, plain-language questions (no identifier in the prompt) | dev-class (written 2026-09-30 from the upstream author's report, tuned on in session 16) | 0.679 | 0.392 | 0 | — |
 | **concept-holdout** (12 q) | ripgrep 14.1.1 (Rust), plain-language questions | never tuned on; gold locked before any run; 1.0.0 scored recall **0.042** | **0.500** | **0.156** | **0** | — |
 | **concept-holdout2** (12 q) | click 8.1.7 (Python, 16 source files), plain-language questions | never tuned on; gold locked before the single run (2026-10-01) | **0.958** | **0.342** | **0** | — |
+| concept-holdout3 (12 q) | cobra v1.8.1 (Go), plain-language questions | gold locked before its single run (2026-10-09); looked at since | 0.833 | 0.357 | 0 | — |
+| concept-holdout4 (12 q) | axios v1.7.7 (JavaScript), plain-language questions | gold locked before its single run (2026-10-09); looked at since | 0.667 | 0.528 | 0 | — |
+| **concept-holdout5** (12 q) | jsoup 1.18.1 (Java), plain-language questions | gold locked before its single run (2026-10-10); list R@3 0.750 vs BM25 0.667 (pre-S1 v1.2.0: 0.417) | **0.667** | **0.235** | **0** | — |
 
 - **recall / precision** are file-level against a hand-written gold (`gold_files`) per question.
   A forbidden file in the packet zeroes that question's precision.

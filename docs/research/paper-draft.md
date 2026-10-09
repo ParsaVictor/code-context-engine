@@ -46,6 +46,11 @@ MoatlessTools (agentic search), CodeRankEmbed / Jina code embeddings (dense), BM
 3.3 Reports (≥60 words): hygiene (template scaffolding, links, checklists, headings), code-like
 tokens, definition-level BM25 with title ×3, RRF with the packet order → `where_to_look`.
 3.4 Short questions: RRF of packet order and whole-question ranking.
+3.5 Functions to look at (every prompt): the definition ranking fused (RRF) with each
+definition's file rank (Agentless's file → function step without an LLM), plus the functions a
+traceback runs through — each frame resolved to an indexed file by its longest unique path suffix,
+then to the definition named in the frame (or the innermost one containing its line), test frames
+skipped, voting at double weight deepest-first.
 
 ## 4. Evaluation protocol
 
@@ -121,8 +126,17 @@ p50 2.9 s / p90 10.6 s per Lite issue (Verified 2.5 s / 8.8 s) on a 6-core lapto
 | body term frequency in BM25F | Acc@5 0.544 → 0.509 |
 | MiniLM fusion | lowered every plain-language set |
 | evaluation: suffix match without segment boundary | inflated a BM25 baseline (0.958 vs 0.875) |
+| commit-history prior (BugLocator: similar past commit messages → their files) | dev file Acc@1 0.271 → 0.169 even at weight 0.1 |
+| identifiers in the issue's code blocks → their definitions | file Acc@1 drops; func Acc@5 +0.019 (below the 0.02 bar) |
+| RM3 pseudo-relevance feedback on the definition ranking | alone worse at @1 (0.135 → 0.038, dev-fast); as a vote no better than plain BM25 |
+| doc sections as a bridge from question words to identifiers (plain-language) | R@3 down on 3 of 4 sets (ripgrep 0.500 → 0.375, axios 0.833 → 0.583) |
+| evaluation: function-level denominator without short reports | 244 instead of 274 instances, Acc@5 0.443 instead of 0.394 |
 
 ## 7. Threats to validity
+
+Bookkeeping is itself a threat: two of our own evaluation slips were caught only by re-deriving
+counts against an external reference (LocAgent's 274) — a denominator that silently dropped short
+reports, and a prototype baseline taken from an older run. Both are reported with their effect.
 
 Different instance subsets vs published numbers; single annotator for plain-language gold; 12
 questions per plain-language holdout; Windows-only timing; blobless clones / network.
