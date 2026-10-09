@@ -221,6 +221,11 @@ pub(crate) fn stemmer() -> Stemmer {
 /// Lowercase, split identifiers into words, drop short/non-alphabetic
 /// pieces and stopwords, stem.
 pub(crate) fn terms_of(text: &str, st: &Stemmer, keep_stopwords: bool) -> Vec<String> {
+    terms_of_opt(text, Some(st), keep_stopwords)
+}
+
+/// [`terms_of`], stemming only when a stemmer is given.
+pub(crate) fn terms_of_opt(text: &str, st: Option<&Stemmer>, keep_stopwords: bool) -> Vec<String> {
     let mut out = Vec::new();
     for raw in text.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {
         if raw.is_empty() {
@@ -237,7 +242,10 @@ pub(crate) fn terms_of(text: &str, st: &Stemmer, keep_stopwords: bool) -> Vec<St
             if !keep_stopwords && STOPWORDS.contains(&w.as_str()) {
                 continue;
             }
-            out.push(st.stem(&w).into_owned());
+            out.push(match st {
+                Some(st) => st.stem(&w).into_owned(),
+                None => w,
+            });
         }
     }
     out

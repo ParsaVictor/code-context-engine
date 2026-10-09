@@ -406,9 +406,10 @@ Release binary v1.3.0 (tag `6e94b91`), one run per benchmark (`swebench/lite-v13
 | Lite strict holdout | 276 | **0.507** [0.45,0.57] | **0.717** [0.66,0.77] | 0.750 [0.70,0.80] | 0.815 | 0.301/0.507/0.587/0.721 |
 | LocAgent subset | 274 | **0.500** [0.44,0.56] | **0.723** [0.67,0.77] | 0.755 [0.70,0.81] | 0.828 | 0.299/0.522/0.606/0.734 |
 | Verified, all | 500 | **0.446** [0.40,0.49] | 0.680 [0.64,0.72] | 0.736 [0.69,0.77] | 0.814 | 0.216/0.392/0.490/0.642 |
-| Verified not in Lite | 403 | **0.437** [0.39,0.48] | 0.670 [0.63,0.72] | 0.732 [0.69,0.77] | 0.811 | 0.194/0.372/0.476/0.620 |
+| Verified not in Lite | 407 | **0.435** [0.38,0.48] | 0.671 [0.62,0.71] | 0.732 [0.69,0.78] | 0.811 | 0.194/0.373/0.477/0.622 |
 
-v1.2.0 → v1.3.0, same instances: Lite-276 Acc@1 0.486 → 0.507, Verified-not-Lite 0.392 → 0.437
+v1.2.0 → v1.3.0, same instances: Lite-276 Acc@1 0.486 → 0.507, Verified-not-Lite (the 403 v1.2.0 scored;
+the subset has 407) 0.392 → 0.437
 (+0.045; the named-files vote, C13, dev gain was +0.049 — it transferred); Acc@5 within ±0.005.
 Latency p50 2.9 s / p90 10.6 s (Lite), 2.5 s / 8.8 s (Verified), cold index included.
 
@@ -438,3 +439,49 @@ function-gold extraction. Engine follow-up: emit the function list for short rep
 DeepSeek-V4-Flash, DeepSeek-V4-Pro) authenticate (`/v1/models` 200) but every chat call returns
 HTTP 402 "please check your current payment status" — the accounts have no credit. The strong-LLM
 stage stays unmeasured until one is funded.
+
+### 8.14 Phase 1: LLM-free priors from the bug-localisation literature (session 18, dev only)
+
+Protocol: each prior first as an offline Python prototype over stored engine lists
+(`scripts/research/priors.py`: RRF vote into `loc_files` / `definitions`, weights swept), scored
+on both halves of SWE-bench dev (dev-fast 59 / dev-rest 166); kept only if file Acc@1 or func
+Acc@5 rises ≥ 0.02 in both halves. Function metric with the corrected denominator (§8.13): 210
+dev issues have function gold. Baseline = v1.3.0 engine (`dev-func2-all.jsonl`): file
+0.308/0.527/0.621/0.692, func Acc@1/5/10 0.158/0.292/0.364.
+
+**Bookkeeping slip, caught:** the first prototype round used `dev-func300-all.jsonl` as its base
+— a deeper run made *before* #140 removed classes from the function list (func 0.124/0.243/0.305).
+Every function-level delta below is re-measured against the true v1.3.0 run.
+
+| prior (inspiration) | fires on | file Acc@1 fast / rest | func Acc@5 fast / rest | verdict |
+|---|---|---|---|---|
+| traceback frame → enclosing function (agents open the deepest frame) | 43 | = / = (w=1) | 0.269→0.288 / 0.299→0.312 (proto) | **kept; engine port below** |
+| non-code "definitions" (YAML keys) out of the function list | 203 | = | = (10 of 2,030 top-10 slots) | no effect |
+| identifiers in the issue's code blocks → their definitions (repro code) | 115 | 0.271→0.254..0.271 / 0.319→0.271..0.313 | +0.019 / +0.019 (base pre-#140) | rejected: file level drops, func gain < 0.02 |
+| commit history (BugLocator / Locus): past commits whose message is like the issue → their files; ancestors of base only | 224 | 0.271→0.169 / 0.319→0.289 even at w=0.1 | = | **rejected** |
+| test named in the issue → modules it imports | 0 | – | – | no effect: dev reports name no repository tests (5 name a `test_` word, all the reporter's own) |
+| RM3 pseudo-relevance feedback on definition BM25 (5 docs, 20 terms, λ=0.6) | 225 | +0.017 / +0.018 (w=0.5); @5 −0.018 / −0.018 | 0.269→0.346 / 0.299→0.306 | rejected: alone worse than plain definition BM25 at @1 (0.038 vs 0.135 fast); as a vote no better than the plain one |
+| plain Python definition BM25 (unstemmed, method text prefixed with its class) as a second vote | 225 | +0.017 / +0.024 (w=1); @5 −0.017 / −0.036 | 0.269→0.327 / 0.299→0.312 (w=1) | under study: why is it complementary to the engine's own definition ranking? (`NM_DIAG` run) |
+
+History details: `git log --no-renames` is required on blobless clones — rename detection fetches
+blobs one by one (it returned 214 of 1,878 pvlib commits in 53 s before the fix).
+
+**Engine port (kept):** `traceback_definitions` (frames → file by longest unique suffix → the
+definition named in the frame, or the innermost one containing the line; test frames skipped),
+voting at weight 2 in `definition_order`, plus a function list for *every* prompt in
+`packet --json` (short reports were automatic misses). Full dev, engine run:
+
+| | func Acc@1 | Acc@5 | Acc@10 | Acc@20 |
+|---|---|---|---|---|
+| v1.3.0, dev-fast (52) | 0.135 | 0.269 | 0.346 | 0.385 |
+| **+ traceback + short reports, dev-fast** | **0.173** | **0.308** | **0.365** | 0.423 |
+| v1.3.0, dev-rest (158) | 0.166 | 0.299 | 0.369 | 0.427 |
+| **+ traceback + short reports, dev-rest** | **0.196** | **0.329** | **0.399** | 0.456 |
+| all 210 | 0.158 → **0.190** | 0.292 → **0.324** | 0.364 → **0.390** | 0.416 → 0.448 |
+
+File level unchanged on every instance (0.308/0.527/0.621/0.692). Of 20 short dev reports with
+function gold, 4 now have every edited function in the top 5 (0 before).
+
+Also fixed in passing: the definition ranker sorted query terms alphabetically and kept the first
+256, so a long report lost every term after about "p" (4 of 225 dev issues, 2 of 300 Lite issues
+exceed 256 distinct terms); it now keeps title terms, then the rarest, up to 1,024.

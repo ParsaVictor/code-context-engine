@@ -122,6 +122,9 @@ def _main():
     ap.add_argument("--only", default="", help="comma-separated repos to keep")
     ap.add_argument("--shard", default="", help="i/n: this process takes every n-th instance starting at i")
     ap.add_argument("--work", default=os.path.join(tempfile.gettempdir(), "swe-wt"))
+    ap.add_argument("--no-bm25", action="store_true",
+                    help="skip the Python BM25 baseline (it does not change between engine runs and "
+                         "costs more CPU than the engine on large checkouts)")
     args = ap.parse_args()
     _ARGS["args"] = args
 
@@ -164,6 +167,8 @@ def _main():
                 )
                 if pkt.get("definitions"):
                     rec["definitions"] = pkt["definitions"]
+                if pkt.get("diag_definitions"):
+                    rec["diag_definitions"] = pkt["diag_definitions"]
                 loc = pkt.get("localization") or []
                 if loc:
                     rec["loc_files"] = loc
@@ -171,8 +176,9 @@ def _main():
                 ranked = pkt.get("ranked_paths") or []
                 if ranked:
                     rec.update(**{f"bm25f_hit@{k}": hit(ranked, gold, k) for k in (1, 3, 5, 10)})
-                bm = Bm25(dest, repo_files(dest)).rank(row["problem_statement"])
-                rec.update(**{f"bm25_hit@{k}": hit(bm, gold, k) for k in (1, 3, 5, 10)})
+                if not args.no_bm25:
+                    bm = Bm25(dest, repo_files(dest)).rank(row["problem_statement"])
+                    rec.update(**{f"bm25_hit@{k}": hit(bm, gold, k) for k in (1, 3, 5, 10)})
             except Exception as e:  # recorded, not fatal: one bad checkout must not stop the run
                 rec["error"] = str(e)[-300:]
             out.write(json.dumps(rec) + "\n")

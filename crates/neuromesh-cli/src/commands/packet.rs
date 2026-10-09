@@ -48,6 +48,10 @@ struct PacketJsonOut {
     /// lines), 20 deep — function-level localisation.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     definitions: Vec<neuromesh_graph::RankedDefinition>,
+    /// Research runs (`NM_DIAG=1`): the same list under other settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diag_definitions:
+        Option<std::collections::BTreeMap<String, Vec<neuromesh_graph::RankedDefinition>>>,
     /// The whole-question file ranking (BM25F), top 10, for evaluation.
     ranked_paths: Vec<String>,
     identifiers: Vec<String>,
@@ -104,12 +108,11 @@ pub fn execute(args: &[String]) -> Result<()> {
 
     let selected_paths = neuromesh_context::gold::packet_file_order(&graph, &prompt, &view);
     let localization = neuromesh_context::gold::localization_order(&graph, &prompt, &view, 20);
+    // Every prompt gets the function list: a short issue still has a function
+    // to change (30 of LocAgent's 274 Lite instances are under 60 words and
+    // scored as misses without one).
     let definitions =
-        if prompt.split_whitespace().count() >= neuromesh_parser::text_normalize::REPORT_WORDS {
-            neuromesh_context::gold::definition_order(&graph, &prompt, &localization, def_depth())
-        } else {
-            Vec::new()
-        };
+        neuromesh_context::gold::definition_order(&graph, &prompt, &localization, def_depth());
     let mut files: Vec<String> = packet_file_names(&view).into_iter().collect();
     files.sort();
     let reduction = if workspace_tokens > 0 {
@@ -139,6 +142,7 @@ pub fn execute(args: &[String]) -> Result<()> {
         selected_files_count: files.len(),
         selected_files: files.clone(),
         selected_paths,
+        diag_definitions: diag_definitions(&graph, &prompt, &localization),
         localization,
         definitions,
         ranked_paths: graph
@@ -453,4 +457,77 @@ mod tests {
         let parsed = parse_args(&args).unwrap();
         assert_eq!(parsed.query.as_deref(), Some("Where is HTTPAdapter.send?"));
     }
+}
+
+/// Definition lists under research settings, only when `NM_DIAG=1` (one run
+/// measures several variants on the same checkouts).
+fn diag_definitions(
+    graph: &neuromesh_graph::NeuralProjectGraph,
+    prompt: &str,
+    localization: &[String],
+) -> Option<std::collections::BTreeMap<String, Vec<neuromesh_graph::RankedDefinition>>> {
+    if std::env::var("NM_DIAG").ok().as_deref() != Some("1") {
+        return None;
+    }
+    use neuromesh_context::gold::{definition_order_with, DefinitionOpts};
+    use neuromesh_graph::ChunkOpts;
+    let base = DefinitionOpts::default();
+    let variants = [
+        (
+            "raw",
+            DefinitionOpts {
+                file_prior: false,
+                traceback: false,
+                ..base
+            },
+        ),
+        (
+            "no_trace",
+            DefinitionOpts {
+                traceback: false,
+                ..base
+            },
+        ),
+        (
+            "no_stem",
+            DefinitionOpts {
+                chunk: ChunkOpts {
+                    no_stem: true,
+                    owner_terms: false,
+                },
+                ..base
+            },
+        ),
+        (
+            "owner",
+            DefinitionOpts {
+                chunk: ChunkOpts {
+                    no_stem: false,
+                    owner_terms: true,
+                },
+                ..base
+            },
+        ),
+        (
+            "no_stem_owner",
+            DefinitionOpts {
+                chunk: ChunkOpts {
+                    no_stem: true,
+                    owner_terms: true,
+                },
+                ..base
+            },
+        ),
+    ];
+    Some(
+        variants
+            .into_iter()
+            .map(|(name, opts)| {
+                (
+                    name.to_string(),
+                    definition_order_with(graph, prompt, localization, def_depth(), opts),
+                )
+            })
+            .collect(),
+    )
 }

@@ -12,8 +12,8 @@ graph, field-weighted lexical ranking, a definition-level ranking of long report
 report hygiene, all on a laptop CPU. On SWE-bench Lite, run once after tuning only on the SWE-bench
 dev split, the engine reaches file-level Acc@1/3/5 of 0.507/0.717/0.750 on 276 held-out issues
 (plain BM25 0.301/0.507/0.587) in 2.9 s per issue including a cold index — above a code embedding
-model at Acc@1 and level with Agentless+GPT-4o at Acc@5; on SWE-bench Verified's 403 issues outside
-Lite, 0.437/0.670/0.732 (BM25 0.194/0.372/0.476). We report every component's effect,
+model at Acc@1 and level with Agentless+GPT-4o at Acc@5; on SWE-bench Verified's 407 issues outside
+Lite, 0.435/0.671/0.732 (BM25 0.194/0.373/0.477). We report every component's effect,
 negative results (dense retrieval on CPU, cross-encoder reranking, blind graph expansion), and a
 holdout protocol that caught two results that looked-at sets had suggested. TODO: LLM stage (D1),
 Verified, ablations.
@@ -81,8 +81,9 @@ tokens, definition-level BM25 with title ×3, RRF with the packet order → `whe
 
 dev: BM25 0.160/0.347/0.427/0.538 → engine v1.3.0 0.308/0.527/0.621/0.692 (Acc@1/3/5/10).
 Verified (run once per version): BM25 0.216/0.392/0.490/0.642 → v1.2.0 0.405/0.669/0.732/0.804 (496)
-→ **v1.3.0 0.446/0.680/0.736/0.814** (500). On the 403 Verified issues not in Lite: BM25
-0.194/0.372/0.476/0.620 → v1.2.0 0.392/0.655/0.727/0.809 → v1.3.0 0.437/0.670/0.732/0.811.
+→ **v1.3.0 0.446/0.680/0.736/0.814** (500). On the Verified issues not in Lite (407; v1.2.0 lost 4 to checkout errors): BM25
+0.194/0.372/0.476/0.620 → v1.2.0 0.392/0.655/0.727/0.809 (403 scored) → v1.3.0 0.435/0.671/0.732/0.811
+(all 407; BM25 on 407: 0.194/0.373/0.477/0.622).
 Function level (v1.3.0, all edited functions in top k): Verified 459 with function gold
 0.163/0.346/0.416 (Acc@1/5/10); not in Lite (375) 0.157/0.312/0.381.
 

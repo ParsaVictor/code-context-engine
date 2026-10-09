@@ -97,10 +97,10 @@ instance. 95% bootstrap intervals in brackets.
 | Lite strict holdout | 276 | **0.507** [0.45,0.57] | **0.717** [0.66,0.77] | **0.750** [0.70,0.80] | **0.815** | 0.301 / 0.507 / 0.587 / 0.721 |
 | Lite, LocAgent's subset | 274 | **0.500** [0.44,0.56] | **0.723** [0.67,0.77] | **0.755** [0.70,0.81] | **0.828** | 0.299 / 0.522 / 0.606 / 0.734 |
 | Verified, all | 500 | **0.446** [0.40,0.49] | **0.680** [0.64,0.72] | **0.736** [0.69,0.77] | **0.814** | 0.216 / 0.392 / 0.490 / 0.642 |
-| Verified, not in Lite | 403 | **0.437** [0.39,0.48] | **0.670** [0.63,0.72] | **0.732** [0.69,0.77] | **0.811** | 0.194 / 0.372 / 0.476 / 0.620 |
+| Verified, not in Lite | 407 | **0.435** [0.38,0.48] | **0.671** [0.62,0.71] | **0.732** [0.69,0.78] | **0.811** | 0.194 / 0.373 / 0.477 / 0.622 |
 
-v1.2.0 → v1.3.0 on the same instances: Lite 276 Acc@1 0.486 → 0.507; Verified-not-Lite 0.392 →
-0.437; Acc@5 unchanged within ±0.005. p50 2.9 s / p90 10.6 s per Lite issue (cold index included).
+v1.2.0 → v1.3.0 on the same instances: Lite 276 Acc@1 0.486 → 0.507; Verified-not-Lite (the 403
+v1.2.0 scored) 0.392 → 0.437; Acc@5 unchanged within ±0.005. p50 2.9 s / p90 10.6 s per Lite issue (cold index included).
 
 | function level (all edited functions in top k) | n | Acc@1 | Acc@5 | Acc@10 |
 |---|---|---|---|---|
