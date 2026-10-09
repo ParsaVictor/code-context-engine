@@ -12,8 +12,8 @@ graph, field-weighted lexical ranking, a definition-level ranking of long report
 report hygiene, all on a laptop CPU. On SWE-bench Lite, run once after tuning only on the SWE-bench
 dev split, the engine reaches file-level Acc@1/3/5 of 0.507/0.717/0.750 on 276 held-out issues
 (plain BM25 0.301/0.507/0.587) in 2.9 s per issue including a cold index — above a code embedding
-model at Acc@1 and level with Agentless+GPT-4o at Acc@5; on SWE-bench Verified's 403 issues outside
-Lite, 0.437/0.670/0.732 (BM25 0.194/0.372/0.476). We report every component's effect,
+model at Acc@1 and level with Agentless+GPT-4o at Acc@5; on SWE-bench Verified's 407 issues outside
+Lite, 0.435/0.671/0.732 (BM25 0.194/0.373/0.477). We report every component's effect,
 negative results (dense retrieval on CPU, cross-encoder reranking, blind graph expansion), and a
 holdout protocol that caught two results that looked-at sets had suggested. TODO: LLM stage (D1),
 Verified, ablations.
@@ -46,6 +46,11 @@ MoatlessTools (agentic search), CodeRankEmbed / Jina code embeddings (dense), BM
 3.3 Reports (≥60 words): hygiene (template scaffolding, links, checklists, headings), code-like
 tokens, definition-level BM25 with title ×3, RRF with the packet order → `where_to_look`.
 3.4 Short questions: RRF of packet order and whole-question ranking.
+3.5 Functions to look at (every prompt): the definition ranking fused (RRF) with each
+definition's file rank (Agentless's file → function step without an LLM), plus the functions a
+traceback runs through — each frame resolved to an indexed file by its longest unique path suffix,
+then to the definition named in the frame (or the innermost one containing its line), test frames
+skipped, voting at double weight deepest-first.
 
 ## 4. Evaluation protocol
 
@@ -81,8 +86,9 @@ tokens, definition-level BM25 with title ×3, RRF with the packet order → `whe
 
 dev: BM25 0.160/0.347/0.427/0.538 → engine v1.3.0 0.308/0.527/0.621/0.692 (Acc@1/3/5/10).
 Verified (run once per version): BM25 0.216/0.392/0.490/0.642 → v1.2.0 0.405/0.669/0.732/0.804 (496)
-→ **v1.3.0 0.446/0.680/0.736/0.814** (500). On the 403 Verified issues not in Lite: BM25
-0.194/0.372/0.476/0.620 → v1.2.0 0.392/0.655/0.727/0.809 → v1.3.0 0.437/0.670/0.732/0.811.
+→ **v1.3.0 0.446/0.680/0.736/0.814** (500). On the Verified issues not in Lite (407; v1.2.0 lost 4 to checkout errors): BM25
+0.194/0.372/0.476/0.620 → v1.2.0 0.392/0.655/0.727/0.809 (403 scored) → v1.3.0 0.435/0.671/0.732/0.811
+(all 407; BM25 on 407: 0.194/0.373/0.477/0.622).
 Function level (v1.3.0, all edited functions in top k): Verified 459 with function gold
 0.163/0.346/0.416 (Acc@1/5/10); not in Lite (375) 0.157/0.312/0.381.
 
@@ -120,8 +126,17 @@ p50 2.9 s / p90 10.6 s per Lite issue (Verified 2.5 s / 8.8 s) on a 6-core lapto
 | body term frequency in BM25F | Acc@5 0.544 → 0.509 |
 | MiniLM fusion | lowered every plain-language set |
 | evaluation: suffix match without segment boundary | inflated a BM25 baseline (0.958 vs 0.875) |
+| commit-history prior (BugLocator: similar past commit messages → their files) | dev file Acc@1 0.271 → 0.169 even at weight 0.1 |
+| identifiers in the issue's code blocks → their definitions | file Acc@1 drops; func Acc@5 +0.019 (below the 0.02 bar) |
+| RM3 pseudo-relevance feedback on the definition ranking | alone worse at @1 (0.135 → 0.038, dev-fast); as a vote no better than plain BM25 |
+| doc sections as a bridge from question words to identifiers (plain-language) | R@3 down on 3 of 4 sets (ripgrep 0.500 → 0.375, axios 0.833 → 0.583) |
+| evaluation: function-level denominator without short reports | 244 instead of 274 instances, Acc@5 0.443 instead of 0.394 |
 
 ## 7. Threats to validity
+
+Bookkeeping is itself a threat: two of our own evaluation slips were caught only by re-deriving
+counts against an external reference (LocAgent's 274) — a denominator that silently dropped short
+reports, and a prototype baseline taken from an older run. Both are reported with their effect.
 
 Different instance subsets vs published numbers; single annotator for plain-language gold; 12
 questions per plain-language holdout; Windows-only timing; blobless clones / network.

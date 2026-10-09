@@ -1,6 +1,6 @@
 pub mod activation;
 mod chunk_rank;
-pub use chunk_rank::RankedDefinition;
+pub use chunk_rank::{ChunkOpts, RankedDefinition};
 pub mod concept_index;
 pub mod edge;
 pub mod embeddings;

@@ -406,9 +406,10 @@ Release binary v1.3.0 (tag `6e94b91`), one run per benchmark (`swebench/lite-v13
 | Lite strict holdout | 276 | **0.507** [0.45,0.57] | **0.717** [0.66,0.77] | 0.750 [0.70,0.80] | 0.815 | 0.301/0.507/0.587/0.721 |
 | LocAgent subset | 274 | **0.500** [0.44,0.56] | **0.723** [0.67,0.77] | 0.755 [0.70,0.81] | 0.828 | 0.299/0.522/0.606/0.734 |
 | Verified, all | 500 | **0.446** [0.40,0.49] | 0.680 [0.64,0.72] | 0.736 [0.69,0.77] | 0.814 | 0.216/0.392/0.490/0.642 |
-| Verified not in Lite | 403 | **0.437** [0.39,0.48] | 0.670 [0.63,0.72] | 0.732 [0.69,0.77] | 0.811 | 0.194/0.372/0.476/0.620 |
+| Verified not in Lite | 407 | **0.435** [0.38,0.48] | 0.671 [0.62,0.71] | 0.732 [0.69,0.78] | 0.811 | 0.194/0.373/0.477/0.622 |
 
-v1.2.0 → v1.3.0, same instances: Lite-276 Acc@1 0.486 → 0.507, Verified-not-Lite 0.392 → 0.437
+v1.2.0 → v1.3.0, same instances: Lite-276 Acc@1 0.486 → 0.507, Verified-not-Lite (the 403 v1.2.0 scored;
+the subset has 407) 0.392 → 0.437
 (+0.045; the named-files vote, C13, dev gain was +0.049 — it transferred); Acc@5 within ±0.005.
 Latency p50 2.9 s / p90 10.6 s (Lite), 2.5 s / 8.8 s (Verified), cold index included.
 
@@ -438,3 +439,125 @@ function-gold extraction. Engine follow-up: emit the function list for short rep
 DeepSeek-V4-Flash, DeepSeek-V4-Pro) authenticate (`/v1/models` 200) but every chat call returns
 HTTP 402 "please check your current payment status" — the accounts have no credit. The strong-LLM
 stage stays unmeasured until one is funded.
+
+### 8.14 Phase 1: LLM-free priors from the bug-localisation literature (session 18, dev only)
+
+Protocol: each prior first as an offline Python prototype over stored engine lists
+(`scripts/research/priors.py`: RRF vote into `loc_files` / `definitions`, weights swept), scored
+on both halves of SWE-bench dev (dev-fast 59 / dev-rest 166); kept only if file Acc@1 or func
+Acc@5 rises ≥ 0.02 in both halves. Function metric with the corrected denominator (§8.13): 210
+dev issues have function gold. Baseline = v1.3.0 engine (`dev-func2-all.jsonl`): file
+0.308/0.527/0.621/0.692, func Acc@1/5/10 0.158/0.292/0.364.
+
+**Bookkeeping slip, caught:** the first prototype round used `dev-func300-all.jsonl` as its base
+— a deeper run made *before* #140 removed classes from the function list (func 0.124/0.243/0.305).
+Every function-level delta below is re-measured against the true v1.3.0 run.
+
+| prior (inspiration) | fires on | file Acc@1 fast / rest | func Acc@5 fast / rest | verdict |
+|---|---|---|---|---|
+| traceback frame → enclosing function (agents open the deepest frame) | 43 | = / = (w=1) | 0.269→0.288 / 0.299→0.312 (proto) | **kept; engine port below** |
+| non-code "definitions" (YAML keys) out of the function list | 203 | = | = (10 of 2,030 top-10 slots) | no effect |
+| identifiers in the issue's code blocks → their definitions (repro code) | 115 | 0.271→0.254..0.271 / 0.319→0.271..0.313 | +0.019 / +0.019 (base pre-#140) | rejected: file level drops, func gain < 0.02 |
+| commit history (BugLocator / Locus): past commits whose message is like the issue → their files; ancestors of base only | 224 | 0.271→0.169 / 0.319→0.289 even at w=0.1 | = | **rejected** |
+| test named in the issue → modules it imports | 0 | – | – | no effect: dev reports name no repository tests (5 name a `test_` word, all the reporter's own) |
+| RM3 pseudo-relevance feedback on definition BM25 (5 docs, 20 terms, λ=0.6) | 225 | +0.017 / +0.018 (w=0.5); @5 −0.018 / −0.018 | 0.269→0.346 / 0.299→0.306 | rejected: alone worse than plain definition BM25 at @1 (0.038 vs 0.135 fast); as a vote no better than the plain one |
+| plain Python definition BM25 (unstemmed, method text prefixed with its class) as a second vote | 225 | +0.017 / +0.024 (w=1); @5 −0.017 / −0.036 | 0.269→0.327 / 0.299→0.312 (w=1) | not shipped: standalone it is level with the engine at @1 and below at @5/@10 (fast 0.135/0.250/0.327 vs 0.135/0.269/0.346; rest 0.171/0.272/0.329 vs 0.165/0.297/0.367) — the gain is diversity; the engine-side variants below do not reproduce it |
+
+History details: `git log --no-renames` is required on blobless clones — rename detection fetches
+blobs one by one (it returned 214 of 1,878 pvlib commits in 53 s before the fix).
+
+**Engine port (kept):** `traceback_definitions` (frames → file by longest unique suffix → the
+definition named in the frame, or the innermost one containing the line; test frames skipped),
+voting at weight 2 in `definition_order`, plus a function list for *every* prompt in
+`packet --json` (short reports were automatic misses). Full dev, engine run:
+
+| | func Acc@1 | Acc@5 | Acc@10 | Acc@20 |
+|---|---|---|---|---|
+| v1.3.0, dev-fast (52) | 0.135 | 0.269 | 0.346 | 0.385 |
+| **+ traceback + short reports, dev-fast** | **0.173** | **0.308** | **0.365** | 0.423 |
+| v1.3.0, dev-rest (158) | 0.166 | 0.299 | 0.369 | 0.427 |
+| **+ traceback + short reports, dev-rest** | **0.196** | **0.329** | **0.399** | 0.456 |
+| all 210 | 0.158 → **0.190** | 0.292 → **0.324** | 0.364 → **0.390** | 0.416 → 0.448 |
+
+File level unchanged on every instance (0.308/0.527/0.621/0.692). Of 20 short dev reports with
+function gold, 4 now have every edited function in the top 5 (0 before).
+
+Also fixed in passing: the definition ranker sorted query terms alphabetically and kept the first
+256, so a long report lost every term after about "p" (4 of 225 dev issues, 2 of 300 Lite issues
+exceed 256 distinct terms); it now keeps title terms, then the rarest, up to 1,024.
+
+### 8.15 Phase 3: plain-language questions through the docs (rejected)
+
+Idea (how people ask vs how code names things): the project's own doc sections that read most
+like the question (BM25 over Markdown/rST sections) name the flags and identifiers involved; the
+source files that contain those identifiers (rarity-weighted) vote next to the engine's list
+(RRF). Prototype `scripts/research/doc_bridge.py`, engine lists from v1.3.0 cached
+(`plain-lists-v130.jsonl`), R@3 on the four looked-at plain-language sets:
+
+| set | engine (v1.3.0) | doc bridge alone | fused w=0.5 | w=1 | w=2 |
+|---|---|---|---|---|---|
+| ripgrep (Rust) | 0.500 | 0.125 | 0.375 | 0.208 | 0.167 |
+| click (Python) | 0.917 | 0.500 | 0.958 | 0.875 | 0.833 |
+| cobra (Go) | 0.875 | 0.458 | 0.792 | 0.708 | 0.625 |
+| axios (JS) | 0.833 | 0.083 | 0.583 | 0.417 | 0.250 |
+
+Rejected: worse on three of four sets at every weight. Doc sections mention many identifiers
+(examples, other flags, changelog entries), and an identifier→file vote by containment spreads
+over every file that uses it — the bridge is far noisier than the question itself.
+
+**Why does a second definition ranker help? (`NM_DIAG=1`, one engine run, dev 225).** The engine
+emits its function list under research settings next to the shipped one
+(`diag_definitions`; `scripts/research/diag_eval.py`). Shipped = traceback vote + file prior.
+
+| variant | func Acc@1 fast / rest | func Acc@5 fast / rest | verdict |
+|---|---|---|---|
+| shipped (v1.4 candidate) | 0.173 / 0.196 | 0.308 / 0.329 | – |
+| no traceback vote | 0.135 / 0.171 | 0.288 / 0.316 | traceback's share: @1 +0.038/+0.025 |
+| no traceback, no file prior (raw ranking) | 0.135 / 0.171 | 0.288 / 0.304 | file prior's share: @5 0/+0.012 |
+| exact words instead of stems | 0.192 / 0.184 | 0.288 / 0.335 | rejected (mixed) |
+| method chunks carry their class name ("owner") | 0.192 / 0.209 | 0.308 / 0.342 | rejected: @5 0/+0.013 < bar |
+| RRF of owner + owner-unstemmed (two indices) | 0.212 / 0.222 | 0.308 / 0.342 | rejected by the pre-set bar (func @5 0/+0.013), although @1 rises +0.039/+0.026 — noted for a later round with a fresh dev split |
+
+The bar was fixed before the run (file Acc@1 or func Acc@5 ≥ +0.02 in both halves); the two-index
+fusion clears it only at func Acc@1, a metric the bar does not name, so it is not shipped.
+
+### 8.16 Fifth plain-language holdout: jsoup (Java), run once (2026-10-10)
+
+`concept-holdout5`: jhy/jsoup 1.18.1, 12 plain-language questions, gold written from the source
+and committed (`2b9f4a3` on the pushed branch, `b86026c` after rebase) before any engine run. Purpose fixed in advance: confirm the
+short-question list fusion (S1, §8.6), which had been decided on looked-at sets and was only
+neutral on axios. Run once with three binaries chosen beforehand (v1.2.0 = before S1, v1.3.0 =
+S1, the v1.4 candidate) and BM25:
+
+| | list R@3 | packet recall / precision |
+|---|---|---|
+| plain BM25 | 0.667 (R@1 0.500, R@5 0.917) | – |
+| v1.2.0 (no S1) | 0.417 | – |
+| **v1.3.0 (S1)** | **0.750** | – |
+| v1.4 candidate | 0.750 (list unchanged for short questions) | 0.667 / 0.235 |
+
+S1 holds on a language and repository never run before: +0.333 R@3 over the packet-order list and
++0.083 over BM25. jsoup is now looked at.
+
+**Fourteen sets with the v1.4 candidate** (traceback vote, function list for every prompt, query
+term cap fix): identical to the numbers on record (docs/measured.md) on all fourteen, including `concept`
+0.679 / 0.392 (§8.3's 0.398 was an older reading of this self-measuring set).
+
+**Dense on the short list only (prior 6, CodeRankEmbed/Jina-inspired).** jina-code-v2 (int8 ONNX,
+CPU, 4 threads) embeds the issue and the engine's top-30 definitions (text from the base commit),
+reorders them by cosine (`scripts/research/dense_shortlist.py`); the order votes by RRF. Dev 225,
+base = v1.4 candidate:
+
+| | file Acc@1 fast / rest | file Acc@3 | file Acc@5 | func Acc@1 | func Acc@5 |
+|---|---|---|---|---|---|
+| base | 0.271 / 0.319 | 0.525 / 0.524 | 0.576 / 0.633 | 0.173 / 0.196 | 0.308 / 0.329 |
+| + dense vote w=0.5 | 0.288 / 0.343 | 0.525 / 0.554 | 0.593 / 0.651 | 0.212 / 0.215 | 0.327 / 0.342 |
+| + dense vote w=1 | 0.271 / 0.361 | 0.559 / 0.554 | 0.610 / 0.645 | 0.212 / 0.190 | 0.308 / 0.329 |
+| dense order alone (all 225) | file 0.356 / 0.524 / 0.596 (@1/3/5) | | | func 0.162 / 0.276 (@1/5) | |
+
+Cost: 10.6 s p50 / 27.7 s p90 per issue on top of the engine (CPU shared with other runs).
+Verdict: **not shipped by default** — positive on almost every cell but below the pre-set bar in
+dev-fast (file Acc@1 +0.017 = one issue of 59; func Acc@5 +0.019/+0.013). Noted: the dense order
+alone puts the right file first more often than the engine (0.356 vs 0.307) while losing depth —
+a cheap re-ranker of the top few files, not a retriever. Candidate for an opt-in deep mode, to be
+decided on a larger split.

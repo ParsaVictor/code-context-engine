@@ -1146,14 +1146,48 @@ pub fn definition_order(
     files: &[String],
     k: usize,
 ) -> Vec<neuromesh_graph::RankedDefinition> {
+    definition_order_with(graph, prompt, files, k, DefinitionOpts::default())
+}
+
+/// Switches for research runs (`NM_DIAG`); the default is what ships.
+#[derive(Debug, Clone, Copy)]
+pub struct DefinitionOpts {
+    pub chunk: neuromesh_graph::ChunkOpts,
+    pub file_prior: bool,
+    pub traceback: bool,
+}
+
+impl Default for DefinitionOpts {
+    fn default() -> Self {
+        Self {
+            chunk: neuromesh_graph::ChunkOpts::default(),
+            file_prior: true,
+            traceback: true,
+        }
+    }
+}
+
+/// [`definition_order`] with research switches.
+pub fn definition_order_with(
+    graph: &neuromesh_graph::NeuralProjectGraph,
+    prompt: &str,
+    files: &[String],
+    k: usize,
+    opts: DefinitionOpts,
+) -> Vec<neuromesh_graph::RankedDefinition> {
     const K: f32 = 60.0;
     let file_rank: std::collections::HashMap<&str, usize> = files
         .iter()
         .enumerate()
         .map(|(i, f)| (f.as_str(), i))
         .collect();
+    let file_rank = if opts.file_prior {
+        file_rank
+    } else {
+        std::collections::HashMap::new()
+    };
     let mut scored: Vec<(f32, usize, neuromesh_graph::RankedDefinition)> = graph
-        .rank_definitions(prompt, 300)
+        .rank_definitions_with(prompt, 300, opts.chunk)
         .into_iter()
         .filter(|d| !crate::selector::is_noise_path(std::path::Path::new(&d.path)))
         .enumerate()
@@ -1165,8 +1199,193 @@ pub fn definition_order(
             (s, i, d)
         })
         .collect();
+    // The functions a traceback runs through vote at double weight, deepest
+    // frame first, and enter the list even when the ranking missed them.
+    // SWE-bench dev, func Acc@5: dev-fast 0.212 → 0.250, dev-rest 0.253 →
+    // 0.278 (prototype `scripts/research/priors.py --prior traceback`).
+    const TRACE_WEIGHT: f32 = 2.0;
+    let frames = if opts.traceback {
+        traceback_definitions(graph, prompt)
+    } else {
+        Vec::new()
+    };
+    for (i, d) in frames.into_iter().enumerate() {
+        let vote = TRACE_WEIGHT / (K + i as f32 + 1.0);
+        match scored
+            .iter_mut()
+            .find(|(_, _, s)| s.path == d.path && s.name == d.name)
+        {
+            Some(hit) => hit.0 += vote,
+            None => {
+                let mut s = vote;
+                if let Some(r) = file_rank.get(d.path.as_str()) {
+                    s += 1.0 / (K + *r as f32 + 1.0);
+                }
+                let at = scored.len();
+                scored.push((s, at, d));
+            }
+        }
+    }
     scored.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
     scored.into_iter().take(k).map(|(_, _, d)| d).collect()
+}
+
+/// The definitions a report's traceback runs through, deepest frame first.
+/// A frame (`File "…/pkg/mod.py", line 12, in name`, or pytest's
+/// `pkg/mod.py:12: in name`) resolves to an indexed file as in
+/// [`named_files`], then to the definition called `name` there (the one
+/// containing the line when several share the name) or, for `<module>` and
+/// names the index lacks, the innermost definition containing the line.
+/// Frames in tests are skipped: the test that reproduces a bug is not where
+/// it is fixed. Line numbers come from the reporter's version, so the name
+/// decides first.
+pub fn traceback_definitions(
+    graph: &neuromesh_graph::NeuralProjectGraph,
+    prompt: &str,
+) -> Vec<neuromesh_graph::RankedDefinition> {
+    use std::sync::OnceLock;
+    static FRAME: OnceLock<regex::Regex> = OnceLock::new();
+    static PYTEST: OnceLock<regex::Regex> = OnceLock::new();
+    let frame = FRAME.get_or_init(|| {
+        regex::Regex::new(r#"File "([^"\n]+\.py)", line (\d+), in ([\w<>.]+)"#).unwrap()
+    });
+    let pytest = PYTEST.get_or_init(|| {
+        regex::Regex::new(r"(?m)^([\w./\\-]+\.py):(\d+):(?: in ([\w<>.]+))?").unwrap()
+    });
+    let mut frames: Vec<(String, usize, Option<String>)> = Vec::new();
+    for c in frame.captures_iter(prompt) {
+        let line = c[2].parse().unwrap_or(0);
+        frames.push((c[1].to_string(), line, Some(c[3].to_string())));
+    }
+    for c in pytest.captures_iter(prompt) {
+        let line = c[2].parse().unwrap_or(0);
+        frames.push((
+            c[1].to_string(),
+            line,
+            c.get(3).map(|m| m.as_str().to_string()),
+        ));
+    }
+    if frames.is_empty() {
+        return Vec::new();
+    }
+    let resolver = FileResolver::new(graph);
+    let mut out: Vec<neuromesh_graph::RankedDefinition> = Vec::new();
+    for (token, line, func) in frames.iter().rev() {
+        let Some(path) = resolver.resolve(token) else {
+            continue;
+        };
+        if neuromesh_core::source_path::is_test_path(std::path::Path::new(&path)) {
+            continue;
+        }
+        // (qualified name, first line, last line) of every definition that
+        // is not a container (a class whose methods name it as parent).
+        let nodes = graph.nodes_in_file(std::path::Path::new(&path));
+        let parents: std::collections::HashSet<&str> =
+            nodes.iter().filter_map(|n| n.parent.as_deref()).collect();
+        let defs: Vec<(String, usize, usize)> = nodes
+            .iter()
+            .filter(|n| n.node_type != neuromesh_core::NodeType::File)
+            .filter_map(|n| {
+                let r = n.line_range.as_ref()?;
+                if r.end <= r.start {
+                    return None;
+                }
+                let name = match &n.parent {
+                    Some(p) if !p.is_empty() => format!("{p}.{}", n.name),
+                    _ => n.name.clone(),
+                };
+                (!parents.contains(name.as_str())).then_some((name, r.start, r.end))
+            })
+            .collect();
+        let wanted = func
+            .as_deref()
+            .filter(|f| *f != "<module>")
+            .map(|f| f.rsplit('.').next().unwrap_or(f));
+        let inside = |d: &&(String, usize, usize)| d.1 <= *line && *line <= d.2;
+        let named: Vec<&(String, usize, usize)> = defs
+            .iter()
+            .filter(|d| wanted.is_some_and(|w| d.0.rsplit('.').next() == Some(w)))
+            .collect();
+        let pick = if named.is_empty() {
+            defs.iter().filter(inside).min_by_key(|d| d.2 - d.1)
+        } else {
+            named
+                .iter()
+                .copied()
+                .filter(inside)
+                .min_by_key(|d| d.2 - d.1)
+                .or_else(|| named.iter().copied().min_by_key(|d| d.1.abs_diff(*line)))
+        };
+        if let Some((name, start, end)) = pick {
+            if !out.iter().any(|d| d.path == path && &d.name == name) {
+                out.push(neuromesh_graph::RankedDefinition {
+                    path: path.clone(),
+                    name: name.clone(),
+                    lines: (*start, *end),
+                    score: 0.0,
+                });
+            }
+        }
+    }
+    out
+}
+
+/// Resolves a path or file name written in a report to an indexed file: the
+/// longest suffix that names exactly one indexed file (site-packages and
+/// home-directory prefixes fall away), else a bare file name that exactly one
+/// non-test file has.
+struct FileResolver {
+    files: Vec<String>,
+    by_name: std::collections::HashMap<String, Vec<String>>,
+}
+
+impl FileResolver {
+    fn new(graph: &neuromesh_graph::NeuralProjectGraph) -> Self {
+        let files: Vec<String> = graph
+            .file_node_paths()
+            .into_iter()
+            .map(|(_, p)| p.to_string_lossy().replace('\\', "/"))
+            .collect();
+        let mut by_name: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        for f in &files {
+            if !neuromesh_core::source_path::is_test_path(std::path::Path::new(f)) {
+                by_name
+                    .entry(f.rsplit('/').next().unwrap_or(f).to_string())
+                    .or_default()
+                    .push(f.clone());
+            }
+        }
+        Self { files, by_name }
+    }
+
+    fn resolve(&self, token: &str) -> Option<String> {
+        let t = token.replace('\\', "/");
+        let t = t.trim_start_matches("./");
+        let parts: Vec<&str> = t.split('/').filter(|s| !s.is_empty()).collect();
+        if parts.is_empty() {
+            return None;
+        }
+        for i in 0..parts.len() {
+            let suffix = parts[i..].join("/");
+            let tail = format!("/{suffix}");
+            let hits: Vec<&String> = self
+                .files
+                .iter()
+                .filter(|f| **f == suffix || f.ends_with(&tail))
+                .collect();
+            match hits.len() {
+                1 => return Some(hits[0].clone()),
+                0 => continue,
+                _ if i + 1 < parts.len() => continue,
+                _ => return None,
+            }
+        }
+        match self.by_name.get(parts[parts.len() - 1]) {
+            Some(c) if c.len() == 1 => Some(c[0].clone()),
+            _ => None,
+        }
+    }
 }
 
 /// Indexed files a report names, best pointer first: traceback frames
@@ -1181,46 +1400,8 @@ fn named_files(graph: &neuromesh_graph::NeuralProjectGraph, prompt: &str) -> Vec
     let frame = FRAME.get_or_init(|| regex::Regex::new(r#"File "([^"\n]+)", line \d+"#).unwrap());
     let path =
         PATH.get_or_init(|| regex::Regex::new(r"[\w./\\-]+\.[A-Za-z][A-Za-z0-9]{0,5}\b").unwrap());
-    let files: Vec<String> = graph
-        .file_node_paths()
-        .into_iter()
-        .map(|(_, p)| p.to_string_lossy().replace('\\', "/"))
-        .collect();
-    let mut by_name: std::collections::HashMap<&str, Vec<&String>> =
-        std::collections::HashMap::new();
-    for f in &files {
-        if !neuromesh_core::source_path::is_test_path(std::path::Path::new(f)) {
-            by_name
-                .entry(f.rsplit('/').next().unwrap_or(f))
-                .or_default()
-                .push(f);
-        }
-    }
-    let resolve = |token: &str| -> Option<String> {
-        let t = token.replace('\\', "/");
-        let t = t.trim_start_matches("./");
-        let parts: Vec<&str> = t.split('/').filter(|s| !s.is_empty()).collect();
-        if parts.is_empty() {
-            return None;
-        }
-        for i in 0..parts.len() {
-            let suffix = parts[i..].join("/");
-            let hits: Vec<&String> = files
-                .iter()
-                .filter(|f| **f == suffix || f.ends_with(&format!("/{suffix}")))
-                .collect();
-            match hits.len() {
-                1 => return Some(hits[0].clone()),
-                0 => continue,
-                _ if i + 1 < parts.len() => continue,
-                _ => return None,
-            }
-        }
-        match by_name.get(parts[parts.len() - 1]) {
-            Some(c) if c.len() == 1 => Some(c[0].clone()),
-            _ => None,
-        }
-    };
+    let resolver = FileResolver::new(graph);
+    let resolve = |token: &str| resolver.resolve(token);
     let mut out: Vec<String> = Vec::new();
     let frames: Vec<&str> = frame
         .captures_iter(prompt)
@@ -1302,6 +1483,46 @@ mod tests {
                 l.id
             );
         }
+    }
+
+    #[test]
+    fn traceback_frames_name_the_functions_deepest_first() {
+        use neuromesh_index::{IndexedFile, SourceLanguage};
+        use neuromesh_parser::CodeIntelligenceEngine;
+        use std::path::PathBuf;
+        let graph = NeuralProjectGraph::new(ProjectId::new("tb"));
+        let core = "def helper(x):\n    return x + 1\n\n\nclass Frame:\n    def render(self, x):\n        y = helper(x)\n        return y\n\n    def close(self):\n        pass\n";
+        let test = "from pkg.core import Frame\n\ndef test_render():\n    Frame().render(1)\n";
+        for (rel, src) in [("pkg/core.py", core), ("tests/test_core.py", test)] {
+            let file = IndexedFile {
+                project_id: ProjectId::new("tb"),
+                relative_path: PathBuf::from(rel),
+                full_path: PathBuf::from(rel),
+                blake3_hash: rel.into(),
+                byte_size: src.len() as u64,
+                token_count: 40,
+                language: SourceLanguage::Python,
+                last_modified: chrono::Utc::now(),
+            };
+            graph.ingest_file(
+                &file,
+                &CodeIntelligenceEngine::analyze(&PathBuf::from(rel), src, SourceLanguage::Python),
+                Some(src),
+            );
+        }
+        graph.finalize_links();
+        let report = "Rendering fails:\n\nTraceback (most recent call last):\n  File \"tests/test_core.py\", line 4, in test_render\n    Frame().render(1)\n  File \"/usr/lib/python3/site-packages/pkg/core.py\", line 7, in render\n    y = helper(x)\n  File \"/usr/lib/python3/site-packages/pkg/core.py\", line 2, in helper\n    return x + 1\nTypeError: boom\n";
+        let got: Vec<(String, String)> = traceback_definitions(&graph, report)
+            .into_iter()
+            .map(|d| (d.path, d.name))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("pkg/core.py".to_string(), "helper".to_string()),
+                ("pkg/core.py".to_string(), "Frame.render".to_string()),
+            ]
+        );
     }
 
     #[test]

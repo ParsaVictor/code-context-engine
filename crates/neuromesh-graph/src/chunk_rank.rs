@@ -15,7 +15,7 @@
 //! Built lazily from the sources on disk on the first long report, cached
 //! with the file ranker's key.
 
-use crate::file_rank::{stemmer, terms_of, RankedFile};
+use crate::file_rank::{stemmer, terms_of_opt, RankedFile};
 use neuromesh_core::NodeId;
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -39,6 +39,16 @@ pub(crate) struct ChunkSource {
     /// Whether each span holds other definitions (a class): it still votes
     /// for its file, but a function-level list names what is inside it.
     pub containers: Vec<bool>,
+}
+
+/// How chunks and queries are turned into terms. The default is what ships;
+/// the other settings exist for research runs (`NM_DIAG`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ChunkOpts {
+    /// Exact words instead of Snowball stems.
+    pub no_stem: bool,
+    /// A method's chunk also carries its class name's words.
+    pub owner_terms: bool,
 }
 
 /// One definition ranked for a report: where it is and how well it matched.
@@ -65,21 +75,27 @@ pub(crate) struct ChunkRankIndex {
     post: HashMap<String, Vec<(u32, u16)>>,
     /// Per chunk: definition name (`<head>` for the file head) and lines.
     label: Vec<Label>,
+    opts: ChunkOpts,
 }
 
 impl ChunkRankIndex {
     pub(crate) fn build(sources: Vec<ChunkSource>) -> Self {
+        Self::build_with(sources, ChunkOpts::default())
+    }
+
+    pub(crate) fn build_with(sources: Vec<ChunkSource>, opts: ChunkOpts) -> Self {
         // Per file: its chunks' term counts, computed in parallel.
         let per_file: Vec<FileChunks> = sources
             .into_par_iter()
             .map(|f| {
-                let st = stemmer();
+                let stem = stemmer();
+                let st = (!opts.no_stem).then_some(&stem);
                 let rel = f.path.to_string_lossy().replace('\\', "/");
                 let stem_path = match rel.rsplit_once('.') {
                     Some((head, ext)) if !ext.contains('/') => head.to_string(),
                     _ => rel.clone(),
                 };
-                let path_terms = terms_of(&stem_path, &st, true);
+                let path_terms = terms_of_opt(&stem_path, st, true);
                 let lines: Vec<&str> = f.source.lines().collect();
                 let head = (1..HEAD_LINES.min(lines.len()), ("<head>".to_string(), true));
                 let mut chunks = Vec::new();
@@ -96,9 +112,17 @@ impl ChunkRankIndex {
                         continue;
                     }
                     let mut counts: HashMap<String, u16> = HashMap::new();
-                    for t in terms_of(&lines[start..end].join("\n"), &st, false)
+                    let owner = if opts.owner_terms {
+                        name.rsplit_once('.')
+                            .map(|(o, _)| terms_of_opt(o, st, false))
+                            .unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+                    for t in terms_of_opt(&lines[start..end].join("\n"), st, false)
                         .into_iter()
                         .chain(path_terms.iter().cloned())
+                        .chain(owner)
                     {
                         let c = counts.entry(t).or_insert(0);
                         *c = c.saturating_add(1);
@@ -110,7 +134,10 @@ impl ChunkRankIndex {
                 (f.id, f.path, chunks)
             })
             .collect();
-        let mut idx = ChunkRankIndex::default();
+        let mut idx = ChunkRankIndex {
+            opts,
+            ..ChunkRankIndex::default()
+        };
         for (id, path, chunks) in per_file {
             let file = idx.files.len() as u32;
             idx.files.push((id, path));
@@ -197,7 +224,8 @@ impl ChunkRankIndex {
         if n == 0.0 {
             return score;
         }
-        let st = stemmer();
+        let stem = stemmer();
+        let st = (!self.opts.no_stem).then_some(&stem);
         let body = neuromesh_parser::strip_issue_boilerplate(prompt);
         let title = body
             .lines()
@@ -205,15 +233,23 @@ impl ChunkRankIndex {
             .find(|l| !l.is_empty())
             .unwrap_or("");
         let mut q: HashMap<String, f32> = HashMap::new();
-        for t in terms_of(&body, &st, false) {
+        for t in terms_of_opt(&body, st, false) {
             q.insert(t, 1.0);
         }
-        for t in terms_of(title, &st, false) {
+        for t in terms_of_opt(title, st, false) {
             *q.entry(t).or_insert(0.0) += TITLE_EXTRA;
         }
+        // A cap bounds the work on a pasted log; it keeps the title's terms and
+        // then the rarest ones. (It used to keep the alphabetically first 256,
+        // so a long report lost every term after about "p".)
         let mut terms: Vec<(String, f32)> = q.into_iter().collect();
-        terms.sort_by(|a, b| a.0.cmp(&b.0));
-        terms.truncate(256);
+        terms.sort_by(|a, b| {
+            let df = |t: &str| self.post.get(t).map_or(usize::MAX, Vec::len);
+            b.1.total_cmp(&a.1)
+                .then_with(|| df(&a.0).cmp(&df(&b.0)))
+                .then_with(|| a.0.cmp(&b.0))
+        });
+        terms.truncate(1024);
         for (t, w) in &terms {
             let Some(list) = self.post.get(t) else {
                 continue;

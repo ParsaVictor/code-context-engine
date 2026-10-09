@@ -25,9 +25,12 @@ not the project's number.** Only the holdout rows are.
 | **holdout-cfg** | lightning-hydra-template (Hydra YAML), detr (argparse) | D-4 gold; F55 (session 12) + F71/F72 (session 13) tuned on it — dev-class for config questions | **1.000** | **0.767** | **0** | — |
 | holdout-web (30 q) | fastify/demo (Fastify API), shadcn-ui/taxonomy (Next.js app router) | dev-class for the web domain (fixed on since session 13; 10 blind questions added in G4 scored 0.58 before fixes) | **0.917** | **0.643** | **0** | — |
 | **private** | one closed-source B2B backend+frontend (Fastify/Drizzle + Next.js, ~1.2k files) | never tuned on; gold and checkout live outside this repo | **1.000** | **0.587** | **0** | — |
-| concept (14 q) | this repository, plain-language questions (no identifier in the prompt) | dev-class (written 2026-09-30 from the upstream author's report, tuned on in session 16) | 0.679 | 0.392 | 0 | — || **concept-holdout** (12 q) | ripgrep 14.1.1 (Rust), plain-language questions | never tuned on; gold locked before any run; 1.0.0 scored recall **0.042** | **0.500** | **0.152** | **0** | — |
+| concept (14 q) | this repository, plain-language questions (no identifier in the prompt) | dev-class (written 2026-09-30 from the upstream author's report, tuned on in session 16) | 0.679 | 0.392 | 0 | — |
 | **concept-holdout** (12 q) | ripgrep 14.1.1 (Rust), plain-language questions | never tuned on; gold locked before any run; 1.0.0 scored recall **0.042** | **0.500** | **0.156** | **0** | — |
 | **concept-holdout2** (12 q) | click 8.1.7 (Python, 16 source files), plain-language questions | never tuned on; gold locked before the single run (2026-10-01) | **0.958** | **0.342** | **0** | — |
+| concept-holdout3 (12 q) | cobra v1.8.1 (Go), plain-language questions | gold locked before its single run (2026-10-09); looked at since | 0.833 | 0.357 | 0 | — |
+| concept-holdout4 (12 q) | axios v1.7.7 (JavaScript), plain-language questions | gold locked before its single run (2026-10-09); looked at since | 0.667 | 0.528 | 0 | — |
+| **concept-holdout5** (12 q) | jsoup 1.18.1 (Java), plain-language questions | gold locked before its single run (2026-10-10); list R@3 0.750 vs BM25 0.667 (pre-S1 v1.2.0: 0.417) | **0.667** | **0.235** | **0** | — |
 
 - **recall / precision** are file-level against a hand-written gold (`gold_files`) per question.
   A forbidden file in the packet zeroes that question's precision.
@@ -97,10 +100,10 @@ instance. 95% bootstrap intervals in brackets.
 | Lite strict holdout | 276 | **0.507** [0.45,0.57] | **0.717** [0.66,0.77] | **0.750** [0.70,0.80] | **0.815** | 0.301 / 0.507 / 0.587 / 0.721 |
 | Lite, LocAgent's subset | 274 | **0.500** [0.44,0.56] | **0.723** [0.67,0.77] | **0.755** [0.70,0.81] | **0.828** | 0.299 / 0.522 / 0.606 / 0.734 |
 | Verified, all | 500 | **0.446** [0.40,0.49] | **0.680** [0.64,0.72] | **0.736** [0.69,0.77] | **0.814** | 0.216 / 0.392 / 0.490 / 0.642 |
-| Verified, not in Lite | 403 | **0.437** [0.39,0.48] | **0.670** [0.63,0.72] | **0.732** [0.69,0.77] | **0.811** | 0.194 / 0.372 / 0.476 / 0.620 |
+| Verified, not in Lite | 407 | **0.435** [0.38,0.48] | **0.671** [0.62,0.71] | **0.732** [0.69,0.78] | **0.811** | 0.194 / 0.373 / 0.477 / 0.622 |
 
-v1.2.0 → v1.3.0 on the same instances: Lite 276 Acc@1 0.486 → 0.507; Verified-not-Lite 0.392 →
-0.437; Acc@5 unchanged within ±0.005. p50 2.9 s / p90 10.6 s per Lite issue (cold index included).
+v1.2.0 → v1.3.0 on the same instances: Lite 276 Acc@1 0.486 → 0.507; Verified-not-Lite (the 403
+v1.2.0 scored) 0.392 → 0.437; Acc@5 unchanged within ±0.005. p50 2.9 s / p90 10.6 s per Lite issue (cold index included).
 
 | function level (all edited functions in top k) | n | Acc@1 | Acc@5 | Acc@10 |
 |---|---|---|---|---|

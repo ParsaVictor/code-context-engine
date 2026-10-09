@@ -1,0 +1,87 @@
+# Locked 2026-10-10 before any engine run on jsoup. Plain-language
+# questions only; gold from reading the source (grep-checked).
+
+[[task]]
+id = "js_clean_untrusted"
+prompt = "How does it strip tags and attributes that are not allowed from untrusted HTML, keeping only safe markup?"
+gold_files = ["src/main/java/org/jsoup/safety/Cleaner.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_allowed_presets"
+prompt = "Where are the sets of tags and attributes that may survive sanitising defined, including the ready-made basic and relaxed presets?"
+gold_files = ["src/main/java/org/jsoup/safety/Safelist.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_detect_encoding"
+prompt = "When a downloaded page does not declare its character encoding in the HTTP headers, how is the encoding worked out from the bytes or a meta tag?"
+gold_files = ["src/main/java/org/jsoup/helper/DataUtil.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_escape_output"
+prompt = "When writing a document back out as HTML, how are special characters like less-than signs or non-breaking spaces turned into named or numeric references?"
+gold_files = ["src/main/java/org/jsoup/nodes/Entities.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_css_query"
+prompt = "How is a CSS-style query such as div > p.intro turned into something that can match elements?"
+gold_files = ["src/main/java/org/jsoup/select/QueryParser.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_cookies"
+prompt = "How are cookies attached to an outgoing request and saved from the headers of the response?"
+gold_files = ["src/main/java/org/jsoup/helper/CookieUtil.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_redirects"
+prompt = "How does fetching a URL follow redirects, and what limits the number of hops?"
+gold_files = ["src/main/java/org/jsoup/helper/HttpConnection.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_walk_tree"
+prompt = "How does it visit every node under a root depth-first, calling back when entering and leaving each node, without recursion?"
+gold_files = ["src/main/java/org/jsoup/select/NodeTraversor.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_to_w3c"
+prompt = "How can a parsed document be converted into a standard W3C DOM document, for example to run XPath over it?"
+gold_files = ["src/main/java/org/jsoup/helper/W3CDom.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_read_chars"
+prompt = "How is the input text read character by character with lookahead and buffering while tokenising?"
+gold_files = ["src/main/java/org/jsoup/parser/CharacterReader.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_form_submit"
+prompt = "How are the fields of an HTML form gathered into name and value pairs ready to submit?"
+gold_files = ["src/main/java/org/jsoup/nodes/FormElement.java"]
+forbidden_files = []
+expect_seeds_missed = false
+
+[[task]]
+id = "js_url_normalize"
+prompt = "Before connecting, how is a URL that contains spaces or non-ASCII characters made safe to request?"
+gold_files = ["src/main/java/org/jsoup/helper/UrlBuilder.java"]
+forbidden_files = []
+expect_seeds_missed = false
+

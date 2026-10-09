@@ -791,16 +791,49 @@ impl NeuralProjectGraph {
             .rank_definitions(&prompt[..end], limit)
     }
 
+    /// [`Self::rank_definitions`] over an index built with other term
+    /// settings (research runs only: built per call, not cached).
+    pub fn rank_definitions_with(
+        &self,
+        prompt: &str,
+        limit: usize,
+        opts: crate::chunk_rank::ChunkOpts,
+    ) -> Vec<crate::chunk_rank::RankedDefinition> {
+        if opts == crate::chunk_rank::ChunkOpts::default() {
+            return self.rank_definitions(prompt, limit);
+        }
+        let mut end = prompt.len().min(32 * 1024);
+        while !prompt.is_char_boundary(end) {
+            end -= 1;
+        }
+        crate::chunk_rank::ChunkRankIndex::build_with(self.chunk_sources(), opts)
+            .rank_definitions(&prompt[..end], limit)
+    }
+
     fn chunk_rank_index(&self) -> Arc<crate::chunk_rank::ChunkRankIndex> {
-        let (key, files) = {
+        let key = {
             let data = self.inner.read();
-            let key = (data.generation, data.file_to_nodes.len() as u64);
-            {
-                let cached = self.derived.read();
-                if cached.chunk_rank_key == Some(key) {
-                    return Arc::clone(&cached.chunk_rank);
-                }
+            (data.generation, data.file_to_nodes.len() as u64)
+        };
+        {
+            let cached = self.derived.read();
+            if cached.chunk_rank_key == Some(key) {
+                return Arc::clone(&cached.chunk_rank);
             }
+        }
+        let sources = self.chunk_sources();
+        let t0 = std::time::Instant::now();
+        let index = Arc::new(crate::chunk_rank::ChunkRankIndex::build(sources));
+        crate::timing("chunk_rank build", t0);
+        let mut cached = self.derived.write();
+        cached.chunk_rank_key = Some(key);
+        cached.chunk_rank = Arc::clone(&index);
+        index
+    }
+
+    fn chunk_sources(&self) -> Vec<crate::chunk_rank::ChunkSource> {
+        let files = {
+            let data = self.inner.read();
             let mut files = Vec::new();
             for (path, ids) in &data.file_to_nodes {
                 if neuromesh_core::is_low_priority_source_path(path) {
@@ -839,10 +872,9 @@ impl NeuralProjectGraph {
                     files.push((id, path.clone(), spans, names, containers));
                 }
             }
-            (key, files)
+            files
         };
-        let t0 = std::time::Instant::now();
-        let sources: Vec<crate::chunk_rank::ChunkSource> = files
+        files
             .into_par_iter()
             .filter_map(|(id, path, spans, names, containers)| {
                 let source = self.read_source(&path)?;
@@ -855,13 +887,7 @@ impl NeuralProjectGraph {
                     containers,
                 })
             })
-            .collect();
-        let index = Arc::new(crate::chunk_rank::ChunkRankIndex::build(sources));
-        crate::timing("chunk_rank build", t0);
-        let mut cached = self.derived.write();
-        cached.chunk_rank_key = Some(key);
-        cached.chunk_rank = Arc::clone(&index);
-        index
+            .collect()
     }
 
     fn file_rank_index(&self) -> Arc<crate::file_rank::FileRankIndex> {
