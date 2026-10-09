@@ -1,0 +1,11 @@
+# Fifth plain-language holdout (2026-10-10), Java: written to confirm the
+# short-question list fusion (S1) and any session-18 change on a language and
+# repository never run before. Gold written from reading the source before any
+# engine run; locked by this commit.
+#
+#   jsoup — jhy/jsoup 1.18.1: HTML parser, cleaner and HTTP client for Java
+
+[[repo]]
+name = "jsoup"
+url = "https://github.com/jhy/jsoup"
+rev = "19e8539fbfae80432fc4d8e9b562a39f786f547e"
