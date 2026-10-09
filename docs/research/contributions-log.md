@@ -361,3 +361,37 @@ functions in the top k). dev-fast (48 issues with function gold): func Acc@1/5/1
 0.062/0.229/0.292/0.396 (raw definition ranking, no file prior). Reference (LocAgent Table 4, Lite,
 function level Acc@5/@10): BM25 0.318/0.369, CodeRankEmbed 0.518/0.588, Agentless+Claude 0.588,
 LocAgent+Claude 0.734/0.774. File-prior orderings (`func_hier.py`) pending the full-dev run.
+
+### 8.11 SWE-bench Verified (second standard benchmark) and the ablation table (2026-10-09)
+
+**Verified, v1.2.0 engine, run once** (496 of 500; 4 lost to git checkout errors):
+
+| | Acc@1 | Acc@3 | Acc@5 | Acc@10 |
+|---|---|---|---|---|
+| engine, 496 | **0.405** [0.36,0.45] | **0.669** [0.63,0.71] | **0.732** [0.69,0.77] | **0.804** |
+| BM25, 496 | 0.216 | 0.391 | 0.490 | 0.641 |
+| engine, 403 never seen before (not in Lite) | 0.392 | 0.655 | 0.727 | 0.809 |
+| BM25, same 403 | 0.194 | 0.372 | 0.476 | 0.620 |
+
+**Ablation on the Lite strict holdout (276)**, one run per removed component (`NM_ABLATE` switch
+build, not shipped):
+
+| removed | Acc@1 | Acc@3 | Acc@5 | Acc@10 |
+|---|---|---|---|---|
+| nothing (v1.2.0) | 0.486 | 0.710 | 0.750 | 0.804 |
+| report hygiene + code tokens (C11) | 0.467 | 0.707 | 0.743 | 0.801 |
+| definition-level ranking (C12) | **0.388** | **0.569** | **0.652** | 0.764 |
+| localisation list — packet order only | 0.366 | 0.536 | 0.558 | – |
+
+Reading: the definition-level ranking (LocAgent's entity-content BM25 idea, made LLM-free) carries
+most of the gain over the packet (+0.10 @1, +0.14 @3). Hygiene is small on Lite (−0.019 @1 when
+removed) — its dev gains came mostly from sqlfluff's template-heavy issues; reported as is.
+
+### 8.12 Function level: classes out, file prior in (engine, dev 225)
+
+Classes (a definition another one names as its parent) stay in the file ranking but leave the
+function list; the list is fused (RRF) with each definition's file rank in `where_to_look`.
+Engine on SWE-bench dev (189 issues with function gold), func Acc@1/5/10/20: 0.137/0.268/0.337/–
+→ **0.175/0.323/0.402/0.460** (prototype predicted 0.174/0.321/0.400). Same run, file level with
+everything since v1.2.0 (named files): 0.249/0.484/0.600/0.680 → **0.308/0.527/0.621/0.692**.
+MCP: reports now also get `functions_to_look` (five, `path:Class.method Lx-Ly`).

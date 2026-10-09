@@ -74,7 +74,16 @@ with Claude-3.5 0.726 / 0.792 / 0.796; LocAgent with Claude-3.5 0.777 / 0.920 / 
 remain ahead at Acc@1; the engine is an LLM-free first stage they can start from.
 
 SWE-bench dev (tuning set, 225): plain BM25 0.160 / 0.347 / 0.427 / 0.538 → 0.249 / 0.484 / 0.600 /
-0.680. Raw results: `swebench/results-final-test.jsonl` (outside the repository); harness
+0.680.
+
+**SWE-bench Verified** (500 human-validated issues, v1.2.0 engine, run once; 496 scored, 4 lost to
+git checkout errors): plain BM25 0.216 / 0.391 / 0.490 / 0.641 → **0.405 / 0.669 / 0.732 / 0.804**
+(Acc@1/3/5/10). On the 403 Verified issues that are not in Lite: BM25 0.194 / 0.372 / 0.476 / 0.620
+→ 0.392 / 0.655 / 0.727 / 0.809.
+
+**Which part does the work** (Lite strict holdout, one run per removed component, Acc@1/3/5):
+definition-level ranking removed 0.388 / 0.569 / 0.652; report hygiene removed 0.467 / 0.707 /
+0.743; packet order only 0.366 / 0.536 / 0.558; full 0.486 / 0.710 / 0.750. Raw results: `swebench/results-final-test.jsonl` (outside the repository); harness
 `scripts/swebench_localize.py`, scoring `scripts/research/eval_loc.py`.
 
 ## Speed (same machine, same hour, release binary without embeddings)

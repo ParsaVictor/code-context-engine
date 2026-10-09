@@ -1135,6 +1135,40 @@ pub fn localization_order(
     out
 }
 
+/// Functions and methods to look at for a report, best first, `k` deep: the
+/// definition ranking fused (RRF, k = 60) with the rank of each definition's
+/// file in [`localization_order`] — the function step Agentless takes inside
+/// the files it chose. SWE-bench dev (190 issues with function gold), func
+/// Acc@5/@10: 0.311/0.374 without the file prior → 0.321/0.400 with it.
+pub fn definition_order(
+    graph: &neuromesh_graph::NeuralProjectGraph,
+    prompt: &str,
+    files: &[String],
+    k: usize,
+) -> Vec<neuromesh_graph::RankedDefinition> {
+    const K: f32 = 60.0;
+    let file_rank: std::collections::HashMap<&str, usize> = files
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.as_str(), i))
+        .collect();
+    let mut scored: Vec<(f32, usize, neuromesh_graph::RankedDefinition)> = graph
+        .rank_definitions(prompt, 300)
+        .into_iter()
+        .filter(|d| !crate::selector::is_noise_path(std::path::Path::new(&d.path)))
+        .enumerate()
+        .map(|(i, d)| {
+            let mut s = 1.0 / (K + i as f32 + 1.0);
+            if let Some(r) = file_rank.get(d.path.as_str()) {
+                s += 1.0 / (K + *r as f32 + 1.0);
+            }
+            (s, i, d)
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    scored.into_iter().take(k).map(|(_, _, d)| d).collect()
+}
+
 /// Indexed files a report names, best pointer first: traceback frames
 /// (`File "…/pkg/mod.py", line 12`) from the deepest up, then any other path
 /// or file name in order of mention. A path resolves by its longest suffix

@@ -104,6 +104,12 @@ pub fn execute(args: &[String]) -> Result<()> {
 
     let selected_paths = neuromesh_context::gold::packet_file_order(&graph, &prompt, &view);
     let localization = neuromesh_context::gold::localization_order(&graph, &prompt, &view, 20);
+    let definitions =
+        if prompt.split_whitespace().count() >= neuromesh_parser::text_normalize::REPORT_WORDS {
+            neuromesh_context::gold::definition_order(&graph, &prompt, &localization, def_depth())
+        } else {
+            Vec::new()
+        };
     let mut files: Vec<String> = packet_file_names(&view).into_iter().collect();
     files.sort();
     let reduction = if workspace_tokens > 0 {
@@ -134,19 +140,7 @@ pub fn execute(args: &[String]) -> Result<()> {
         selected_files: files.clone(),
         selected_paths,
         localization,
-        definitions: if prompt.split_whitespace().count()
-            >= neuromesh_parser::text_normalize::REPORT_WORDS
-        {
-            graph
-                .rank_definitions(&prompt, def_depth())
-                .into_iter()
-                .filter(|d| {
-                    !neuromesh_context::selector::is_noise_path(std::path::Path::new(&d.path))
-                })
-                .collect()
-        } else {
-            Vec::new()
-        },
+        definitions,
         ranked_paths: graph
             .file_rank(&prompt, 10)
             .into_iter()
