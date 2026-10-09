@@ -287,7 +287,7 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
             {
                 graph.mark_index_loading();
             }
-            commands::spawn_live_sync(
+            let indexable = commands::spawn_live_sync(
                 graph.clone(),
                 current_dir.clone(),
                 project_id.clone(),
@@ -316,16 +316,27 @@ async fn async_main(command: &str, args: &[String]) -> Result<()> {
                 });
                 // Separate task: only open a browser once we know the real
                 // bound port, but this never delays the stdio server below.
+                // A workspace that will not be indexed gets no tab: its
+                // dashboard would show an empty graph ("no modules").
                 let workspace_for_ui = current_dir.clone();
                 tokio::spawn(async move {
                     if let Ok(actual_port) = port_rx.await {
-                        maybe_open_ui_first_run(&workspace_for_ui, actual_port);
+                        if indexable {
+                            maybe_open_ui_first_run(&workspace_for_ui, actual_port);
+                        }
                     }
                 });
             }
 
             let server = neuromesh_mcp::McpServer::new(handler);
             server.run_stdio().await?;
+            // The client closed stdin: the session is over. Dropping the
+            // runtime would wait on the file watcher's blocking task forever,
+            // leaving an orphan process per closed client (a probe that closed
+            // stdin found the server still alive after 10 minutes).
+            use std::io::Write;
+            let _ = std::io::stdout().flush();
+            std::process::exit(0);
         }
         "--help" | "-h" | "help" => {
             print_help();
