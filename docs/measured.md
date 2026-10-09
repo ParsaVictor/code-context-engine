@@ -86,6 +86,36 @@ definition-level ranking removed 0.388 / 0.569 / 0.652; report hygiene removed 0
 0.743; packet order only 0.366 / 0.536 / 0.558; full 0.486 / 0.710 / 0.750. Raw results: `swebench/results-final-test.jsonl` (outside the repository); harness
 `scripts/swebench_localize.py`, scoring `scripts/research/eval_loc.py`.
 
+### v1.3.0, run once on Lite and Verified (2026-10-09/10)
+
+v1.3.0 adds files the report names (traceback frames, paths) as a vote and the function list
+(`functions_to_look`). Same protocol: release binary, one run per benchmark, never inspected per
+instance. 95% bootstrap intervals in brackets.
+
+| file level | n | Acc@1 | Acc@3 | Acc@5 | Acc@10 | BM25 Acc@1/3/5/10 |
+|---|---|---|---|---|---|---|
+| Lite strict holdout | 276 | **0.507** [0.45,0.57] | **0.717** [0.66,0.77] | **0.750** [0.70,0.80] | **0.815** | 0.301 / 0.507 / 0.587 / 0.721 |
+| Lite, LocAgent's subset | 274 | **0.500** [0.44,0.56] | **0.723** [0.67,0.77] | **0.755** [0.70,0.81] | **0.828** | 0.299 / 0.522 / 0.606 / 0.734 |
+| Verified, all | 500 | **0.446** [0.40,0.49] | **0.680** [0.64,0.72] | **0.736** [0.69,0.77] | **0.814** | 0.216 / 0.392 / 0.490 / 0.642 |
+| Verified, not in Lite | 403 | **0.437** [0.39,0.48] | **0.670** [0.63,0.72] | **0.732** [0.69,0.77] | **0.811** | 0.194 / 0.372 / 0.476 / 0.620 |
+
+v1.2.0 → v1.3.0 on the same instances: Lite 276 Acc@1 0.486 → 0.507; Verified-not-Lite 0.392 →
+0.437; Acc@5 unchanged within ±0.005. p50 2.9 s / p90 10.6 s per Lite issue (cold index included).
+
+| function level (all edited functions in top k) | n | Acc@1 | Acc@5 | Acc@10 |
+|---|---|---|---|---|
+| Lite, LocAgent's subset | 274 | 0.168 [0.12,0.22] | **0.394** [0.34,0.46] | **0.482** [0.42,0.54] |
+| Lite strict holdout, with function gold | 250 | 0.168 | 0.400 | 0.492 |
+| Verified, all, with function gold | 459 | 0.163 | 0.346 | 0.416 |
+| Verified not in Lite, with function gold | 375 | 0.157 | 0.312 | 0.381 |
+
+Function gold = innermost function containing a removed line or insertion point of the reference
+patch (Python `ast`); the 274 instances that have one are exactly LocAgent's subset. Published
+(LocAgent Table 4, function Acc@5/@10): BM25 0.318/0.369, CodeRankEmbed 0.518/0.588,
+Agentless+Claude-3.5 0.588, LocAgent+Claude-3.5 0.734/0.774. The engine lists functions only for
+reports of 60+ words; shorter reports count as misses here (30 of 274). Scoring them out, as the
+session-17 dev numbers did, gives 0.443/0.541 on 244 — the smaller denominator flatters.
+
 ## Speed (same machine, same hour, release binary without embeddings)
 
 ultralytics, 931 files: index ≈3.6 s; one question end-to-end p50 ≈0.70 s (n=10, cold process each

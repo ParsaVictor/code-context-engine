@@ -395,3 +395,46 @@ Engine on SWE-bench dev (189 issues with function gold), func Acc@1/5/10/20: 0.1
 → **0.175/0.323/0.402/0.460** (prototype predicted 0.174/0.321/0.400). Same run, file level with
 everything since v1.2.0 (named files): 0.249/0.484/0.600/0.680 → **0.308/0.527/0.621/0.692**.
 MCP: reports now also get `functions_to_look` (five, `path:Class.method Lx-Ly`).
+
+### 8.13 v1.3.0 run once on Lite and Verified; function-level denominator fix (session 18, 2026-10-10)
+
+Release binary v1.3.0 (tag `6e94b91`), one run per benchmark (`swebench/lite-v130-*.jsonl`,
+`verified-v130-*.jsonl`; 300/300 and 500/500 scored, no checkout errors this time).
+
+| file level | n | Acc@1 | Acc@3 | Acc@5 | Acc@10 | BM25 |
+|---|---|---|---|---|---|---|
+| Lite strict holdout | 276 | **0.507** [0.45,0.57] | **0.717** [0.66,0.77] | 0.750 [0.70,0.80] | 0.815 | 0.301/0.507/0.587/0.721 |
+| LocAgent subset | 274 | **0.500** [0.44,0.56] | **0.723** [0.67,0.77] | 0.755 [0.70,0.81] | 0.828 | 0.299/0.522/0.606/0.734 |
+| Verified, all | 500 | **0.446** [0.40,0.49] | 0.680 [0.64,0.72] | 0.736 [0.69,0.77] | 0.814 | 0.216/0.392/0.490/0.642 |
+| Verified not in Lite | 403 | **0.437** [0.39,0.48] | 0.670 [0.63,0.72] | 0.732 [0.69,0.77] | 0.811 | 0.194/0.372/0.476/0.620 |
+
+v1.2.0 → v1.3.0, same instances: Lite-276 Acc@1 0.486 → 0.507, Verified-not-Lite 0.392 → 0.437
+(+0.045; the named-files vote, C13, dev gain was +0.049 — it transferred); Acc@5 within ±0.005.
+Latency p50 2.9 s / p90 10.6 s (Lite), 2.5 s / 8.8 s (Verified), cold index included.
+
+**Function level** (`func_eval.py`, now with `--ci`, `--gold-cache`):
+
+| | n | Acc@1 | Acc@5 | Acc@10 | Acc@20 |
+|---|---|---|---|---|---|
+| LocAgent subset (= all Lite instances with function gold) | 274 | 0.168 [0.12,0.22] | **0.394** [0.34,0.46] | **0.482** [0.42,0.54] | 0.544 |
+| Lite strict, with function gold | 250 | 0.168 | 0.400 | 0.492 | 0.548 |
+| Verified, with function gold | 459 | 0.163 | 0.346 | 0.416 | 0.468 |
+| Verified not in Lite | 375 | 0.157 | 0.312 | 0.381 | 0.435 |
+
+Reference (LocAgent Table 4, function Acc@5/@10): BM25 0.318/0.369 · CodeRankEmbed 0.518/0.588 ·
+Agentless+Claude-3.5 0.588 · LocAgent+Claude-3.5 0.734/0.774. Engine: above BM25 by +0.08/+0.11,
+below the dense retriever.
+
+**Evaluation fix (denominator).** `func_eval.py` used to score only instances whose result *has* a
+`definitions` list; the engine emits it only for reports of ≥ 60 words, so short reports left the
+denominator. Measured effect on LocAgent's 274: skipping them gives 244 instances and Acc@5/@10
+0.443/0.541; counting them as misses (correct) gives 274 and 0.394/0.482. The session-17 dev
+function numbers (189 issues, 0.323 Acc@5) used the old rule; phase 1 re-baselines dev with the
+correct one. The 274 count now matches LocAgent's subset exactly, which also validates the
+function-gold extraction. Engine follow-up: emit the function list for short reports too.
+`git show` failures in gold extraction now retry and raise instead of reading as "no gold".
+
+**Phase 2 blocker (2026-10-10).** Five Baseten keys (Kimi-K3, GLM-5.2-Fast, GLM-5.3,
+DeepSeek-V4-Flash, DeepSeek-V4-Pro) authenticate (`/v1/models` 200) but every chat call returns
+HTTP 402 "please check your current payment status" — the accounts have no credit. The strong-LLM
+stage stays unmeasured until one is funded.
