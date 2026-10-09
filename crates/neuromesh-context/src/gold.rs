@@ -1107,7 +1107,105 @@ pub fn localization_order(
             .take(k.max(out.len()))
             .collect();
     }
+    // The report's own pointers: files it names (a traceback's frames,
+    // deepest first, then paths and unique file names in prose), at double
+    // weight. SWE-bench dev (225): Acc@1 0.249 → 0.298, @3 0.484 → 0.516;
+    // both halves of dev agree (prototype `scripts/research/mention_prior.py`).
+    if long {
+        let named: Vec<String> = named_files(graph, prompt)
+            .into_iter()
+            .filter(|p| !crate::selector::is_noise_path(std::path::Path::new(p)))
+            .collect();
+        if !named.is_empty() {
+            const K: f32 = 60.0;
+            const NAMED_WEIGHT: f32 = 2.0;
+            let mut fused: std::collections::HashMap<String, f32> =
+                std::collections::HashMap::new();
+            for (list, w) in [(&out, 1.0), (&named, NAMED_WEIGHT)] {
+                for (i, p) in list.iter().enumerate() {
+                    *fused.entry(p.clone()).or_insert(0.0) += w / (K + i as f32 + 1.0);
+                }
+            }
+            let mut order: Vec<(String, f32)> = fused.into_iter().collect();
+            order.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+            out = order.into_iter().map(|(p, _)| p).collect();
+        }
+    }
     out.extend(aside);
+    out
+}
+
+/// Indexed files a report names, best pointer first: traceback frames
+/// (`File "…/pkg/mod.py", line 12`) from the deepest up, then any other path
+/// or file name in order of mention. A path resolves by its longest suffix
+/// that names exactly one indexed file (site-packages prefixes fall away); a
+/// bare file name only when one non-test file has it.
+fn named_files(graph: &neuromesh_graph::NeuralProjectGraph, prompt: &str) -> Vec<String> {
+    use std::sync::OnceLock;
+    static FRAME: OnceLock<regex::Regex> = OnceLock::new();
+    static PATH: OnceLock<regex::Regex> = OnceLock::new();
+    let frame = FRAME.get_or_init(|| regex::Regex::new(r#"File "([^"\n]+)", line \d+"#).unwrap());
+    let path =
+        PATH.get_or_init(|| regex::Regex::new(r"[\w./\\-]+\.[A-Za-z][A-Za-z0-9]{0,5}\b").unwrap());
+    let files: Vec<String> = graph
+        .file_node_paths()
+        .into_iter()
+        .map(|(_, p)| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+    let mut by_name: std::collections::HashMap<&str, Vec<&String>> =
+        std::collections::HashMap::new();
+    for f in &files {
+        if !neuromesh_core::source_path::is_test_path(std::path::Path::new(f)) {
+            by_name
+                .entry(f.rsplit('/').next().unwrap_or(f))
+                .or_default()
+                .push(f);
+        }
+    }
+    let resolve = |token: &str| -> Option<String> {
+        let t = token.replace('\\', "/");
+        let t = t.trim_start_matches("./");
+        let parts: Vec<&str> = t.split('/').filter(|s| !s.is_empty()).collect();
+        if parts.is_empty() {
+            return None;
+        }
+        for i in 0..parts.len() {
+            let suffix = parts[i..].join("/");
+            let hits: Vec<&String> = files
+                .iter()
+                .filter(|f| **f == suffix || f.ends_with(&format!("/{suffix}")))
+                .collect();
+            match hits.len() {
+                1 => return Some(hits[0].clone()),
+                0 => continue,
+                _ if i + 1 < parts.len() => continue,
+                _ => return None,
+            }
+        }
+        match by_name.get(parts[parts.len() - 1]) {
+            Some(c) if c.len() == 1 => Some(c[0].clone()),
+            _ => None,
+        }
+    };
+    let mut out: Vec<String> = Vec::new();
+    let frames: Vec<&str> = frame
+        .captures_iter(prompt)
+        .filter_map(|c| c.get(1).map(|m| m.as_str()))
+        .collect();
+    for tok in frames.iter().rev() {
+        if let Some(f) = resolve(tok) {
+            if !out.contains(&f) {
+                out.push(f);
+            }
+        }
+    }
+    for m in path.find_iter(prompt) {
+        if let Some(f) = resolve(m.as_str()) {
+            if !out.contains(&f) {
+                out.push(f);
+            }
+        }
+    }
     out
 }
 

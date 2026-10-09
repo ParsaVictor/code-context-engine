@@ -294,3 +294,39 @@ unchanged; packet recall/precision on the new sets: cobra 0.833/0.357, axios 0.6
 affected: cobra BM25 R@3 is 0.875, not the 0.958 first printed. Re-run on every published set
 (holdout-2/c/ml2/lang, ripgrep, click, this repo): identical numbers. SWE-bench Lite has no root-level
 gold file (dev: 4 of 225, Verified: 1 of 500), and the Rust gold harness matches bare names exactly.
+
+### 8.7 Head-to-head on LocAgent's exact Lite subset (274)
+
+LocAgent §5.1 keeps the 274 Lite instances whose patch modifies an existing function. Rebuilt with
+`scripts/research/locagent_subset.py` (removed line or insertion point inside a function span of
+the base file, Python `ast`): **exactly 274 of 300**. Same v1.2.0 results file, scored on that set:
+
+| method (274, same instances) | LLM | Acc@1 | Acc@3 | Acc@5 |
+|---|---|---|---|---|
+| BM25 (LocAgent's) | – | 0.387 | 0.518 | 0.617 |
+| BM25 (ours) | – | 0.299 | 0.522 | 0.606 |
+| Jina-Code-v2 | – | 0.434 | 0.712 | 0.803 |
+| **engine v1.2.0 (CPU)** | – | **0.474** [0.42,0.53] | **0.708** [0.65,0.76] | **0.752** [0.70,0.80] |
+| CodeRankEmbed | – | 0.526 | 0.777 | 0.847 |
+| Agentless + GPT-4o | ✓ | 0.672 | 0.745 | 0.745 |
+| Agentless + Claude-3.5 | ✓ | 0.726 | 0.792 | 0.796 |
+| LocAgent + Qwen2.5-7B (fine-tuned) | ✓ | 0.708 | 0.847 | 0.883 |
+| LocAgent + Claude-3.5 | ✓ | 0.777 | 0.920 | 0.942 |
+
+Caveat: all 24 session-16 dev-class instances are among the 274 (measured) (flask/requests/seaborn/
+xarray/pylint); without them (250 strict holdout instances) the engine scores 0.488 / 0.716 /
+0.756 and BM25 0.304 / 0.512 / 0.592 — the looked-at instances do not flatter the result.
+
+### 8.8 Files the report names (C13) and quoted error messages (session 17)
+
+Inspired by what agents do first (open the frame of a traceback, grep the error message). On
+SWE-bench dev, 50 single-file issues name the gold file in their text, yet only 28 had it first.
+
+- **Named files** (`named_files` in `gold.rs`): traceback frames deepest first, then paths and
+  unique file names in prose, resolved against the index by longest unique path suffix; a third
+  RRF vote at weight 2 for reports. Prototype (`mention_prior.py`) on dev 225: Acc@1/3/5/10
+  0.249/0.484/0.600/0.680 → **0.298/0.516/0.609/0.689**; both halves agree (dev-fast 0.254 → 0.271
+  @1, dev-rest 0.247 → 0.307 @1; weight 1/2/4 swept, 2 kept for @3). Engine port on dev-fast
+  reproduces the prototype exactly (0.271/0.525/0.576/0.695). Fourteen sets unchanged.
+- **Error-message grep** (`error_grep_prior.py`): fires on 15 of 225 dev issues, fixes 2 (+0.009
+  @1). Small and positive; not shipped.
