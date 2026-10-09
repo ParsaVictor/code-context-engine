@@ -128,13 +128,15 @@ pub fn print_file_cap(report: &neuromesh_index::ScanReport, indent: &str) {
     }
 }
 
+/// Starts the background index of `dir`; returns whether it will be indexed
+/// (`false` when the path is rejected — the server then answers from nothing).
 pub fn spawn_live_sync(
     graph: std::sync::Arc<neuromesh_graph::NeuralProjectGraph>,
     dir: std::path::PathBuf,
     pid: ProjectId,
     cap: FileCapArg,
     explicit: bool,
-) {
+) -> bool {
     // The one choke point where the CLI starts a scan. A path the user gave us
     // only has to be safe; a path we guessed also has to look like a project,
     // which is what stops a server launched with no workspace from indexing
@@ -150,7 +152,7 @@ pub fn spawn_live_sync(
             "NeuroMesh: pass a project path (`neuromesh mcp <path>`) or set NEUROMESH_WORKSPACE"
         );
         graph.mark_index_ready();
-        return;
+        return false;
     }
     // Marked before the scan thread is scheduled: until then the gate still
     // said Ready over an empty graph, and a first question got "no seed".
@@ -174,6 +176,7 @@ pub fn spawn_live_sync(
             let _ = graph.save_persisted(&dir);
         }
     });
+    true
 }
 
 #[cfg(test)]
