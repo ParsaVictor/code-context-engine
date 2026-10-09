@@ -10,9 +10,10 @@ either run an LLM agent over the repository (Agentless, LocAgent, SWE-agent) or 
 retriever (CodeRankEmbed). We ask how far a local engine gets with neither: a per-project code
 graph, field-weighted lexical ranking, a definition-level ranking of long reports, and explicit
 report hygiene, all on a laptop CPU. On SWE-bench Lite, run once after tuning only on the SWE-bench
-dev split, the engine reaches file-level Acc@1/3/5 of 0.486/0.710/0.750 on 276 held-out issues
-(plain BM25 0.301/0.507/0.587) in 2.8 s per issue including a cold index — above a code embedding
-model at Acc@1 and level with Agentless+GPT-4o at Acc@5. We report every component's effect,
+dev split, the engine reaches file-level Acc@1/3/5 of 0.507/0.717/0.750 on 276 held-out issues
+(plain BM25 0.301/0.507/0.587) in 2.9 s per issue including a cold index — above a code embedding
+model at Acc@1 and level with Agentless+GPT-4o at Acc@5; on SWE-bench Verified's 403 issues outside
+Lite, 0.437/0.670/0.732 (BM25 0.194/0.372/0.476). We report every component's effect,
 negative results (dense retrieval on CPU, cross-encoder reranking, blind graph expansion), and a
 holdout protocol that caught two results that looked-at sets had suggested. TODO: LLM stage (D1),
 Verified, ablations.
@@ -56,25 +57,34 @@ tokens, definition-level BM25 with title ×3, RRF with the packet order → `whe
 
 ## 5. Results
 
-### 5.1 SWE-bench Lite (holdout, 276)
+### 5.1 SWE-bench Lite — head-to-head on LocAgent's 274 instances (holdout, run once)
 
-| method | LLM | Acc@1 | Acc@3 | Acc@5 |
-|---|---|---|---|---|
-| BM25 (ours) | – | 0.301 | 0.507 | 0.587 |
-| **engine** | – | **0.486** | **0.710** | **0.750** |
-| Jina-Code-v2 † | – | 0.434 | 0.712 | 0.803 |
-| CodeRankEmbed † | – | 0.526 | 0.777 | 0.847 |
-| Agentless + GPT-4o † | ✓ | 0.672 | 0.745 | 0.745 |
-| LocAgent + Claude-3.5 † | ✓ | 0.777 | 0.920 | 0.942 |
-| engine + local LLM (D1) | ✓ (3B, CPU) | TODO | TODO | TODO |
+| method | LLM | file Acc@1 | Acc@3 | Acc@5 | func Acc@5 | func Acc@10 |
+|---|---|---|---|---|---|---|
+| BM25 (ours) | – | 0.299 | 0.522 | 0.606 | – | – |
+| BM25 † | – | 0.387 | 0.518 | 0.617 | 0.318 | 0.369 |
+| engine v1.2.0 | – | 0.474 | 0.708 | 0.752 | – | – |
+| **engine v1.3.0** | – | **0.500** [0.44,0.56] | **0.723** | **0.755** | **0.394** | **0.482** |
+| Jina-Code-v2 † | – | 0.434 | 0.712 | 0.803 | – | – |
+| CodeRankEmbed † | – | 0.526 | 0.777 | 0.847 | 0.518 | 0.588 |
+| Agentless + GPT-4o † | ✓ | 0.672 | 0.745 | 0.745 | – | – |
+| Agentless + Claude-3.5 † | ✓ | 0.726 | 0.792 | 0.796 | 0.588 | – |
+| LocAgent + Qwen2.5-7B (ft) † | ✓ | 0.708 | 0.847 | 0.883 | – | – |
+| LocAgent + Claude-3.5 † | ✓ | 0.777 | 0.920 | 0.942 | 0.734 | 0.774 |
+| engine + local 3B LLM (D1, dev pilot) | ✓ (CPU) | rejected on dev (§6) | | | | |
+| engine + API LLM (Agentless-style) | ✓ | TODO (no funded key) | | | | |
 
-† LocAgent Table 4, their 274-instance subset (head-to-head on the same subset: TODO).
+† LocAgent Table 4. Strict holdout (276, excludes 24 instances looked at in development):
+0.507/0.717/0.750/0.815 (BM25 0.301/0.507/0.587/0.721).
 
 ### 5.2 SWE-bench dev (225) and Verified (496 of 500)
 
-dev: BM25 0.160/0.347/0.427/0.538 → engine 0.249/0.484/0.600/0.680 (Acc@1/3/5/10).
-Verified (v1.2.0, run once): BM25 0.216/0.391/0.490/0.641 → engine 0.405/0.669/0.732/0.804; on the
-403 Verified issues not in Lite: 0.194/0.372/0.476/0.620 → 0.392/0.655/0.727/0.809.
+dev: BM25 0.160/0.347/0.427/0.538 → engine v1.3.0 0.308/0.527/0.621/0.692 (Acc@1/3/5/10).
+Verified (run once per version): BM25 0.216/0.392/0.490/0.642 → v1.2.0 0.405/0.669/0.732/0.804 (496)
+→ **v1.3.0 0.446/0.680/0.736/0.814** (500). On the 403 Verified issues not in Lite: BM25
+0.194/0.372/0.476/0.620 → v1.2.0 0.392/0.655/0.727/0.809 → v1.3.0 0.437/0.670/0.732/0.811.
+Function level (v1.3.0, all edited functions in top k): Verified 459 with function gold
+0.163/0.346/0.416 (Acc@1/5/10); not in Lite (375) 0.157/0.312/0.381.
 
 ### 5.3 Ablation (Lite holdout, 276)
 
@@ -96,8 +106,8 @@ Verified (v1.2.0, run once): BM25 0.216/0.391/0.490/0.641 → engine 0.405/0.669
 
 ### 5.5 Cost
 
-p50 2.8 s / p90 11.4 s per issue on a 6-core laptop CPU, cold index included; packet p50 11.1k
-tokens; no network, no GPU.
+p50 2.9 s / p90 10.6 s per Lite issue (Verified 2.5 s / 8.8 s) on a 6-core laptop CPU (Ryzen 5
+7530U), cold index included; packet p50 11.1k tokens; no network, no GPU.
 
 ## 6. Negative results and what the holdouts caught
 
