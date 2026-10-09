@@ -2,6 +2,30 @@
 
 All notable user-facing changes live here. The README stays a product guide, not a version diary.
 
+## 1.4.0 — 2026-10-10
+
+### Bug reports and issues
+
+- **Functions a traceback runs through** vote in `functions_to_look` / `definitions`: each frame
+  (`File "…", line N, in name`, or pytest's `path.py:N: in name`) resolves to the indexed file and
+  then to the function it names (or the innermost one containing the line); test frames are
+  skipped. SWE-bench dev, function level Acc@1/5/10: 0.158/0.292/0.364 → 0.190/0.324/0.390; both
+  halves of dev agree (+0.03–0.04 at Acc@1 and Acc@5).
+- `packet --json` lists `definitions` for every prompt, not only reports of 60+ words (a short
+  issue still has a function to change).
+- The definition ranker no longer drops query terms after the alphabetically first 256 on long
+  reports; it keeps the title's terms, then the rarest.
+
+### Measured
+
+- v1.3.0 run once on SWE-bench Lite (276 strict holdout: Acc@1/3/5 0.507/0.717/0.750) and Verified
+  (500: 0.446/0.680/0.736); function level on LocAgent's 274: Acc@5/@10 0.394/0.482.
+- Fresh plain-language holdout (jsoup, Java, gold locked before the run): list R@3 0.750 vs BM25
+  0.667 (0.417 before the 1.3.0 list fusion).
+- Rejected with numbers (see `docs/research/contributions-log.md` §8.14–8.16): commit-history
+  prior, repro-code identifiers, test→module links, RM3 expansion, doc→code bridge, owner/unstemmed
+  definition variants.
+
 ## 1.3.0 — 2026-10-09
 
 ### Bug reports and issues

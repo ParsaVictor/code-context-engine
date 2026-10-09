@@ -542,3 +542,22 @@ S1 holds on a language and repository never run before: +0.333 R@3 over the pack
 **Fourteen sets with the v1.4 candidate** (traceback vote, function list for every prompt, query
 term cap fix): identical to the numbers on record (docs/measured.md) on all fourteen, including `concept`
 0.679 / 0.392 (§8.3's 0.398 was an older reading of this self-measuring set).
+
+**Dense on the short list only (prior 6, CodeRankEmbed/Jina-inspired).** jina-code-v2 (int8 ONNX,
+CPU, 4 threads) embeds the issue and the engine's top-30 definitions (text from the base commit),
+reorders them by cosine (`scripts/research/dense_shortlist.py`); the order votes by RRF. Dev 225,
+base = v1.4 candidate:
+
+| | file Acc@1 fast / rest | file Acc@3 | file Acc@5 | func Acc@1 | func Acc@5 |
+|---|---|---|---|---|---|
+| base | 0.271 / 0.319 | 0.525 / 0.524 | 0.576 / 0.633 | 0.173 / 0.196 | 0.308 / 0.329 |
+| + dense vote w=0.5 | 0.288 / 0.343 | 0.525 / 0.554 | 0.593 / 0.651 | 0.212 / 0.215 | 0.327 / 0.342 |
+| + dense vote w=1 | 0.271 / 0.361 | 0.559 / 0.554 | 0.610 / 0.645 | 0.212 / 0.190 | 0.308 / 0.329 |
+| dense order alone (all 225) | file 0.356 / 0.524 / 0.596 (@1/3/5) | | | func 0.162 / 0.276 (@1/5) | |
+
+Cost: 10.6 s p50 / 27.7 s p90 per issue on top of the engine (CPU shared with other runs).
+Verdict: **not shipped by default** — positive on almost every cell but below the pre-set bar in
+dev-fast (file Acc@1 +0.017 = one issue of 59; func Acc@5 +0.019/+0.013). Noted: the dense order
+alone puts the right file first more often than the engine (0.356 vs 0.307) while losing depth —
+a cheap re-ranker of the top few files, not a retriever. Candidate for an opt-in deep mode, to be
+decided on a larger split.
