@@ -37,6 +37,20 @@ SUBSETS = {
     "Verified, all": ("verified", None),
     "Verified, not in Lite": ("verified", "devset/verified-not-lite.json"),
 }
+DEV = [  # SWE-bench dev (tuning split): engine runs per version
+    ("engine v1.3.0", "dev-func2-all.jsonl"),
+    ("engine v1.4.0", "dev-s18a-all.jsonl"),
+]
+# Plain-language list R@3: (set, gold toml under the repo, {label: cached lists})
+PLAIN = [
+    ("ripgrep (Rust)", "tests/third_party/concept-holdout/ripgrep/gold_tasks.toml", {"v1.3.0": "plain-lists-v130.jsonl"}),
+    ("click (Python)", "tests/third_party/concept-holdout2/click/gold_tasks.toml", {"v1.3.0": "plain-lists-v130.jsonl"}),
+    ("cobra (Go)", "tests/third_party/concept-holdout3/cobra/gold_tasks.toml", {"v1.3.0": "plain-lists-v130.jsonl"}),
+    ("axios (JavaScript)", "tests/third_party/concept-holdout4/axios/gold_tasks.toml", {"v1.3.0": "plain-lists-v130.jsonl"}),
+    ("jsoup (Java)", "tests/third_party/concept-holdout5/jsoup/gold_tasks.toml",
+     {"v1.2.0": "plain-lists-jsoup-v120.jsonl", "v1.3.0": "plain-lists-jsoup-v130.jsonl",
+      "v1.4.0": "plain-lists-jsoup-s18b.jsonl"}),
+]
 ABLATION = [  # Lite strict holdout, v1.2.0 engine with one component switched off (NM_ABLATE build)
     ("nothing removed", "results-final-test.jsonl", "loc_files"),
     ("report hygiene + code tokens (C11)", "abl-hyg-all.jsonl", "loc_files"),
@@ -172,6 +186,48 @@ def main():
         p = os.path.join(swe, f)
         if os.path.exists(p):
             lines.append(f"| {label} | " + " | ".join(file_row(load(p), ids, key, ci=False)) + " |")
+    lines.append("")
+
+    lines += ["## SWE-bench dev (tuning split, 225; halves dev-fast 59 / dev-rest 166)", "",
+              "| run | half | file Acc@1 | @3 | @5 | @10 | func Acc@1 | @5 | @10 |", "|---|---|---|---|---|---|---|---|---|"]
+    dev_rows = {r["instance_id"]: r for r in json.load(open(os.path.join(swe, "devset/swe-dev.json"), encoding="utf-8"))}
+    dev_gold = load_gold(dev_rows, list(dev_rows), repos, os.path.join(swe, "func-gold-dev.json"))
+    fast = {r["instance_id"] for r in json.load(open(os.path.join(swe, "devset/dev-fast.json"), encoding="utf-8"))}
+    for label, f in DEV:
+        p = os.path.join(swe, f)
+        if not os.path.exists(p):
+            continue
+        res = load(p)
+        for half, ids in (("fast", [i for i in dev_rows if i in fast]), ("rest", [i for i in dev_rows if i not in fast]),
+                          ("all", list(dev_rows))):
+            fcells = file_row(res, ids, "loc_files", ci=False)
+            _, ucells = func_row(res, ids, dev_gold)
+            lines.append(f"| {label} | {half} | " + " | ".join(fcells + [c.split(" [")[0] for c in ucells]) + " |")
+    lines.append("")
+
+    lines += ["## Plain-language questions, localisation list R@3", "",
+              "| set | run | R@3 |", "|---|---|---|"]
+    try:
+        import tomllib
+    except ImportError:  # Python < 3.11
+        import tomli as tomllib
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    for name, gold_toml, runs_ in PLAIN:
+        gold = {t["id"]: t["gold_files"] for t in tomllib.load(open(os.path.join(root, gold_toml), "rb"))["task"]}
+        for label, f in runs_.items():
+            p = os.path.join(swe, f)
+            if not os.path.exists(p):
+                continue
+            lists = {}
+            for line in open(p, encoding="utf-8"):
+                if line.strip():
+                    r = json.loads(line)
+                    if r["id"] in gold:
+                        lists[r["id"]] = r["localization"]
+            if len(lists) < len(gold):
+                continue
+            r3 = sum(sum(1 for g in gold[i] if g in lists[i][:3]) / len(gold[i]) for i in gold) / len(gold)
+            lines.append(f"| {name} | engine {label} | {r3:.3f} |")
     lines.append("")
 
     lines += ["## Cost per issue (cold index included, laptop CPU)", "",

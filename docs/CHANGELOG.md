@@ -18,6 +18,8 @@ All notable user-facing changes live here. The README stays a product guide, not
 
 ### Measured
 
+- **v1.4.0 run once** — file level identical to 1.3.0; function level Acc@5 on LocAgent's 274 Lite
+  instances 0.394 → 0.460 (Acc@10 0.482 → 0.540), on Verified 0.346 → 0.429.
 - v1.3.0 run once on SWE-bench Lite (276 strict holdout: Acc@1/3/5 0.507/0.717/0.750) and Verified
   (500: 0.446/0.680/0.736); function level on LocAgent's 274: Acc@5/@10 0.394/0.482.
 - Fresh plain-language holdout (jsoup, Java, gold locked before the run): list R@3 0.750 vs BM25

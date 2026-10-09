@@ -561,3 +561,28 @@ dev-fast (file Acc@1 +0.017 = one issue of 59; func Acc@5 +0.019/+0.013). Noted:
 alone puts the right file first more often than the engine (0.356 vs 0.307) while losing depth —
 a cheap re-ranker of the top few files, not a retriever. Candidate for an opt-in deep mode, to be
 decided on a larger split.
+
+### 8.17 v1.4.0 run once on Lite and Verified (2026-10-10)
+
+Release binary v1.4.0 (tag on `ee6cc27`, #144), one run each (`swebench/lite-v140-*.jsonl`,
+`verified-v140-*.jsonl`; 300/300 and 500/500 scored, `--no-bm25`). File level identical to v1.3.0
+on every instance. Function level (all edited functions in top k):
+
+| | n | v1.3.0 Acc@1/5/10 | v1.4.0 Acc@1/5/10 | Δ@5 |
+|---|---|---|---|---|
+| LocAgent subset | 274 | 0.168/0.394/0.482 | **0.223/0.460/0.540** (@5 CI [0.40,0.52]) | +0.066 |
+| Lite strict, with function gold | 250 | 0.168/0.400/0.492 | **0.228/0.472/0.556** | +0.072 |
+| Verified, with function gold | 459 | 0.163/0.346/0.416 | **0.198/0.429/0.497** (@5 CI [0.38,0.47]) | +0.083 |
+| Verified not in Lite | 375 | 0.157/0.312/0.381 | **0.189/0.397/0.464** | +0.085 |
+
+Dev predicted +0.034 at func Acc@5 (0.290 → 0.324); the holdouts gained about twice that. Not
+because the holdouts have more tracebacks or short reports (aggregate input statistics: frames in
+20% / 20% / 14% of dev / Lite / Verified issues, under 60 words 10% / 12% / 14%), but because their
+function gold is smaller: one edited function in 45% of dev issues (mean 3.7) vs 86% of Lite
+(mean 1.17) and 72% of Verified (1.87) — when every edited function must be in the top k, a
+correctly placed function pays off far more often on single-function gold. Dev understates
+function-level effects on Lite-like data. Against published function-level numbers (LocAgent Table 4, Lite): above BM25
+(0.318/0.369) by +0.14/+0.17, below CodeRankEmbed (0.518/0.588) by −0.06/−0.05 — the gap to the
+GPU-scale dense retriever halved (it was −0.12/−0.11 with v1.3.0).
+Installed as the dogfood binary (v1.3.0 kept as `neuromesh-v1.3.0-backup.exe`); MCP banner 1.4.0,
+exits on stdin EOF (probe with `NEUROMESH_NO_BROWSER=1`).

@@ -119,6 +119,23 @@ Agentless+Claude-3.5 0.588, LocAgent+Claude-3.5 0.734/0.774. The engine lists fu
 reports of 60+ words; shorter reports count as misses here (30 of 274). Scoring them out, as the
 session-17 dev numbers did, gives 0.443/0.541 on 244 — the smaller denominator flatters.
 
+### v1.4.0, run once on Lite and Verified (2026-10-10)
+
+v1.4.0 adds the functions a traceback runs through to the function list and lists functions for
+every prompt. File level is identical to v1.3.0 on every instance (it was not touched). Function
+level, every edited function in the top k, 95% bootstrap CI for Acc@5:
+
+| function level | n | v1.3.0 Acc@1 / @5 / @10 | **v1.4.0 Acc@1 / @5 / @10** |
+|---|---|---|---|
+| Lite, LocAgent's subset | 274 | 0.168 / 0.394 / 0.482 | **0.223 / 0.460** [0.40,0.52] **/ 0.540** |
+| Lite strict holdout, with function gold | 250 | 0.168 / 0.400 / 0.492 | **0.228 / 0.472 / 0.556** |
+| Verified, with function gold | 459 | 0.163 / 0.346 / 0.416 | **0.198 / 0.429** [0.38,0.47] **/ 0.497** |
+| Verified not in Lite | 375 | 0.157 / 0.312 / 0.381 | **0.189 / 0.397 / 0.464** |
+
+Published (LocAgent Table 4, function Acc@5/@10): BM25 0.318/0.369, CodeRankEmbed 0.518/0.588,
+Agentless+Claude-3.5 0.588, LocAgent+Claude-3.5 0.734/0.774. p50 2.8 s / p90 11.2 s per Lite issue.
+Tables regenerate with `scripts/research/paper_tables.py --swe <swebench dir>`.
+
 ## Speed (same machine, same hour, release binary without embeddings)
 
 ultralytics, 931 files: index ≈3.6 s; one question end-to-end p50 ≈0.70 s (n=10, cold process each
