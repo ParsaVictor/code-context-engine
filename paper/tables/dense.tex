@@ -1,0 +1,42 @@
+% Dense short-list vote: dev near miss (sec. 8.16), SWE-Gym pass + pooled test, decision locked in
+% 608acb4, then Lite and Verified once (sec. 8.18, log at ce0dceb).
+\begin{table}[t]
+\centering
+\small
+\caption{Opt-in dense short-list vote (jina-code-v2, int8, CPU; the issue and the engine's top-30
+definitions are embedded, their cosine order votes by RRF at $w=0.5$). Function Acc@$k$, engine $\to$
+engine + vote. The weight and $k$ were committed before the Lite and Verified runs. Paired
+differences: bootstrap 95\% CI, issues gained/lost at @5, two-sided sign test.}
+\label{tab:dense}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrccc@{}}
+\toprule
+set & $n$ & @1 & @5 & @10\\
+\midrule
+dev-fast (tuning) & 52 & 0.173\,$\to$\,0.212 & 0.308\,$\to$\,0.327 & --\\
+dev-rest (tuning) & 158 & 0.196\,$\to$\,0.215 & 0.329\,$\to$\,0.342 & --\\
+gym-a (tuning) & 140 & 0.152\,$\to$\,0.167 & 0.258\,$\to$\,0.288 & 0.333\,$\to$\,0.364\\
+gym-b (tuning) & 140 & 0.112\,$\to$\,0.134 & 0.254\,$\to$\,0.313 & 0.366\,$\to$\,0.388\\
+\addlinespace
+\multicolumn{5}{@{}l}{dev + gym pooled, $n=476$: @5 0.286\,$\to$\,0.317, $+0.032$ [0.015,\,0.050],}\\
+\multicolumn{5}{@{}l}{\quad 17 gained / 2 lost, $p=0.0007$}\\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Holdout, run once with the locked decision}}\\
+Lite, LocAgent subset & 274 & 0.223\,$\to$\,\textbf{0.252} & 0.460\,$\to$\,\textbf{0.485} & 0.540\,$\to$\,\textbf{0.555}\\
+Lite, strict & 250 & 0.228\,$\to$\,0.252 & 0.472\,$\to$\,0.496 & 0.556\,$\to$\,0.568\\
+\addlinespace
+\multicolumn{5}{@{}l}{Lite 274 paired: @5 $+0.026$ [0.004,\,0.051], 9 gained / 2 lost, $p=0.065$;}\\
+\multicolumn{5}{@{}l}{\quad @1 $+0.029$ (18 / 10)}\\
+\addlinespace
+Verified & 459 & 0.198\,$\to$\,\textbf{0.237} & 0.429\,$\to$\,\textbf{0.458} & 0.497\,$\to$\,\textbf{0.514}\\
+Verified, not in Lite & 375 & 0.189\,$\to$\,0.208 & 0.397\,$\to$\,0.435 & 0.464\,$\to$\,0.483\\
+\addlinespace
+\multicolumn{5}{@{}l}{Verified 459 paired: @5 $+0.028$ [0.009,\,0.048], 17 / 4, $p=0.007$;}\\
+\multicolumn{5}{@{}l}{\quad @1 $+0.039$ [0.013,\,0.065], 28 / 10, $p=0.005$; @10 $+0.017$, 8 / 0, $p=0.008$}\\
+\bottomrule
+\end{tabular}
+\par\smallskip
+{\footnotesize Lite and Verified numbers come from the Python prototype applied to the stored v1.4.0 runs. The Rust
+port (\texttt{NM\_DENSE=1}) reproduces the prototype order up to near-tie swaps; on SWE-Gym it gives
+@5 0.295 (gym-a) and 0.299 (gym-b).}
+\end{table}

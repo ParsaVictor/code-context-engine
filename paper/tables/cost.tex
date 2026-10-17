@@ -1,0 +1,28 @@
+% Cost per issue; ours: contributions-log sec. 8.1, sec. 8.2, sec. 8.9, sec. 8.13, sec. 8.18;
+% others: related-work-2026.md sec. 1-sec. 2 (SweRank T5, LocAgent T5, Agentless T1).
+\begin{table}[t]
+\centering
+\small
+\caption{Cost of localising one issue. Ours measured on a 6-core laptop CPU (Ryzen~5 7530U), cold
+index included, no network and no GPU. Others as reported by their authors.}
+\label{tab:cost}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}p{0.52\columnwidth}p{0.42\columnwidth}@{}}
+\toprule
+setting & cost\\
+\midrule
+NeuroMesh, Lite & p50 2.9\,s, p90 10.6\,s; 0 tokens\\
+NeuroMesh, Verified & p50 2.5\,s, p90 8.8\,s; 0 tokens\\
+\quad index build, django (3.5k files) & 26\,s cold\\
+\quad + dense short-list vote & +$\approx$6\,s p50 (30 definitions + issue)\\
+Whole-repository embedding, CPU & 2.6 chunks/s (jina-code-v2)\\
+Local 3B LLM judge, CPU & $\approx$105\,s per issue\\
+\midrule
+SweRankEmbed-L + SweRankLLM-Small (7B) & A100, 12.5\,s, \$0.011\\
+LocAgent + Qwen2.5-7B (ft) & GPU, \$0.05\\
+LocAgent + Claude-3.5 & \$0.66\\
+Agentless + GPT-4o & \$0.70, 78k tokens\\
+SWE-Adept + Claude-Sonnet-4.5 & 348k tokens\\
+\bottomrule
+\end{tabular}
+\end{table}

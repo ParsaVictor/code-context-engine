@@ -1,0 +1,20 @@
+% Plain-language holdouts, R@3 of the localisation list; contributions-log sec. 8.6, sec. 8.16.
+\begin{table}[t]
+\centering
+\small
+\caption{Plain-language questions (12 per repository, gold written from the source and committed
+before the first run), R@3 of the localisation list. S1 = fusing the packet order with the
+whole-question ranking for short questions; it was chosen on the first three sets.}
+\label{tab:plain}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+set (language) & BM25 & before S1 & S1\\
+\midrule
+ripgrep (Rust), looked at & 0.500 & 0.208 & 0.500\\
+click (Python), looked at & 0.750 & 0.750 & 0.917\\
+cobra (Go), looked at & 0.875 & 0.792 & 0.875\\
+axios (JS), fresh at its run & 0.583 & 0.833 & 0.833\\
+\textbf{jsoup (Java), fresh, run once} & 0.667 & 0.417 & \textbf{0.750}\\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,20 @@
+% Ablation, v1.2.0 engine, Lite strict holdout (276); contributions-log sec. 8.11.
+\begin{table}[t]
+\centering
+\small
+\caption{Ablation on the Lite strict holdout (276 issues), one run per removed component, engine
+v1.2.0 (before the named-files and traceback votes). File Acc@$k$.}
+\label{tab:ablation}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+removed & @1 & @3 & @5 & @10\\
+\midrule
+nothing (v1.2.0) & 0.486 & 0.710 & 0.750 & 0.804\\
+report hygiene + code tokens & 0.467 & 0.707 & 0.743 & 0.801\\
+definition-level ranking & \textbf{0.388} & \textbf{0.569} & \textbf{0.652} & 0.764\\
+localisation list (packet order only) & 0.366 & 0.536 & 0.558 & --\\
+\midrule
+plain BM25, for reference & 0.301 & 0.507 & 0.587 & 0.721\\
+\bottomrule
+\end{tabular}
+\end{table}

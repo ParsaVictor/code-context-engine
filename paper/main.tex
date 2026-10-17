@@ -1,0 +1,488 @@
+% Where to look: LLM-free, CPU-only code localisation for coding agents, measured on holdouts.
+%
+% Source of every number: docs/research/contributions-log.md (sections cited in comments as "log sec. x").
+% Competitor numbers: docs/research/related-work-2026.md (PR #146).
+% Build: `make` (one column) or `make twocol`. Two-column mode is selected by defining
+% \twocolumnmode to 1 before this file is read (see the Makefile).
+\providecommand{\twocolumnmode}{0}
+\if1\twocolumnmode
+  \documentclass[10pt,twocolumn]{article}
+  \PassOptionsToPackage{margin=0.75in}{geometry}
+\else
+  \documentclass[11pt]{article}
+  \PassOptionsToPackage{margin=1in}{geometry}
+\fi
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+
+% Unmeasured or unconfirmed content. `make check` lists every occurrence; none may remain at submission.
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO:~#1]}}}
+\newcommand{\nm}{NeuroMesh}
+\newcommand{\accat}[1]{Acc@#1}
+
+\title{Where to Look: LLM-Free, CPU-Only Code Localisation\\for Coding Agents, Measured on Holdouts}
+\author{Parsa Karkooti\thanks{\todo{affiliation and co-authors}}}
+\date{}
+
+\begin{document}
+\maketitle
+
+% ---------------------------------------------------------------------------------------------
+\begin{abstract}
+Coding agents spend much of their budget finding the code a task needs. Strong localisers today
+run an LLM agent over the repository, or embed every function of it with a trained retriever,
+usually on a GPU. We ask how far a local engine gets with neither: a per-project code graph,
+field-weighted lexical ranking, a definition-level ranking of long reports, report hygiene, and the
+report's own traceback, all on a laptop CPU in a few seconds per issue. Design decisions were
+tuned on SWE-bench dev only (the last one also on a SWE-Gym split, after the released engine had
+been run on it once), and each released version was run once on held-out data. On 276 held-out SWE-bench Lite issues the engine reaches file-level
+\accat{1}/3/5 of 0.507/0.717/0.750 (BM25 0.301/0.507/0.587) at 2.9\,s per issue including a cold
+index; on the 407 SWE-bench Verified issues outside Lite 0.435/0.671/0.732 (BM25
+0.194/0.373/0.477); on 280 SWE-Gym issues from seven repositories it never saw, file \accat{1}
+0.279/0.271 on the two halves (BM25 0.121/0.121). At function level it lists every edited function
+among its first five on 0.460 of LocAgent's 274 Lite instances, and 0.485 with an opt-in vote that
+embeds only the engine's top 30 definitions on CPU (paired $+0.026$, 95\% CI [0.004, 0.051]); on
+Verified the same vote lifts function \accat{5} from 0.429 to 0.458 ($+0.028$ [0.009, 0.048]). This
+is below code-trained dense retrievers --- SweRankEmbed-Small reaches 0.664 file \accat{1} and
+0.631 function \accat{5} on the same instances --- and well below LLM agents and rerankers. Our
+contribution is the other corner of the trade-off: no training, no GPU, no whole-repository
+embedding index, zero tokens, a holdout protocol that caught two results looked-at data had
+suggested, and a dozen negative results with numbers.
+\end{abstract}
+
+% ---------------------------------------------------------------------------------------------
+\section{Introduction}
+\label{sec:intro}
+
+A coding agent asked to fix an issue first has to find where the fix goes. On SWE-bench
+\citep{jimenez2024swebench} this step, \emph{localisation}, is where agent pipelines spend much of
+their budget: Agentless \citep{xia2025agentless} prompts a model with the repository tree, then with
+file skeletons, then with code; LocAgent \citep{chen2025locagent}, SWE-agent \citep{yang2024sweagent}
+and OpenHands \citep{wang2025openhands} run multi-step LLM searches. The strongest model-free
+alternatives embed every function of the repository with a trained encoder
+\citep{suresh2025cornstack,reddy2026swerank}. A 137M-parameter encoder is small for a GPU, but on a
+laptop CPU we measured 2.6 chunks per second for a comparable model (\S\ref{sec:negative}): hours per
+large repository, repeated whenever the code changes. Local-first assistants such as Aider's RepoMap
+\citep{aider_repomap} ship structural or lexical retrieval but are not measured on localisation
+benchmarks.
+
+We ask a narrow question: \emph{how far does a local engine get with no LLM and no GPU, if every
+design decision is measured on a tuning split and confirmed once on held-out data?} The engine,
+\nm{} \citep{neuromesh}, builds a per-project code graph in seconds, ranks files with field-weighted
+BM25 \citep{robertson2004bm25f}, ranks \emph{definitions} for long reports, removes issue-template
+scaffolding from the query, and reads the report's own pointers --- the files and functions its
+traceback runs through. It returns a ranked list of files and of functions (\texttt{where\_to\_look},
+\texttt{functions\_to\_look}) that an agent opens first.
+
+The answer is \emph{not} state of the art, and we say so up front. On LocAgent's 274 Lite instances
+the engine is 0.03 below CodeRankEmbed and 0.16 below SweRankEmbed-Small at file \accat{1}, and
+0.27 below LocAgent with Claude-3.5 at function \accat{5} (Table~\ref{tab:lite274}). What it offers
+is a measured point no published method occupies: no learned model at query time, no
+whole-repository index beyond a code graph, zero tokens, 2.9\,s per issue on a laptop, and numbers
+from holdouts run once.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item \textbf{A holdout protocol for retrieval engines} (\S\ref{sec:protocol}): gold locked by
+  commit before any run, two tuning splits disjoint in repositories from every evaluation set, a
+  pre-set acceptance bar, one run per released version on each holdout, and per-set labels for what
+  has been looked at. It caught two results that looked-at sets suggested (a cross-encoder reranker
+  and a neighbour vote) and confirmed one on a fresh repository.
+  \item \textbf{An LLM-free localiser} reaching file \accat{1} 0.507 on 276 held-out Lite issues (BM25
+  0.301), 0.435 on 407 Verified issues outside Lite (BM25 0.194) and $2.2$--$2.3\times$ BM25 on seven unseen
+  SWE-Gym repositories, at 2.9\,s per issue on a laptop CPU (\S\ref{sec:results}).
+  \item \textbf{A cheap dense short-list vote}: embedding only the engine's top 30 definitions lifts
+  function \accat{5} on Lite from 0.460 to 0.485 and on Verified from 0.429 to 0.458, with the
+  decision committed before both holdout runs
+  (\S\ref{sec:dense}).
+  \item \textbf{Ablations, costs and negative results with numbers} (\S\ref{sec:ablation},
+  \S\ref{sec:negative}): a dozen ideas from the bug-localisation and retrieval literature --- commit
+  history, query expansion, cross-encoder reranking, graph expansion, a learned reranker, a small
+  local LLM judge --- that did not survive the protocol, and why.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------------------------
+\section{Related work}
+\label{sec:related}
+
+\paragraph{LLM localisers.}
+Agentless \citep{xia2025agentless} narrows hierarchically (repository tree, files, class and
+function skeletons, lines) with one model call per level plus sampling and voting; with GPT-4o it
+covers the gold file in 69.7\% and the gold function in 52.0\% of Lite issues at \$0.70 per issue.
+SWE-agent \citep{yang2024sweagent}, OpenHands \citep{wang2025openhands} and MoatlessTools
+\citep{moatless} search through shell or retrieval tools inside an agent loop. LocAgent
+\citep{chen2025locagent} indexes a heterogeneous code graph (files, classes, functions;
+contain/import/invoke/inherit edges) that an LLM agent traverses with entity-level BM25. It also
+fixed the reference protocol we use: 274 Lite instances whose patch edits an existing function, and
+\accat{k} requiring all gold locations in the top $k$. With Claude-3.5 it reaches file \accat{1}/5
+0.777/0.942 and function \accat{5} 0.734 at \$0.66 per issue. Later systems refine the search
+policy: iterative graph search (CoSIL, \citealp{jiang2025cosil}), priority scheduling and context
+pruning (OrcaLoca, \citealp{yu2025orcaloca}), repository knowledge graphs (KGCompass,
+\citealp{yang2025kgcompass}), repository memory (RepoMem, \citealp{wang2025repomem}) and code graphs as
+a plug-in (RepoGraph, \citealp{ouyang2025repograph}). Another line trains small open models for
+localisation with reinforcement learning \citep{ma2026tooltrain,sutawika2026codescout,xu2026fusesearch}.
+With frontier models the numbers keep rising: SWE-Adept \citep{he2026sweadept} reports function
+\accat{5} 0.878 on the 274 instances with Claude-Sonnet-4.5 at 348k tokens per issue, and in the same
+paper LocAgent re-run with GPT-5.2 scores 0.646 against the 0.734 originally reported --- agent
+numbers move by about 0.1 with the model and the run. SHERLOC \citep{tamoyan2026sherloc} adds
+structured diagnosis with a reasoning model. Our engine borrows LocAgent's entity-level content
+ranking and Agentless's file-to-function narrowing, without the model.
+
+\paragraph{Dense retrieval and learned rerankers.}
+CodeRankEmbed (137M; \citealp{suresh2025cornstack}) ranks function chunks by cosine with the issue;
+on the 274 instances it reaches file \accat{1} 0.526 and function \accat{5} 0.518, and a 7B
+listwise reranker lifts the latter to 0.675. SweRank \citep{reddy2026swerank} fine-tunes retrievers
+and rerankers on issue-localisation data mined from GitHub: SweRankEmbed-Small (137M) reaches
+0.664/0.631 (file \accat{1}/function \accat{5}) with no LLM at query time, and
+SweRankEmbed-Large with a 32B reranker 0.832/0.814 at \$0.015 per issue on a GPU; SweRank+
+\citep{reddy2025swerankplus} extends this to several languages (function \accat{5} 0.854). CoRet
+\citep{fehr2025coret} adds call-graph context to a 130M retriever, SWE-Fixer \citep{xie2025swefixer}
+selects files from a BM25 short list with a fine-tuned 7B model, and BLAZE
+\citep{chakraborty2025blaze} fine-tunes CodeSage \citep{zhang2024codesage} for cross-project bug
+localisation. These are the strongest non-agent localisers. All require training data close to the
+task and an embedding of every function in the repository; none reports CPU indexing cost. We
+measure that cost, and a variant that embeds only the engine's short list (\S\ref{sec:dense}).
+
+\paragraph{Classic bug localisation.}
+IR-based bug localisation uses report text, history and structure: BugLocator
+\citep{zhou2012buglocator} combines a revised VSM with similar fixed bugs, Locus
+\citep{wen2016locus} ranks change hunks, and \citet{rahman2018query} reformulate the query. We test
+the history and reformulation (RM3, \citealp{abduljaleel2004rm3}) ideas under our protocol; both are
+negative (\S\ref{sec:negative}). MULocBench \citep{zhang2025mulocbench} shows that issues outside
+code (configuration, documentation, build) are much harder --- LocAgent with Claude-3.5 reaches file
+\accat{5} 0.352 there --- which motivates our plain-language holdouts (\S\ref{sec:plain}).
+
+\paragraph{Ranking machinery.}
+We use BM25F \citep{robertson2004bm25f} and reciprocal rank fusion (RRF;
+\citealp{cormack2009rrf}); \citet{bruch2023fusion} analyse convex lexical/dense fusion.
+
+\paragraph{Positioning.}
+No published method in this space is free of learned models at query time, and none reports a
+pre-registered holdout. Table~\ref{tab:lite274} places our engine among the methods measured on the
+same 274 instances with the same metric.
+
+% ---------------------------------------------------------------------------------------------
+\section{System}
+\label{sec:system}
+
+\paragraph{Index.}
+A per-project graph of files, definitions (functions, methods, classes), calls and imports, built by
+tree-sitter parsers and cached on disk. Link resolution was the cold-start bottleneck: on a django
+checkout (3.5k files) four fixes to repeated path normalisation and per-relation neighbour walks
+brought the first packet from 3\,min\,20\,s to 26\,s without changing the graph (log~\S8.2).
+
+\paragraph{Questions.}
+A prompt's anchors (identifiers, paths) seed spreading activation over the graph; the activated
+nodes form a token-bounded \emph{packet}. Files are ranked by BM25F over four fields: path, symbol
+names, comments and body.
+
+\paragraph{Reports.}
+For prompts of at least 60 words the engine treats the prompt as an issue report. (i)~\emph{Hygiene}
+removes issue-template scaffolding (``search before asking'', checklists, links, headings) and keeps
+code-like tokens that word tokenisers drop (rule codes such as \texttt{L031}). (ii)~A
+\emph{definition-level} BM25 ranks every definition's text, with the report title counted three
+times; files inherit the rank of their best definition. (iii)~\emph{Named files}: traceback frames
+(deepest first), then paths and unique file names in prose, resolved against the index by longest
+unique path suffix. The packet order, the definition ranking and the named files are fused by RRF
+(named files at weight~2) into the file list \texttt{where\_to\_look}.
+
+\paragraph{Short questions.}
+For short prompts the file list is the RRF of the packet order and a whole-question ranking (S1);
+the packet's activation order alone puts hub files first.
+
+\paragraph{Functions to look at.}
+For every prompt the definition ranking (classes removed) is fused by RRF with each definition's file
+rank --- Agentless's file-to-function step without an LLM --- and with the functions a traceback runs
+through: each frame is resolved to an indexed file, then to the definition named in the frame (or
+the innermost one containing its line), test frames skipped, voting at double weight deepest-first.
+
+\paragraph{Opt-in dense short-list vote.}
+With \texttt{NM\_DENSE=1}, jina-embeddings-v2-base-code \citep{gunther2023jina} (int8 ONNX, CPU)
+embeds the issue and the engine's top 30 definitions (text from the base commit, cut at 512 tokens);
+their cosine order joins the function-list fusion by RRF ($k=60$, weight $0.5$). The file list is not
+changed. It costs about 6\,s per issue on CPU and 31 embeddings (30 definitions and the issue), instead of an embedding of every
+function in the repository.
+
+% ---------------------------------------------------------------------------------------------
+\section{Evaluation protocol}
+\label{sec:protocol}
+
+\paragraph{Tuning splits.}
+\emph{SWE-bench dev} (225 issues from pvlib, pydicom, sqlfluff, astroid, pyvista and marshmallow ---
+no repository shared with Lite or Verified), in halves dev-fast (59, ten per repository) and dev-rest
+(166). Because one dev-fast issue is worth 0.017, dev cannot resolve differences of 0.02, and its
+function gold is unlike Lite's; we therefore added \emph{SWE-Gym} \citep{pan2025swegym}: 280 issues
+from seven repositories disjoint from Lite, Verified and dev (pydantic, hydra, conan, dvc, dask,
+moto, mypy), at most 40 per repository, patches that edit only existing non-test Python files,
+sampled with a fixed seed by a script committed before any run, in halves gym-a and gym-b.
+
+\paragraph{Acceptance bar.}
+A change is kept only if file \accat{1} or function \accat{5} rises by at least 0.02 in \emph{both}
+halves of a tuning split, a bar fixed before each measurement. Every idea is first a Python
+prototype over stored engine outputs, then an engine port re-measured on the full split.
+
+\paragraph{Holdouts.}
+SWE-bench Lite test (300) and Verified (500), each run once per released version with the release
+binary and never inspected per instance. The 24 Lite instances looked at in an early session are
+excluded from the strict row (276). LocAgent's 274-instance subset (patches that edit an existing
+function) was rebuilt from its definition and matches exactly; it gives the head-to-head. 407
+Verified issues are outside Lite. The released v1.4.0 had never seen the SWE-Gym repositories, so its
+single run there is a third holdout, reported before any tuning on SWE-Gym.
+
+\paragraph{Metrics.}
+File-level \accat{k}: all gold files in the top $k$. Function-level \accat{k}: all edited functions in
+the top $k$, where function gold is the innermost function containing a removed line or insertion
+point of the reference patch at the base commit; an instance without a function list counts as a
+miss. 95\% bootstrap confidence intervals \citep{efron1993bootstrap}; paired comparisons report the
+bootstrap CI of the difference, issues gained and lost, and a two-sided sign test.
+
+\paragraph{Plain-language questions.}
+Five holdouts (ripgrep/Rust, click/Python, cobra/Go, axios/JavaScript, jsoup/Java), 12 questions
+each, gold written from source and locked by commit before the first run; metric R@3 of the file
+list.
+
+% ---------------------------------------------------------------------------------------------
+\section{Results}
+\label{sec:results}
+
+\input{tables/lite274}
+\input{tables/holdouts}
+
+\subsection{Head-to-head on LocAgent's 274 Lite instances}
+\label{sec:h2h}
+
+Table~\ref{tab:lite274} compares the engine with every method reported on the same instances and
+metric. Without any learned model it is $+0.11$ above LocAgent's BM25 at file \accat{1} (0.500 vs
+0.387) and $+0.14$ at function \accat{5} (0.460 vs 0.318). It is above Jina-Code-v2 at file
+\accat{1} (0.434), level with E5-base (0.496), and below CodeRankEmbed (0.526) and SweRankEmbed-Small
+(0.664). At file \accat{5} it is below every dense retriever (0.755 vs 0.781--0.909). At function
+\accat{5} it is above E5-base, Jina-Code-v2 and CodeSage-large (0.394, 0.423, 0.339), equal to
+SWE-agent with GPT-4o (0.460), and below CodeRankEmbed (0.518), SweRankEmbed-Small (0.631) and every
+LLM agent on Claude-3.5. Function \accat{1} is 0.223 (not reported by the other papers).
+
+The 24 instances looked at during development are all among the 274; without them (250 instances)
+the v1.2.0 engine scored 0.488/0.716/0.756 and BM25 0.304/0.512/0.592, so the looked-at instances do
+not flatter the result (log~\S8.7).
+
+\subsection{Three holdouts}
+\label{sec:holdouts}
+
+Table~\ref{tab:holdouts} gives every SWE-bench-style set. The gain over BM25 holds across all of
+them: file \accat{1} $+0.21$ on Lite strict, $+0.24$ on Verified outside Lite, and $2.2$--$2.3\times$ on
+the two SWE-Gym halves --- seven repositories the engine was never developed on. On dev the gain was
+$+0.15$; the holdout gains are larger, not smaller, which is the expected sign if the tuning did not
+overfit dev.
+
+Function-level gains from dev transfer \emph{larger} than predicted. The traceback vote and function
+lists for short reports (v1.3.0 $\to$ v1.4.0) raised dev function \accat{5} by $+0.034$
+(0.290 $\to$ 0.324) but Lite-274 by $+0.066$ (0.394 $\to$ 0.460) and Verified by $+0.083$ (0.346
+$\to$ 0.429). The inputs do not explain this --- tracebacks appear in 20\%, 20\% and 14\% of dev,
+Lite and Verified issues, reports under 60 words in 10\%, 12\% and 14\% --- but the gold does: one
+edited function in 45\% of dev issues (mean 3.7) against 86\% of Lite (mean 1.17) and 72\% of
+Verified (mean 1.87). When every edited function must be in the top $k$, a correctly placed function
+pays off far more often on single-function gold. SWE-Gym's gold (mean 3.4 functions, one function in
+45\%) resembles dev, which is why its function numbers are low.
+
+\subsection{Dense short-list vote}
+\label{sec:dense}
+
+\input{tables/dense}
+
+The dense vote of \S\ref{sec:system} first came up as a near miss on dev: positive in almost every
+cell but below the bar on dev-fast (file \accat{1} $+0.017$, one issue; function \accat{5} $+0.019$
+and $+0.013$). Re-measured unchanged on SWE-Gym, it passed (function \accat{5} $+0.030$ and $+0.059$;
+Table~\ref{tab:dense}). Pooled over dev and SWE-Gym (476 issues) function \accat{5} rose from 0.286
+to 0.317, $+0.032$ [0.015, 0.050], 17 issues gained and 2 lost. The weight and short-list size were
+committed before the Lite run. On Lite-274, run once, function \accat{1}/5/10 went from
+0.223/0.460/0.540 to 0.252/0.485/0.555: $+0.026$ at \accat{5}, CI [0.004, 0.051], 9 gained and 2
+lost. The CI excludes zero; with only 11 discordant issues the sign test does not ($p=0.065$). The
+effect is the same direction and size as on the tuning splits. It narrows the gap to CodeRankEmbed
+(0.518) from $-0.058$ to $-0.033$ and leaves a gap of $-0.146$ to SweRankEmbed-Small, with 30
+embeddings per issue on CPU instead of every function of the repository. On Verified (459 issues
+with function gold), also run once with the locked decision, function \accat{1}/5/10 went from
+0.198/0.429/0.497 to 0.237/0.458/0.514: $+0.028$ at \accat{5}, CI [0.009, 0.048], 17 gained and 4
+lost ($p=0.007$), and $+0.039$ at \accat{1} (28/10, $p=0.005$); on the 375 outside Lite \accat{5}
+rose from 0.397 to 0.435. Every split --- dev, both SWE-Gym halves, Lite and Verified --- moves the
+same way by $+0.02$ to $+0.06$ at function \accat{5}, and the effect predicted on tuning data
+($+0.032$) is what both holdouts show.
+
+The vote also re-ranks files: the dense order alone puts the gold file first more often than the
+engine on dev (0.356 vs 0.307 file \accat{1}) while losing depth, but the file vote did not clear the
+bar on gym-b ($+0.000$), so the file list is unchanged.
+
+\subsection{Ablation}
+\label{sec:ablation}
+
+\input{tables/ablation}
+
+Table~\ref{tab:ablation} removes one component at a time on the Lite strict holdout (engine v1.2.0,
+before the named-file and traceback votes). The definition-level ranking --- LocAgent's
+entity-content BM25, made LLM-free --- carries most of the gain over the packet ($+0.10$ \accat{1},
+$+0.14$ \accat{3}). Report hygiene is small on Lite ($-0.019$ \accat{1} when removed); its dev gains
+came mostly from sqlfluff's template-heavy issues. The localisation list itself matters most: the
+packet order alone scores 0.366 \accat{1}, because a packet holds one to five files and caps
+\accat{5}. The named-files vote was added after this ablation; its effect is the v1.2.0 $\to$ v1.3.0
+step on Verified outside Lite, file \accat{1} 0.392 $\to$ 0.437 on the same 403 instances, against
+$+0.049$ predicted on dev (log~\S8.13).
+
+\subsection{Plain-language questions}
+\label{sec:plain}
+
+\input{tables/plain}
+
+Issue reports are long and name code. Developers' questions to an assistant are often short and do
+not (``where are retries configured?''). Table~\ref{tab:plain} reports five such holdouts. S1, the
+short-question fusion of \S\ref{sec:system}, was chosen on the first three sets (looked at), was
+neutral on axios, and was confirmed on jsoup, a language and repository never run before:
+$+0.333$ R@3 over the packet order and $+0.083$ over BM25. Twelve questions per set is small (one
+question is 0.083); we report these as a direction, not a precise effect.
+
+\subsection{Cost}
+\label{sec:cost}
+
+\input{tables/cost}
+
+Table~\ref{tab:cost} gives per-issue cost. The engine needs no network, no GPU and no tokens; the
+cold index is included in the 2.9\,s median. Its packet (the context an agent receives) has a median
+of 11.1k tokens. The cheapest published setting that beats it on file \accat{1} at the same protocol
+without an LLM, SweRankEmbed-Small, needs a contrastively trained encoder and an embedding of every
+function; at our measured CPU rate for a model of that size, embedding django's roughly 40k chunks
+would take hours.
+
+% ---------------------------------------------------------------------------------------------
+\section{Negative results and what the holdouts caught}
+\label{sec:negative}
+
+\input{tables/negative}
+
+Table~\ref{tab:negative} lists the ideas that did not survive. Three findings stand out.
+
+\emph{Query length decides whether a cross-encoder helps.} jina-reranker-v2 reordering the engine's
+top 10 files improved R@3 on two short-question sets (ripgrep $+0.375$, click $+0.208$) and hurt on
+long issue reports (\accat{3} 0.492 $\to$ 0.373): its 512-token window drops the report's specifics,
+which the first stage already reads in full. On a fresh short-question set (cobra) it lost $-0.084$;
+without the holdout we would have shipped it for short questions.
+
+\emph{Blind graph expansion hurts.} Voting for the graph neighbours of the top three files pulls in
+the hubs they call (base classes, utilities) ahead of the edited module (file \accat{1} 0.254
+$\to$ 0.136). LocAgent gets value from the graph through an LLM choosing which edges to follow.
+
+\emph{A learned reranker fits the split, not the task.} Logistic regression and boosted trees over 25
+features of the top 100 function candidates did not pass cross-half on dev ($+0.000$/$+0.019$);
+trained on dev and applied to SWE-Gym they gained nothing, and the largest coefficients change sign
+between splits (file rank $-0.61$ on dev, $+1.23$ on SWE-Gym). With a few hundred issues per split,
+supervised reranking of lexical features does not generalise.
+
+Two results from the bug-localisation literature were clearly negative on dev. A commit-history prior
+in the spirit of BugLocator and Locus (past commits whose message resembles the issue vote for the
+files they touched) lowered file \accat{1} from 0.271 to 0.169 on dev-fast even at weight 0.1. RM3
+expansion of the definition query was worse than plain BM25 on its own and no better as a vote.
+A local 3B LLM (Qwen2.5-Coder-3B-Instruct \citep{hui2024qwen25coder}, 4-bit, llama.cpp
+\citep{llamacpp}) as an Agentless-style file judge over the engine's top 10 candidates copied the engine's order when shown it and did worse
+when the order was shuffled (\accat{1} 0.200 $\to$ 0.067 on 15 issues), at about 105\,s per issue:
+on a laptop the engine's ranking already beats a small LLM judge.
+
+Our own evaluation slips are part of the record: a suffix match without a path-segment boundary that
+inflated a baseline, a function-level denominator that silently dropped short reports (244 instead
+of 274 instances, \accat{5} 0.443 instead of 0.394), and a prototype baseline taken from an older
+run. The denominator slip was caught by re-deriving LocAgent's count of 274; every affected number
+was re-measured and is reported corrected.
+
+% ---------------------------------------------------------------------------------------------
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{Where the engine stands.}
+It is the best measured point we know of with no learned model at query time, and it is clearly
+below trained dense retrievers and LLM pipelines. We see it as a first stage: its top 30 definitions
+are a short list that a dense model or an LLM can reorder at a small fraction of the cost of
+searching the repository, as the dense vote shows. An LLM stage over \texttt{where\_to\_look},
+measured in tokens and \accat{1} against Agentless and LocAgent, is the experiment this paper does
+not have (\S\ref{sec:threats}).
+
+\paragraph{Where function misses come from.}
+On dev, 45\% of function-level misses have every gold function in the 300-entry list but not in the
+top five (median rank 36), 15\% miss the file, and 8\% lack coverage (log~\S8.18). Ordering, not
+recall, is the bottleneck --- which is why a reranker of a short list is the natural next stage.
+
+\paragraph{Why holdouts.}
+Two of the ideas that looked best on looked-at sets (the cross-encoder on short questions and the
+neighbour vote) lost on fresh data, one decided on looked-at sets (S1) was confirmed on a fresh one,
+and the gains that did transfer (definition ranking, named files, traceback vote) transferred with
+the predicted sign. None of the competitor papers we read reports a pre-registered holdout; on
+benchmarks where agent numbers move by 0.09 between re-runs, we think they should.
+
+% ---------------------------------------------------------------------------------------------
+\section{Threats to validity}
+\label{sec:threats}
+
+\paragraph{Missing LLM stage.}
+We do not measure an LLM on top of the engine. A local 3B model was rejected on dev; an API model run
+was blocked by unfunded keys at the time of writing. The claim that the engine is a good first stage
+for an LLM is supported only by the dense vote and by the 45\% ordering misses.
+
+\paragraph{Tuning-split mismatch.}
+Dev and SWE-Gym differ from the holdouts in gold size (3.4--3.7 gold functions vs 1.17 on Lite), so
+tuning-split numbers are lower and function-level gains transfer larger than predicted. A split that
+resembles Lite would make the bar more sensitive.
+
+\paragraph{Forking paths.}
+The dense vote failed the bar on dev and was re-measured on SWE-Gym, a second look at the same idea.
+We mitigated this by keeping its weight unchanged, committing the decision before the Lite run, and
+reporting the dev result. The effect is modest on each holdout (Lite CI [0.004, 0.051], sign test
+$p=0.065$; Verified CI [0.009, 0.048], $p=0.007$), but it has the predicted sign and size on both.
+
+\paragraph{Comparisons across papers.}
+All competitor numbers are copied from their papers; our 274 instances are rebuilt from LocAgent's
+definition and match its count exactly, but we did not re-run the competitors. Our own BM25 (0.299
+file \accat{1}) is below LocAgent's (0.387) on the same instances, so ``gain over BM25'' depends on
+which BM25; we report both. Agent numbers vary by model and run.
+
+\paragraph{Small plain-language sets.}
+Twelve questions per repository, one annotator, gold written by the authors. MULocBench-style
+non-code issues are not covered.
+
+\paragraph{Engineering.}
+Timing is from a single Windows laptop shared with other jobs; harness failures (blobless clones,
+path-length limits, worktree lock contention) cost instances in early runs and are reported where
+they occurred. Benchmark data may appear in the pre-training of the encoders we compare against; the
+engine itself has no learned weights, and the dense vote uses an off-the-shelf encoder not trained on
+SWE-bench.
+
+% ---------------------------------------------------------------------------------------------
+\section{Conclusion}
+\label{sec:conclusion}
+
+A model-free engine on a laptop CPU localises SWE-bench issues at file \accat{1} 0.507 (Lite, 276
+held-out issues) and 0.435 (Verified outside Lite), more than doubles BM25 on seven repositories it
+never saw, and lists every edited function in its top five on 0.460 of LocAgent's Lite instances ---
+0.485 when only its top 30 definitions are embedded, on CPU --- in a few seconds and no tokens. It is below trained dense
+retrievers and LLM agents. The holdout protocol mattered: two ideas that looked best on looked-at data
+lost on fresh data, and most literature priors we tried did not clear a bar fixed before measuring.
+What remains: an LLM stage on top of \texttt{where\_to\_look} measured in tokens and accuracy, and
+plain-language holdouts of at least fifty questions with a second annotator.
+
+\paragraph{Availability.}
+Engine, harness, gold files, result files and the scripts that rebuild every table are open source
+\citep{neuromesh}. \todo{archive the release and result files (Zenodo DOI) and cite the exact tag}
+
+\paragraph{Acknowledgements.}
+\nm{} is a fork of the open-source NeuroMesh project by Pinoox (\url{https://github.com/pinoox/neuromesh}).
+\todo{funding and people}. Development of the engine and of this paper used an LLM coding
+assistant; no LLM runs at query time in any reported result. \todo{confirm disclosure wording}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}
