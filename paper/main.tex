@@ -52,7 +52,8 @@ index; on the 407 SWE-bench Verified issues outside Lite 0.435/0.671/0.732 (BM25
 0.194/0.373/0.477); on 280 SWE-Gym issues from seven repositories it never saw, file \accat{1}
 0.279/0.271 on the two halves (BM25 0.121/0.121). At function level it lists every edited function
 among its first five on 0.460 of LocAgent's 274 Lite instances, and 0.485 with an opt-in vote that
-embeds only the engine's top 30 definitions on CPU (paired $+0.026$, 95\% CI [0.004, 0.051]). This
+embeds only the engine's top 30 definitions on CPU (paired $+0.026$, 95\% CI [0.004, 0.051]); on
+Verified the same vote lifts function \accat{5} from 0.429 to 0.458 ($+0.028$ [0.009, 0.048]). This
 is below code-trained dense retrievers --- SweRankEmbed-Small reaches 0.664 file \accat{1} and
 0.631 function \accat{5} on the same instances --- and well below LLM agents and rerankers. Our
 contribution is the other corner of the trade-off: no training, no GPU, no whole-repository
@@ -102,7 +103,8 @@ from holdouts run once.
   0.301), 0.435 on 407 Verified issues outside Lite (BM25 0.194) and $2.2$--$2.3\times$ BM25 on seven unseen
   SWE-Gym repositories, at 2.9\,s per issue on a laptop CPU (\S\ref{sec:results}).
   \item \textbf{A cheap dense short-list vote}: embedding only the engine's top 30 definitions lifts
-  function \accat{5} on Lite from 0.460 to 0.485, with the decision committed before the holdout run
+  function \accat{5} on Lite from 0.460 to 0.485 and on Verified from 0.429 to 0.458, with the
+  decision committed before both holdout runs
   (\S\ref{sec:dense}).
   \item \textbf{Ablations, costs and negative results with numbers} (\S\ref{sec:ablation},
   \S\ref{sec:negative}): a dozen ideas from the bug-localisation and retrieval literature --- commit
@@ -307,9 +309,13 @@ committed before the Lite run. On Lite-274, run once, function \accat{1}/5/10 we
 lost. The CI excludes zero; with only 11 discordant issues the sign test does not ($p=0.065$). The
 effect is the same direction and size as on the tuning splits. It narrows the gap to CodeRankEmbed
 (0.518) from $-0.058$ to $-0.033$ and leaves a gap of $-0.146$ to SweRankEmbed-Small, with 30
-embeddings per issue on CPU instead of every function of the repository. On Verified the run with
-the locked decision is \todo{Verified function \accat{1}/5/10 with the dense vote (459 instances),
-paired $\Delta$@5 with CI and gained/lost --- being measured}.
+embeddings per issue on CPU instead of every function of the repository. On Verified (459 issues
+with function gold), also run once with the locked decision, function \accat{1}/5/10 went from
+0.198/0.429/0.497 to 0.237/0.458/0.514: $+0.028$ at \accat{5}, CI [0.009, 0.048], 17 gained and 4
+lost ($p=0.007$), and $+0.039$ at \accat{1} (28/10, $p=0.005$); on the 375 outside Lite \accat{5}
+rose from 0.397 to 0.435. Every split --- dev, both SWE-Gym halves, Lite and Verified --- moves the
+same way by $+0.02$ to $+0.06$ at function \accat{5}, and the effect predicted on tuning data
+($+0.032$) is what both holdouts show.
 
 The vote also re-ranks files: the dense order alone puts the gold file first more often than the
 engine on dev (0.356 vs 0.307 file \accat{1}) while losing depth, but the file vote did not clear the
@@ -434,7 +440,8 @@ resembles Lite would make the bar more sensitive.
 \paragraph{Forking paths.}
 The dense vote failed the bar on dev and was re-measured on SWE-Gym, a second look at the same idea.
 We mitigated this by keeping its weight unchanged, committing the decision before the Lite run, and
-reporting the dev result; the Lite effect (CI [0.004, 0.051], sign test $p=0.065$) is modest.
+reporting the dev result. The effect is modest on each holdout (Lite CI [0.004, 0.051], sign test
+$p=0.065$; Verified CI [0.009, 0.048], $p=0.007$), but it has the predicted sign and size on both.
 
 \paragraph{Comparisons across papers.}
 All competitor numbers are copied from their papers; our 274 instances are rebuilt from LocAgent's

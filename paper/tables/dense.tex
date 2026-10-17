@@ -1,5 +1,5 @@
 % Dense short-list vote: dev near miss (sec. 8.16), SWE-Gym pass + pooled test, decision locked in
-% 608acb4, then Lite once (sec. 8.18). Verified still being measured.
+% 608acb4, then Lite and Verified once (sec. 8.18, log at ce0dceb).
 \begin{table}[t]
 \centering
 \small
@@ -28,7 +28,11 @@ Lite, strict & 250 & 0.228\,$\to$\,0.252 & 0.472\,$\to$\,0.496 & 0.556\,$\to$\,0
 \multicolumn{5}{@{}l}{Lite 274 paired: @5 $+0.026$ [0.004,\,0.051], 9 gained / 2 lost, $p=0.065$;}\\
 \multicolumn{5}{@{}l}{\quad @1 $+0.029$ (18 / 10)}\\
 \addlinespace
-Verified & 459 & \multicolumn{3}{c}{\todo{locked-decision run, being measured}}\\
+Verified & 459 & 0.198\,$\to$\,\textbf{0.237} & 0.429\,$\to$\,\textbf{0.458} & 0.497\,$\to$\,\textbf{0.514}\\
+Verified, not in Lite & 375 & 0.189\,$\to$\,0.208 & 0.397\,$\to$\,0.435 & 0.464\,$\to$\,0.483\\
+\addlinespace
+\multicolumn{5}{@{}l}{Verified 459 paired: @5 $+0.028$ [0.009,\,0.048], 17 / 4, $p=0.007$;}\\
+\multicolumn{5}{@{}l}{\quad @1 $+0.039$ [0.013,\,0.065], 28 / 10, $p=0.005$; @10 $+0.017$, 8 / 0, $p=0.008$}\\
 \bottomrule
 \end{tabular}
 \par\smallskip

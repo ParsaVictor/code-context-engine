@@ -104,21 +104,24 @@ negative results table shows that we report what failed.
 
 Without these steps, call it a "commit-locked holdout", not "pre-registered".
 
-## 5. "The dense vote went through forking paths, and p = 0.065 is not significant."
+## 5. "The dense vote went through forking paths, and on Lite p = 0.065 is not significant."
 
 The vote failed the bar on dev. It was then re-measured on a *new* split until it passed, and only
 then run on Lite. On Lite, the CI [0.004, 0.051] barely excludes zero, and the sign test (9 issues
 gained, 2 lost) gives p = 0.065.
 
 **Our answer.** The weight and k were not changed between dev and SWE-Gym. The decision was
-committed before Lite. The effect is the same direction and size on every split (+0.032 pooled on
-dev + gym, +0.026 on Lite). The paper reports the dev failure and states this threat explicitly. It
-is opt-in, not the default.
+committed before Lite and Verified. The effect is the same direction and size on every split
+(+0.032 pooled on dev + gym, +0.026 on Lite, +0.028 on Verified). Verified, run once with the locked
+decision, is significant on its own: function Acc@5 0.429 → 0.458, CI [0.009, 0.048], 17 issues
+gained and 4 lost, sign test p = 0.007; at @1, +0.039, p = 0.005. The paper reports the dev failure
+and states this threat explicitly. It is opt-in, not the default.
 
 **What is missing.**
 
-- The Verified run with the locked decision. It is in progress and marked `\todo` in the paper.
-- If Verified is flat, the paper must say so, and the vote stays a "promising opt-in".
+- The Lite and Verified numbers come from the Python prototype applied to the stored v1.4.0 runs.
+  A run of the Rust port (`NM_DENSE=1`) on both would remove "prototype vs shipped" as a follow-up
+  objection.
 - A Holm correction across the three holdouts (Lite, Verified, Gym-by-port) would pre-empt the
   multiple-comparisons version of this objection.
 
