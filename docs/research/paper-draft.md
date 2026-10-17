@@ -119,6 +119,7 @@ skipped, voting at double weight deepest-first.
 | engine v1.3.0 | – | 0.500 [0.44,0.56] | 0.723 | 0.755 | 0.394 | 0.482 |
 | **engine v1.4.0** | – | **0.500** [0.44,0.56] | **0.723** | **0.755** | **0.460** [0.40,0.52] | **0.540** |
 | **engine v1.4.0 + dense short-list vote (opt-in)** | – | 0.500 | 0.723 | 0.755 | **0.485** [0.43,0.54] | **0.555** |
+| engine v1.4.0 + SweRankEmbed-Small vote on top-30 (research, cc-by-nc) | – | 0.500 | 0.723 | 0.755 | **0.496** [0.43,0.56] | **0.573** |
 | Jina-Code-v2 † | – | 0.434 | 0.712 | 0.803 | – | – |
 | CodeRankEmbed † | – | 0.526 | 0.777 | 0.847 | 0.518 | 0.588 |
 | Agentless + GPT-4o † | ✓ | 0.672 | 0.745 | 0.745 | – | – |
@@ -174,7 +175,9 @@ into the function list by RRF (w = 0.5). Decided on the tuning splits (pooled n 
 | Lite, LocAgent subset | 274 | 0.223 → 0.252 | 0.460 → 0.485 | 0.540 → 0.555 | +0.026 [0.004,0.051], 9/2 |
 | Verified | 459 | 0.198 → 0.237 | 0.429 → 0.458 | 0.497 → 0.514 | +0.028 [0.009,0.048], 17/4, p=0.007 |
 
-Thirty embeddings per issue replace a whole-repository index; the gap to CodeRankEmbed at func
+With SweRankEmbed-Small as the embedder (decided on the same splits, k=30 by a rule fixed before
+the k=100 numbers): Lite 0.223/0.460/0.540 → **0.281/0.496/0.573** (func Acc@1/5/10; paired @5 12/2,
+p=0.013), Verified 0.197/0.428/0.496 → **0.231/0.472/0.515** (23/3, p=0.0001). Thirty embeddings per issue replace a whole-repository index; the gap to CodeRankEmbed at func
 Acc@5 narrows from −0.058 to −0.033.
 
 ### 5.3 Ablation (Lite holdout, 276)
