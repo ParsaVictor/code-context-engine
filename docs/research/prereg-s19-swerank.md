@@ -34,3 +34,10 @@ engine's top **k=100** definitions (`--k 100`, same cache file, `--threads 3`).
 each of dev-fast, dev-rest, gym-a, gym-b. **Secondary:** SweRank order alone over the top 100; w=1;
 paired vs the k=30 SweRank vote (pooled); seconds per issue with the text cache warm from k=30.
 The k=30 decision is not revisited by this test.
+
+## Holdout selection rule, committed before any k=100 number was looked at
+
+Lite/Verified are run once with exactly one variant: SweRank vote w=0.5 at k=100 if k=100 passes the
+bar on all four halves AND its pooled func@5 is >= the k=30 pooled func@5; otherwise k=30. No other
+variant is run on the holdouts. (The main session runs the holdout, over the regenerated 300-entry
+lists `lite-v140d300-all.jsonl` / `verified-v140d300-all.jsonl`.)
