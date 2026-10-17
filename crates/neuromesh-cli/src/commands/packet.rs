@@ -113,6 +113,7 @@ pub fn execute(args: &[String]) -> Result<()> {
     // scored as misses without one).
     let definitions =
         neuromesh_context::gold::definition_order(&graph, &prompt, &localization, def_depth());
+    let definitions = dense_vote(definitions, &prompt, &current_dir);
     let mut files: Vec<String> = packet_file_names(&view).into_iter().collect();
     files.sort();
     let reduction = if workspace_tokens > 0 {
@@ -529,5 +530,127 @@ mod tests {
         ];
         let parsed = parse_args(&args).unwrap();
         assert_eq!(parsed.query.as_deref(), Some("Where is HTTPAdapter.send?"));
+    }
+}
+
+/// Opt-in dense vote on the function list (`NM_DENSE=1`; session 19, §8.18):
+/// jina-code-v2 embeds the issue and the top `DENSE_K` definitions (path, name,
+/// body), reorders them by cosine, and that order votes into the list by RRF at
+/// weight 0.5. Decided on SWE-bench dev + a SWE-Gym split (func Acc@5 +0.032,
+/// p = 0.0007); ~6 s per prompt on CPU, needs `neuromesh install embed jina`.
+/// Any failure (model missing, unreadable file) returns the list unchanged.
+fn dense_vote(
+    defs: Vec<neuromesh_graph::RankedDefinition>,
+    prompt: &str,
+    root: &std::path::Path,
+) -> Vec<neuromesh_graph::RankedDefinition> {
+    if std::env::var("NM_DENSE").ok().as_deref() != Some("1") || defs.len() < 2 {
+        return defs;
+    }
+    #[cfg(feature = "embeddings")]
+    {
+        match dense_order(&defs, prompt, root) {
+            Ok(order) => return rrf_vote(defs, &order, 0.5),
+            Err(e) => eprintln!("neuromesh: dense vote skipped ({e})"),
+        }
+    }
+    #[cfg(not(feature = "embeddings"))]
+    let _ = (prompt, root);
+    defs
+}
+
+const DENSE_K: usize = 30;
+
+#[cfg(feature = "embeddings")]
+fn dense_order(
+    defs: &[neuromesh_graph::RankedDefinition],
+    prompt: &str,
+    root: &std::path::Path,
+) -> std::result::Result<Vec<usize>, String> {
+    use neuromesh_core::{EmbeddingConfig, EmbeddingModelId};
+    let k = defs.len().min(DENSE_K);
+    let mut files: std::collections::HashMap<&str, Vec<String>> = Default::default();
+    let mut texts = Vec::with_capacity(k + 1);
+    texts.push(prompt.chars().take(4000).collect::<String>());
+    for d in &defs[..k] {
+        let lines = files.entry(d.path.as_str()).or_insert_with(|| {
+            std::fs::read_to_string(root.join(&d.path))
+                .map(|t| t.lines().map(str::to_string).collect())
+                .unwrap_or_default()
+        });
+        let (a, b) = d.lines;
+        let lo = a.saturating_sub(1).min(lines.len());
+        let hi = b.min(lines.len()).max(lo);
+        let body = lines[lo..hi].join(
+            "
+",
+        );
+        let text = format!(
+            "{}
+{}
+{}",
+            d.path, d.name, body
+        );
+        texts.push(text.chars().take(1500).collect());
+    }
+    let config = EmbeddingConfig {
+        model: EmbeddingModelId::JinaCodeV2,
+        matryoshka_dim: EmbeddingModelId::JinaCodeV2.default_matryoshka_dim(),
+        intra_threads: None,
+        ..EmbeddingConfig::default()
+    };
+    let mut emb = neuromesh_embed::Embedder::try_new(config).map_err(|e| e.to_string())?;
+    let vecs = emb.embed_documents(&texts).map_err(|e| e.to_string())?;
+    let q = &vecs[0];
+    let sim = |v: &Vec<f32>| v.iter().zip(q).map(|(a, b)| a * b).sum::<f32>();
+    let mut order: Vec<usize> = (0..k).collect();
+    order.sort_by(|&i, &j| sim(&vecs[j + 1]).total_cmp(&sim(&vecs[i + 1])));
+    Ok(order)
+}
+
+/// Reciprocal-rank fusion (k = 60) of the list's own order (weight 1) and a
+/// reordering of its head (`order` indexes into `defs`, weight `w`).
+fn rrf_vote(
+    defs: Vec<neuromesh_graph::RankedDefinition>,
+    order: &[usize],
+    w: f32,
+) -> Vec<neuromesh_graph::RankedDefinition> {
+    let mut score: Vec<f32> = (0..defs.len()).map(|i| 1.0 / (61.0 + i as f32)).collect();
+    for (r, &i) in order.iter().enumerate() {
+        score[i] += w / (61.0 + r as f32);
+    }
+    let mut idx: Vec<usize> = (0..defs.len()).collect();
+    idx.sort_by(|&a, &b| score[b].total_cmp(&score[a]).then(a.cmp(&b)));
+    let mut slots: Vec<Option<neuromesh_graph::RankedDefinition>> =
+        defs.into_iter().map(Some).collect();
+    idx.into_iter().filter_map(|i| slots[i].take()).collect()
+}
+
+#[cfg(test)]
+mod dense_tests {
+    use super::*;
+
+    fn d(n: &str) -> neuromesh_graph::RankedDefinition {
+        neuromesh_graph::RankedDefinition {
+            path: "a.py".into(),
+            name: n.into(),
+            lines: (1, 2),
+            score: 0.0,
+        }
+    }
+
+    #[test]
+    fn rrf_vote_promotes_dense_head_but_keeps_tail() {
+        let defs = vec![d("x"), d("y"), d("z"), d("t")];
+        let out = rrf_vote(defs, &[2, 0, 1], 0.5);
+        let names: Vec<_> = out.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names, ["x", "z", "y", "t"]);
+    }
+
+    #[test]
+    fn dense_vote_is_off_by_default() {
+        std::env::remove_var("NM_DENSE");
+        let out = dense_vote(vec![d("x"), d("y")], "q", std::path::Path::new("."));
+        assert_eq!(out[0].name, "x");
     }
 }
