@@ -731,3 +731,24 @@ The candidate set of a CPU-only, model-free engine built in seconds contains the
 which is what a reranker over a short list addresses (§8.18–8.19). Consequence for the earlier dense
 holdout numbers (§8.18): on Lite/Verified the k=30 vote saw only 20 candidates, so +0.026/+0.028 is
 a lower bound for the decided method.
+
+### 8.21 SweRankEmbed-Small vote run once on Lite and Verified (session 19, 2026-10-17)
+
+Variant fixed by the selection rule committed before the k=100 numbers (bae1783): SweRank vote,
+k=30, w=0.5 (k=100 failed dev-rest). Base = the regenerated 300-entry v1.4.0 lists (§8.20), so the
+vote sees 30 candidates as decided. One run each (`swebench/swerank-sl-{lite,verified}.jsonl`):
+
+| set | n | func Acc@1 | func Acc@5 | func Acc@10 | paired @5 | paired @1 |
+|---|---|---|---|---|---|---|
+| Lite, LocAgent subset | 274 | 0.223 → **0.281** | 0.460 → **0.496** [0.43,0.56] | 0.540 → **0.573** | +0.036 [0.011,0.062], 12/2, p=0.013 | +0.058, 20/4, p=0.002 |
+| Verified | 458 | 0.197 → **0.231** | 0.428 → **0.472** [0.43,0.52] | 0.496 → **0.515** | +0.044 [0.024,0.066], 23/3, p=0.0001 | +0.035, 24/8, p=0.007 |
+
+For comparison the jina vote (§8.18, over the 20-entry lists): Lite 0.252 / 0.485 / 0.555, Verified
+0.237 / 0.458 / 0.514. Cost: p50 15.1 s (Lite) / 10.8 s (Verified) per issue for 31 texts — fp32 torch,
+no ONNX export, about 2–3 texts/s on the laptop CPU; at that rate embedding every function of django
+(~30k definitions) once would take hours, which is the price the whole-repository retriever pays
+before its first query. Licence cc-by-nc-4.0: research result, not an engine default.
+
+Against the same model used as a whole-repository retriever (SweRank Table 1, GPU): func Acc@5 0.631;
+our hybrid 0.496 with 30 embeddings per issue. Gap −0.135; the engine's top-300 holds every gold
+function for 0.828 of these issues (§8.20), so the remaining gap is ordering depth, not recall.
