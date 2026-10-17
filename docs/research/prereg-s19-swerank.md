@@ -22,3 +22,15 @@ bootstrap CI); seconds per issue (p50) on CPU.
 
 **Out of scope here.** Lite and Verified are holdouts: no run on them in this branch; the main session
 decides whether a Lite/Verified run follows.
+
+## Addendum (k=100), committed after the k=30 result and before any k=100 number
+
+k=30 result: the SweRank vote cleared the bar on all four halves (§8.19). The engine's top 30 holds
+every gold function for only 0.50 / 0.47 of dev / gym issues; the top 100 holds them for 0.63 / 0.62.
+Second test, same embedder, texts, query, RRF k=60 and w=0.5, only the short list widened to the
+engine's top **k=100** definitions (`--k 100`, same cache file, `--threads 3`).
+
+**Bar (unchanged):** func Acc@5 of engine + SweRank vote over the top 100 (w=0.5) ≥ engine + 0.02 on
+each of dev-fast, dev-rest, gym-a, gym-b. **Secondary:** SweRank order alone over the top 100; w=1;
+paired vs the k=30 SweRank vote (pooled); seconds per issue with the text cache warm from k=30.
+The k=30 decision is not revisited by this test.
