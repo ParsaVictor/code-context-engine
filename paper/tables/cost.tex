@@ -1,4 +1,4 @@
-% Cost per issue; ours: contributions-log sec. 8.1, sec. 8.2, sec. 8.9, sec. 8.13, sec. 8.18;
+% Cost per issue; ours: contributions-log sec. 8.1, sec. 8.2, sec. 8.9, sec. 8.13, sec. 8.18, sec. 8.21;
 % others: related-work-2026.md sec. 1-sec. 2 (SweRank T5, LocAgent T5, Agentless T1).
 \begin{table}[t]
 \centering
@@ -14,7 +14,8 @@ setting & cost\\
 NeuroMesh, Lite & p50 2.9\,s, p90 10.6\,s; 0 tokens\\
 NeuroMesh, Verified & p50 2.5\,s, p90 8.8\,s; 0 tokens\\
 \quad index build, django (3.5k files) & 26\,s cold\\
-\quad + dense short-list vote & +$\approx$6\,s p50 (30 definitions + issue)\\
+\quad + jina-code short-list vote & +$\approx$6\,s p50 (30 definitions + issue)\\
+\quad + SweRankEmbed-Small vote (fp32) & +11--15\,s p50, 2--3 texts/s\\
 Whole-repository embedding, CPU & 2.6 chunks/s (jina-code-v2)\\
 Local 3B LLM judge, CPU & $\approx$105\,s per issue\\
 \midrule

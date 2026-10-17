@@ -10,8 +10,12 @@ the paper.
 
 ## 1. "This is below a 137M retriever on every metric. Why publish a weaker method?"
 
-SweRankEmbed-Small has file Acc@1 0.664 and function Acc@5 0.631 on the same 274 instances. Ours
-are 0.500 and 0.460, or 0.485 with the dense vote. CodeRankEmbed is also ahead (0.526 / 0.518).
+SweRankEmbed-Small, used as a whole-repository retriever, has file Acc@1 0.664 and function Acc@5
+0.631 on the same 274 instances. Ours are 0.500 and 0.460 for the engine alone. With a vote from a
+short list of 30 definitions, function Acc@5 is 0.485 (jina-code, shippable) or 0.496
+(SweRankEmbed-Small itself, research only). The gap to the same model used over the whole
+repository is therefore −0.135 at function Acc@5. CodeRankEmbed is also ahead at file Acc@1 (0.526),
+but our hybrid's function Acc@5 (0.496) is now only −0.022 behind its 0.518.
 
 **Our answer.** We do not claim state of the art, and the abstract says so. Our claim is a
 different point on the cost/accuracy curve:
@@ -22,21 +26,33 @@ different point on the cost/accuracy curve:
 - 2.9 s per issue on a laptop CPU, cold index included;
 - every number from a holdout run once.
 
-None of the methods in Table 1 sits at this point.
+None of the methods in Table 1 sits at this point. The strongest new answer is the **rerank
+ceiling** (log §8.20). The engine's top 300 definitions contain every edited function for 0.828 of
+Lite-274 issues (Verified 0.790; top 30: 0.672 / 0.627). That is above the function Acc@5 of
+SweRank's best retrieve-and-rerank system (0.814), although below SweRank+ (0.854) and SWE-Adept
+(0.878). The engine is a CPU candidate generator whose candidate set is large enough for the best
+published accuracy. What it lacks is ordering, and we show that cheap short-list reranking closes
+part of that gap, on both holdouts:
 
-**What is missing.** We have not shown that this point *matters*. The answer is only convincing if
-we show one of these:
+- SweRank vote, Lite: +0.036 [0.011, 0.062], p = 0.013;
+- SweRank vote, Verified: +0.044 [0.024, 0.066], p = 0.0001.
 
-- (a) a setting where the dense retriever cannot run: CPU-only, a repository that changes often, or
-  a privacy-restricted repository, with its real cost measured (see #2);
-- (b) that our engine as a first stage plus a cheap reranker reaches the dense retriever's accuracy
-  at lower total cost (see #3).
+**Expect the counter-objection.** "Recall@300 is not accuracy; comparing it with Acc@5 is
+apples to oranges." The paper says this explicitly ("for scale, not as a like-for-like
+comparison"). Do not put 0.828 next to 0.814 without that sentence.
 
-Experiment: run SweRankEmbed-Small and CodeRankEmbed **ourselves on CPU** over the same 274
-instances. Report the indexing time per repository, the time per query, and the accuracy. Then
-report our engine plus SweRankEmbed-Small used only as a short-list reranker over our top 30
-definitions. If that hybrid gets close to 0.63 function Acc@5 at a small fraction of the indexing
-cost, the paper has a real result. If not, we should say so plainly.
+**What is still missing.**
+
+- (a) A strong reranker over our top 30–300 that actually *reaches* the ceiling. This could be a
+  listwise LLM reranker (SweRankLLM-Small 7B or an API model) over the engine's list. It would show
+  how much of the 0.828 is reachable, and at what cost compared with whole-repository retrieval. This
+  is the same experiment as #3, and it is now the single most valuable one.
+- (b) The real CPU cost of the whole-repository alternative: SweRankEmbed-Small and CodeRankEmbed
+  indexing every function of the Lite repositories on the same laptop (see #2). Today we have only
+  2–3 texts/s from the short-list runs, which implies hours per large repository. A direct
+  measurement would turn the cost argument from an estimate into a number.
+- (c) An int8 ONNX export of SweRankEmbed-Small, so that its short-list cost (11–15 s per issue in
+  fp32) can be compared fairly with jina's (about 6 s).
 
 ## 2. "The CPU cost of dense retrieval is exaggerated."
 
@@ -119,7 +135,10 @@ and states this threat explicitly. It is opt-in, not the default.
 
 **What is missing.**
 
-- The Lite and Verified numbers come from the Python prototype applied to the stored v1.4.0 runs.
+- The jina Lite and Verified numbers come from the Python prototype applied to the stored v1.4.0
+  runs, which held only 20 candidates, so they are a lower bound for the decided k=30. The
+  SweRankEmbed-Small vote, which was pre-registered and passed all four tuning halves, ran over
+  regenerated 300-entry lists and is significant on both holdouts.
   A run of the Rust port (`NM_DENSE=1`) on both would remove "prototype vs shipped" as a follow-up
   objection.
 - A Holm correction across the three holdouts (Lite, Verified, Gym-by-port) would pre-empt the

@@ -1,5 +1,5 @@
 % Head-to-head on LocAgent's 274-instance SWE-bench Lite subset (same instances, same metric).
-% Ours: contributions-log sec. 8.7, sec. 8.13, sec. 8.17, sec. 8.18. Others: related-work-2026.md sec. 1
+% Ours: contributions-log sec. 8.7, sec. 8.13, sec. 8.17, sec. 8.18, sec. 8.20, sec. 8.21. Others: related-work-2026.md sec. 1
 % (LocAgent Table 4, SweRank Table 1/5), rounded to three decimals.
 \begin{table*}[t]
 \centering
@@ -8,8 +8,9 @@
 gold locations in the top $k$. Rows marked \dag{} are copied from LocAgent~\citep[Table~4]{chen2025locagent}
 and SweRank~\citep[Tables~1 and~5]{reddy2026swerank}. ``Model'' is what runs at query time; ``index'' is
 what must be computed per repository before the first query. Our rows are a single run of a released
-binary on a holdout (\S\ref{sec:protocol}); 95\% bootstrap CIs in brackets. The dense vote changes only
-the function list, so its file columns equal the engine's.}
+binary on a holdout (\S\ref{sec:protocol}); 95\% bootstrap CIs in brackets. The dense votes change only
+the function list, so their file columns equal the engine's. The engine's top 300 definitions hold
+every edited function for 0.828 of these instances (Table~\ref{tab:ceiling}).}
 \label{tab:lite274}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{%
@@ -26,8 +27,10 @@ BM25 (our implementation) & -- / inverted index & 0.299 & 0.522 & 0.606 & -- & -
  & & {\scriptsize[0.44,0.56]} & & & {\scriptsize[0.40,0.52]} & & \\
 \midrule
 \multicolumn{8}{@{}l}{\emph{Short-list embedding (30 definitions per issue, no repository embedding)}}\\
-\textbf{NeuroMesh v1.4.0 + dense vote (ours)} & 161M encoder, CPU / code graph & 0.500 & 0.723 & 0.755 & \textbf{0.485} & \textbf{0.555} & CPU, +$\approx$6\,s p50 \\
+\textbf{NeuroMesh v1.4.0 + jina-code vote (ours)} & 161M encoder, CPU / code graph & 0.500 & 0.723 & 0.755 & \textbf{0.485} & \textbf{0.555} & CPU, +$\approx$6\,s p50 \\
  & & & & & {\scriptsize[0.43,0.54]} & & \\
+NeuroMesh v1.4.0 + SweRankEmbed-Small vote (ours, research) & 137M encoder, CPU / code graph & 0.500 & 0.723 & 0.755 & \textbf{0.496} & \textbf{0.573} & CPU, +11--15\,s p50 \\
+ & & & & & {\scriptsize[0.43,0.56]} & & \\
 \midrule
 \multicolumn{8}{@{}l}{\emph{Dense retrievers (embed every function of the repository)}}\\
 CodeSage-large-v2 (1.3B)~\citep{zhang2024codesage}\dag & -- / all functions & 0.478 & 0.693 & 0.781 & 0.339 & 0.445 & GPU in practice \\

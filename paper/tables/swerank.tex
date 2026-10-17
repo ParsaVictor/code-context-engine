@@ -1,0 +1,36 @@
+% SweRankEmbed-Small as the short-list embedder; contributions-log sec. 8.19 (tuning, k=30 and k=100,
+% bar pre-registered in fca506a, selection rule in bae1783) and sec. 8.21 (holdouts, run once).
+\begin{table}[t]
+\centering
+\small
+\caption{Short-list vote with SweRankEmbed-Small (137M, fp32, CPU) instead of jina-code; everything
+else as in Table~\ref{tab:dense} ($k=30$, RRF $w=0.5$). Research only (licence cc-by-nc-4.0).
+Function \accat{5} on the tuning halves; function \accat{1}/5/10 on the holdouts, engine $\to$ engine +
+vote, with paired differences at @5.}
+\label{tab:swerank}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+function \accat{5} & dev-fast & dev-rest & gym-a & gym-b\\
+ & (52) & (158) & (132) & (134)\\
+\midrule
+engine & 0.308 & 0.329 & 0.258 & 0.254\\
++ jina vote & 0.327 & 0.342 & 0.288 & 0.313\\
++ SweRank vote, $k=30$ & \textbf{0.346} & \textbf{0.361} & \textbf{0.318} & \textbf{0.306}\\
++ SweRank vote, $k=100$ & 0.346 & 0.335 & 0.326 & 0.328\\
+\bottomrule
+\end{tabular}
+
+\medskip
+\begin{tabular}{@{}lrccc@{}}
+\toprule
+holdout, run once & $n$ & @1 & @5 & @10\\
+\midrule
+Lite, LocAgent subset & 274 & 0.223\,$\to$\,\textbf{0.281} & 0.460\,$\to$\,\textbf{0.496} & 0.540\,$\to$\,\textbf{0.573}\\
+Verified & 458 & 0.197\,$\to$\,\textbf{0.231} & 0.428\,$\to$\,\textbf{0.472} & 0.496\,$\to$\,\textbf{0.515}\\
+\addlinespace
+\multicolumn{5}{@{}l}{Lite: @5 $+0.036$ [0.011,\,0.062], 12 / 2, $p=0.013$; @1 $+0.058$, 20 / 4, $p=0.002$}\\
+\multicolumn{5}{@{}l}{Verified: @5 $+0.044$ [0.024,\,0.066], 23 / 3, $p=0.0001$; @1 $+0.035$, 24 / 8, $p=0.007$}\\
+\bottomrule
+\end{tabular}
+\end{table}
