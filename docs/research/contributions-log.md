@@ -659,3 +659,24 @@ index) −0.058 → −0.033, with 30 embeddings per issue on CPU instead of eve
 Paired (459): @1 +0.039 [0.013, 0.065], 28/10, p = 0.005; @5 +0.028 [0.009, 0.048], 17/4, p = 0.007;
 @10 +0.017, 8/0, p = 0.008. Every split — dev, gym-a, gym-b, Lite, Verified — moves the same way by
 +0.02 to +0.06 at func Acc@5; the effect predicted on tuning data (+0.032) is what both holdouts show.
+
+### 8.20 Rerank ceiling: the engine already finds the code (session 19, 2026-10-17)
+
+Share of issues whose every gold function is in the engine's first k (v1.4.0, `NM_DEFINITIONS=300`;
+Lite/Verified lists regenerated with the release binary — the once-per-version runs stored the
+product default of 20; the regenerated runs match the stored ones on 299/300 file lists and 294/300
+top-20 function lists on Lite, 496/499 and 492/499 on Verified, the rest is residual nondeterminism):
+
+| set | n | @5 (now) | @30 | @100 | @300 | file: gold in top 20 |
+|---|---|---|---|---|---|---|
+| dev | 210 | 0.324 | 0.495 | 0.633 | 0.776 | 0.751 |
+| SWE-Gym | 266 | 0.256 | 0.470 | 0.624 | 0.748 | 0.736 |
+| Lite, LocAgent subset | 274 | 0.460 | 0.672 | 0.766 | **0.828** | 0.887 |
+| Verified | 458 | 0.428 | 0.627 | 0.727 | 0.790 | 0.874 |
+
+The candidate set of a CPU-only, model-free engine built in seconds contains the edited functions for
+83% of Lite issues — above the function Acc@5 of the strongest published retrieve-and-rerank system
+(SweRankEmbed-L + SweRankLLM-L 32B, 0.814). The remaining gap to the best localisers is ordering,
+which is what a reranker over a short list addresses (§8.18–8.19). Consequence for the earlier dense
+holdout numbers (§8.18): on Lite/Verified the k=30 vote saw only 20 candidates, so +0.026/+0.028 is
+a lower bound for the decided method.
