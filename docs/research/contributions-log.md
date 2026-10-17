@@ -629,3 +629,21 @@ Bar (func@5 ≥ +0.02 on both halves): **passes** (+0.030 / +0.059). Pooled with
 func@5 0.286 → 0.317, +0.032 [0.015, 0.050], 17 issues gained / 2 lost, sign test p = 0.0007;
 func@1 +0.021 (p = 0.08); func@10 +0.021 (p = 0.006). Decision (w=0.5, k=30) committed in 608acb4
 before the run on Lite / Verified. Cost ~6 s per issue on CPU (p50; embedding 30 definitions + issue).
+
+**Engine port (`NM_DENSE=1`, `packet` function list).** Rust re-implementation (fastembed jina-code-v2,
+same texts, 512-token cut, RRF k=60 w=0.5 over the top 30); order matches the prototype up to
+near-tie swaps. SWE-Gym run with the port: func Acc@5 0.258 → **0.295** (gym-a), 0.254 → **0.299**
+(gym-b); file lists unchanged (the vote touches only the function list — the file vote did not clear
+the bar on gym-b, +0.000).
+
+**Lite, run once with the locked decision** (prototype over the stored v1.4.0 run, `dense-sl-lite.jsonl`):
+
+| | n | func Acc@1 | Acc@5 | Acc@10 |
+|---|---|---|---|---|
+| LocAgent subset, v1.4.0 | 274 | 0.223 | 0.460 [0.40,0.52] | 0.540 |
+| LocAgent subset, + dense vote | 274 | **0.252** | **0.485** [0.43,0.54] | **0.555** |
+| Lite strict, v1.4.0 → + dense | 250 | 0.228 → 0.252 | 0.472 → 0.496 | 0.556 → 0.568 |
+
+Paired (274): @5 +0.026 [0.004, 0.051], 9 gained / 2 lost, sign test p = 0.065; @1 +0.029 (18/10).
+Same direction and size as dev+gym (+0.032). Gap to CodeRankEmbed (0.518 func@5, GPU, whole-repo
+index) −0.058 → −0.033, with 30 embeddings per issue on CPU instead of every function of the repository.

@@ -146,6 +146,22 @@ Function level (all edited functions in top k), v1.3.0 → v1.4.0: Verified 459 
 larger (one edited function in 45% of dev issues vs 86% of Lite), so dev understates
 function-level effects on Lite-like data.
 
+### 5.2b A third holdout: SWE-Gym (280 issues, 7 unseen repositories)
+
+A second tuning split, pre-registered by commit before any run (§4): SWE-Gym issues from pydantic,
+hydra, conan, dvc, dask, moto and mypy (≤40 per repository, seed 19, patches that edit only existing
+non-test Python files), halves gym-a / gym-b. The release v1.4.0 had never seen these repositories,
+so its one run is also a holdout:
+
+| | file Acc@1 | @3 | @5 | @10 | func Acc@5 |
+|---|---|---|---|---|---|
+| BM25, gym-a / gym-b | 0.121 / 0.121 | 0.257 / 0.271 | 0.329 / 0.307 | 0.407 / 0.436 | – |
+| engine v1.4.0, gym-a | 0.279 | 0.450 | 0.536 | 0.650 | 0.258 |
+| engine v1.4.0, gym-b | 0.271 | 0.414 | 0.493 | 0.600 | 0.254 |
+
+The engine's advantage over BM25 (×2.3 at Acc@1) carries to repositories outside every set it
+was developed on.
+
 ### 5.3 Ablation (Lite holdout, 276)
 
 | removed | Acc@1 | Acc@3 | Acc@5 |
@@ -189,6 +205,7 @@ p50 2.9 s / p90 10.6 s per Lite issue (Verified 2.5 s / 8.8 s) on a 6-core lapto
 | identifiers in the issue's code blocks → their definitions | file Acc@1 drops; func Acc@5 +0.019 (below the 0.02 bar) |
 | RM3 pseudo-relevance feedback on the definition ranking | alone worse at @1 (0.135 → 0.038, dev-fast); as a vote no better than plain BM25 |
 | doc sections as a bridge from question words to identifiers (plain-language) | R@3 down on 3 of 4 sets (ripgrep 0.500 → 0.375, axios 0.833 → 0.583) |
+| learned reranker (logistic / boosted trees, 25 features, top-100 functions) | dev func@5 +0.000/+0.019; trained on dev, applied to SWE-Gym +0.000; coefficients flip sign between splits |
 | evaluation: function-level denominator without short reports | 244 instead of 274 instances, Acc@5 0.443 instead of 0.394 |
 
 ## 7. Threats to validity
