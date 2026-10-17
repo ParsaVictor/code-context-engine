@@ -140,9 +140,10 @@ of three general-purpose dense retrievers: E5-base (0.394 / 0.511), Jina-Code-v2
 and CodeSage-large (0.339 / 0.445). It is level with E5-base at file Acc@1 (0.500 vs. 0.496) and
 behind every dense retriever at file Acc@5 (0.755 vs. 0.781–0.847). Code-search-tuned dense
 retrievers lead it clearly. CodeRankEmbed leads by +0.03 file Acc@1 and +0.06 function Acc@5, and
-SweRankEmbed-Small leads by +0.16 and +0.17, at the same 137M size. Fine-tuned 7B rerankers and LLM
-agents lead by 0.27–0.39 at function Acc@5, and frontier-model agents (Claude-3.5 and newer) lead by
-0.28–0.33 at file Acc@1. We therefore do not claim state of the art. We claim the best measured
+SweRankEmbed-Small leads by +0.16 and +0.17, at the same 137M size. Fine-tuned 7B and 32B rerankers
+lead by +0.34 to +0.39 at function Acc@5. LocAgent + Claude-3.5 leads by +0.27 at function Acc@5 and
++0.28 at file Acc@1. Agents on weaker models are much closer: SWE-agent + GPT-4o reaches function
+Acc@5 0.460, equal to ours, and OpenHands + GPT-4o 0.496, both at $0.56–0.83 per issue. We therefore do not claim state of the art. We claim the best measured
 model-free point. It is a strong, cheap first stage: the engine's top-30 definitions are a short
 list that a dense or LLM reranker can re-order (§8.18 dense vote, +0.032 function Acc@5 on dev+gym).
 It is deterministic and auditable, and it runs on any machine. Two caveats apply to cross-paper
@@ -206,7 +207,8 @@ rerank; a code-trained cross-encoder did not survive our holdout).
 numbers above are single-split results; none is reported on a pre-registered holdout. We take the
 other corner of the trade-off: no model, CPU only, zero tokens, about 3 s per issue, every number
 from a holdout run once. Our engine trails code-tuned dense retrievers (−0.03 to −0.16 file Acc@1 on
-the shared Lite protocol) and LLM agents (−0.28 and more). It is ahead of BM25 and of general-purpose
+the shared Lite protocol) and frontier-model agents and rerankers (−0.27 to −0.39 function Acc@5).
+It matches SWE-agent + GPT-4o at function Acc@5 (0.460) and is ahead of BM25 and of general-purpose
 dense retrievers at function level (§5.1).
 ```
 
