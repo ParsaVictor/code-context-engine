@@ -50,14 +50,17 @@ been run on it once), and each released version was run once on held-out data. O
 \accat{1}/3/5 of 0.507/0.717/0.750 (BM25 0.301/0.507/0.587) at 2.9\,s per issue including a cold
 index; on the 407 SWE-bench Verified issues outside Lite 0.435/0.671/0.732 (BM25
 0.194/0.373/0.477); on 280 SWE-Gym issues from seven repositories it never saw, file \accat{1}
-0.279/0.271 on the two halves (BM25 0.121/0.121). At function level it lists every edited function
-among its first five on 0.460 of LocAgent's 274 Lite instances, and 0.485 with an opt-in vote that
-embeds only the engine's top 30 definitions on CPU (paired $+0.026$, 95\% CI [0.004, 0.051]); on
-Verified the same vote lifts function \accat{5} from 0.429 to 0.458 ($+0.028$ [0.009, 0.048]). This
-is below code-trained dense retrievers --- SweRankEmbed-Small reaches 0.664 file \accat{1} and
-0.631 function \accat{5} on the same instances --- and well below LLM agents and rerankers. Our
-contribution is the other corner of the trade-off: no training, no GPU, no whole-repository
-embedding index, zero tokens, a holdout protocol that caught two results looked-at data had
+0.279/0.271 on the two halves (BM25 0.121/0.121). The engine's ranked candidate list already
+contains every edited function within its first 300 entries for 0.828 of LocAgent's 274 Lite
+instances (Verified 0.790): the gap to the best localisers is ordering, not recall. Its own top five
+hold every edited function for 0.460 of the 274. Re-ordering only the top 30 with an off-the-shelf
+encoder on CPU lifts this to 0.485 (jina-code, shippable; paired $+0.026$, 95\% CI [0.004, 0.051])
+and to 0.496 with SweRankEmbed-Small ($+0.036$ [0.011, 0.062]); on Verified the two votes add
+$+0.028$ and $+0.044$ (from about 0.43). This is still below code-trained dense retrievers over the whole repository ---
+SweRankEmbed-Small as a retriever reaches 0.664 file \accat{1} and 0.631 function \accat{5} on the
+same instances --- and well below LLM agents and rerankers. Our contribution is the other corner of
+the trade-off: no training, no GPU, no whole-repository embedding index, zero tokens, a first stage
+whose recall a reranker can exploit, a holdout protocol that caught two results looked-at data had
 suggested, and a dozen negative results with numbers.
 \end{abstract}
 
@@ -90,7 +93,10 @@ the engine is 0.03 below CodeRankEmbed and 0.16 below SweRankEmbed-Small at file
 0.27 below LocAgent with Claude-3.5 at function \accat{5} (Table~\ref{tab:lite274}). What it offers
 is a measured point no published method occupies: no learned model at query time, no
 whole-repository index beyond a code graph, zero tokens, 2.9\,s per issue on a laptop, and numbers
-from holdouts run once.
+from holdouts run once. And it finds the code: its top 300 definitions contain every edited
+function for 0.828 of the 274 instances, so what separates it from the best localisers is the order
+of a list it already has --- which a reranker over a short list can address on CPU
+(\S\ref{sec:ceiling}).
 
 \paragraph{Contributions.}
 \begin{enumerate}
@@ -102,10 +108,14 @@ from holdouts run once.
   \item \textbf{An LLM-free localiser} reaching file \accat{1} 0.507 on 276 held-out Lite issues (BM25
   0.301), 0.435 on 407 Verified issues outside Lite (BM25 0.194) and $2.2$--$2.3\times$ BM25 on seven unseen
   SWE-Gym repositories, at 2.9\,s per issue on a laptop CPU (\S\ref{sec:results}).
-  \item \textbf{A cheap dense short-list vote}: embedding only the engine's top 30 definitions lifts
-  function \accat{5} on Lite from 0.460 to 0.485 and on Verified from 0.429 to 0.458, with the
-  decision committed before both holdout runs
-  (\S\ref{sec:dense}).
+  \item \textbf{A rerank ceiling for a model-free first stage} (\S\ref{sec:ceiling}): every edited
+  function is in the engine's top 300 for 0.828 of LocAgent's Lite instances and 0.790 of Verified
+  (top 30: 0.672 and 0.627), so the engine is a CPU candidate generator with high recall, and the
+  remaining gap to the best published localisers is ordering.
+  \item \textbf{A cheap dense short-list vote} (\S\ref{sec:dense}): embedding only the engine's top
+  30 definitions lifts function \accat{5} on Lite from 0.460 to 0.485 (jina-code, Apache-2.0, opt-in
+  in the engine) or 0.496 (SweRankEmbed-Small, research only), and on Verified by $+0.028$ or
+  $+0.044$, each decision committed before its holdout run.
   \item \textbf{Ablations, costs and negative results with numbers} (\S\ref{sec:ablation},
   \S\ref{sec:negative}): a dozen ideas from the bug-localisation and retrieval literature --- commit
   history, query expansion, cross-encoder reranking, graph expansion, a learned reranker, a small
@@ -212,7 +222,9 @@ With \texttt{NM\_DENSE=1}, jina-embeddings-v2-base-code \citep{gunther2023jina} 
 embeds the issue and the engine's top 30 definitions (text from the base commit, cut at 512 tokens);
 their cosine order joins the function-list fusion by RRF ($k=60$, weight $0.5$). The file list is not
 changed. It costs about 6\,s per issue on CPU and 31 embeddings (30 definitions and the issue), instead of an embedding of every
-function in the repository.
+function in the repository. For research we also ran the same vote with SweRankEmbed-Small
+\citep{reddy2026swerank} as the encoder (fp32, CPU); its licence (cc-by-nc-4.0) rules it out as an
+engine default.
 
 % ---------------------------------------------------------------------------------------------
 \section{Evaluation protocol}
@@ -269,7 +281,10 @@ metric. Without any learned model it is $+0.11$ above LocAgent's BM25 at file \a
 (0.664). At file \accat{5} it is below every dense retriever (0.755 vs 0.781--0.909). At function
 \accat{5} it is above E5-base, Jina-Code-v2 and CodeSage-large (0.394, 0.423, 0.339), equal to
 SWE-agent with GPT-4o (0.460), and below CodeRankEmbed (0.518), SweRankEmbed-Small (0.631) and every
-LLM agent on Claude-3.5. Function \accat{1} is 0.223 (not reported by the other papers).
+LLM agent on Claude-3.5. Function \accat{1} is 0.223 (not reported by the other papers). With a
+short-list vote over its top 30 definitions (\S\ref{sec:dense}) function \accat{5} rises to 0.485
+(jina-code) or 0.496 (SweRankEmbed-Small), $-0.033$ and $-0.022$ from CodeRankEmbed's
+whole-repository 0.518.
 
 The 24 instances looked at during development are all among the 274; without them (250 instances)
 the v1.2.0 engine scored 0.488/0.716/0.756 and BM25 0.304/0.512/0.592, so the looked-at instances do
@@ -294,10 +309,30 @@ Verified (mean 1.87). When every edited function must be in the top $k$, a corre
 pays off far more often on single-function gold. SWE-Gym's gold (mean 3.4 functions, one function in
 45\%) resembles dev, which is why its function numbers are low.
 
-\subsection{Dense short-list vote}
+\subsection{Rerank ceiling: the engine already finds the code}
+\label{sec:ceiling}
+
+\input{tables/ceiling}
+
+Function \accat{5} measures the order of the engine's list. Table~\ref{tab:ceiling} measures what the
+list \emph{contains}: the share of issues whose every edited function appears among the first $k$
+definitions. On LocAgent's 274 Lite instances the first 300 hold every edited function for 0.828 of
+issues (Verified 0.790), and the first 30 for 0.672 (Verified 0.627), from a code graph built in
+seconds on a laptop CPU with no model. For scale, and not as a like-for-like comparison (a recall
+ceiling is not an accuracy), the best function \accat{5} of SweRank's retrieve-and-rerank systems
+on the same instances is 0.814 \citep{reddy2026swerank}; SweRank+ (0.854) and SWE-Adept with
+Claude-Sonnet-4.5 (0.878) go higher. The engine's candidate set is therefore large enough for a
+strong reranker to reach the best published accuracy in principle; what separates the engine from
+those systems is ordering. This fits the dev failure analysis: 45\% of function-level misses have
+every gold function in the list but outside the top five, at a median rank of 36 (log~\S8.18). The
+tuning splits sit lower (0.776 dev, 0.748 SWE-Gym at 300) because their gold averages 3.4--3.7
+functions per issue, all of which must be present.
+
+\subsection{Dense short-list votes}
 \label{sec:dense}
 
 \input{tables/dense}
+\input{tables/swerank}
 
 The dense vote of \S\ref{sec:system} first came up as a near miss on dev: positive in almost every
 cell but below the bar on dev-fast (file \accat{1} $+0.017$, one issue; function \accat{5} $+0.019$
@@ -316,6 +351,30 @@ lost ($p=0.007$), and $+0.039$ at \accat{1} (28/10, $p=0.005$); on the 375 outsi
 rose from 0.397 to 0.435. Every split --- dev, both SWE-Gym halves, Lite and Verified --- moves the
 same way by $+0.02$ to $+0.06$ at function \accat{5}, and the effect predicted on tuning data
 ($+0.032$) is what both holdouts show.
+
+Because the once-per-version runs stored 20 functions per issue (Table~\ref{tab:ceiling}), the
+jina vote on Lite and Verified re-ordered 20 candidates rather than the 30 decided; its holdout gains
+are a lower bound for the decided method.
+
+\paragraph{SweRankEmbed-Small as the short-list encoder.}
+Replacing jina-code by SweRankEmbed-Small, with $k$, the weight and the texts unchanged and the bar
+pre-registered before any number, passes the bar on all four tuning halves (Table~\ref{tab:swerank};
+jina did not on dev). Pooled over dev and SWE-Gym, function \accat{5} rises from 0.286 to 0.332,
+$+0.046$ [0.027, 0.067], 24 gained and 2 lost; head-to-head against the jina vote the difference is
+$+0.015$ [$-0.002$, 0.032], better but not significantly. Widening the short list to $k=100$ (also
+pre-registered) failed on dev-rest ($+0.006$): 70 more candidates bring as many chances to push a gold
+function out of the top five as to pull one in. By the selection rule committed before the $k=100$
+numbers we ran $k=30$ once on each holdout, over the regenerated 300-entry lists so that the vote saw
+30 candidates. On Lite-274 function \accat{1}/5/10 went from 0.223/0.460/0.540 to
+0.281/0.496/0.573 ($+0.036$ [0.011, 0.062] at @5, 12 gained and 2 lost, $p=0.013$); on Verified (458)
+from 0.197/0.428/0.496 to 0.231/0.472/0.515 ($+0.044$ [0.024, 0.066], 23 and 3, $p=0.0001$). The
+same model used as a whole-repository retriever reaches 0.631 on Lite \citep{reddy2026swerank}; our
+hybrid, with 30 embeddings per issue instead of every function of the repository, is $-0.135$ below
+it, while the ceiling of Table~\ref{tab:ceiling} says the missing accuracy is in the order of the
+engine's list, not outside it. It costs 11--15\,s per issue (p50) on the laptop CPU in fp32 without an
+ONNX export, about 2--3 texts per second; at that rate embedding every definition of django
+($\approx$30k) once would take hours, the price the whole-repository retriever pays before its first
+query.
 
 The vote also re-ranks files: the dense order alone puts the gold file first more often than the
 engine on dev (0.356 vs 0.307 file \accat{1}) while losing depth, but the file vote did not clear the
@@ -405,9 +464,10 @@ was re-measured and is reported corrected.
 
 \paragraph{Where the engine stands.}
 It is the best measured point we know of with no learned model at query time, and it is clearly
-below trained dense retrievers and LLM pipelines. We see it as a first stage: its top 30 definitions
-are a short list that a dense model or an LLM can reorder at a small fraction of the cost of
-searching the repository, as the dense vote shows. An LLM stage over \texttt{where\_to\_look},
+below trained dense retrievers and LLM pipelines. We see it as a first stage: its top 300
+definitions contain every edited function for 0.828 of Lite issues (\S\ref{sec:ceiling}), and its
+top 30 are a short list that a dense model or an LLM can reorder at a small fraction of the cost of
+searching the repository, as both dense votes show. An LLM stage over \texttt{where\_to\_look},
 measured in tokens and \accat{1} against Agentless and LocAgent, is the experiment this paper does
 not have (\S\ref{sec:threats}).
 
@@ -430,7 +490,8 @@ benchmarks where agent numbers move by 0.09 between re-runs, we think they shoul
 \paragraph{Missing LLM stage.}
 We do not measure an LLM on top of the engine. A local 3B model was rejected on dev; an API model run
 was blocked by unfunded keys at the time of writing. The claim that the engine is a good first stage
-for an LLM is supported only by the dense vote and by the 45\% ordering misses.
+for an LLM is supported only by the rerank ceiling, the two dense votes and the 45\% ordering
+misses.
 
 \paragraph{Tuning-split mismatch.}
 Dev and SWE-Gym differ from the holdouts in gold size (3.4--3.7 gold functions vs 1.17 on Lite), so
@@ -442,6 +503,15 @@ The dense vote failed the bar on dev and was re-measured on SWE-Gym, a second lo
 We mitigated this by keeping its weight unchanged, committing the decision before the Lite run, and
 reporting the dev result. The effect is modest on each holdout (Lite CI [0.004, 0.051], sign test
 $p=0.065$; Verified CI [0.009, 0.048], $p=0.007$), but it has the predicted sign and size on both.
+The SweRankEmbed-Small vote was pre-registered before any number and passed on every tuning half;
+its holdout gains are significant on both sets ($p=0.013$, $p=0.0001$). We tested two encoders and
+two short-list sizes; each was decided by a rule written before its numbers, and the failed variant
+($k=100$) is reported.
+
+\paragraph{Regenerated lists.}
+The rerank ceiling and the SweRankEmbed-Small holdout runs use 300-entry lists regenerated with the
+release binary, because the original runs stored 20. They reproduce the stored file lists on 299 of
+300 Lite and 496 of 499 Verified issues; the small remainder is nondeterminism in the engine.
 
 \paragraph{Comparisons across papers.}
 All competitor numbers are copied from their papers; our 274 instances are rebuilt from LocAgent's
@@ -467,8 +537,10 @@ SWE-bench.
 A model-free engine on a laptop CPU localises SWE-bench issues at file \accat{1} 0.507 (Lite, 276
 held-out issues) and 0.435 (Verified outside Lite), more than doubles BM25 on seven repositories it
 never saw, and lists every edited function in its top five on 0.460 of LocAgent's Lite instances ---
-0.485 when only its top 30 definitions are embedded, on CPU --- in a few seconds and no tokens. It is below trained dense
-retrievers and LLM agents. The holdout protocol mattered: two ideas that looked best on looked-at data
+0.485 when only its top 30 definitions are re-ordered by a shippable encoder on CPU (0.496 with
+SweRankEmbed-Small) --- in a few seconds and no tokens. Its top 300 already contain every edited
+function for 0.828 of those instances: a model-free first stage on a laptop has the recall, and
+ordering is what remains. It is below trained dense retrievers and LLM agents. The holdout protocol mattered: two ideas that looked best on looked-at data
 lost on fresh data, and most literature priors we tried did not clear a bar fixed before measuring.
 What remains: an LLM stage on top of \texttt{where\_to\_look} measured in tokens and accuracy, and
 plain-language holdouts of at least fifty questions with a second annotator.

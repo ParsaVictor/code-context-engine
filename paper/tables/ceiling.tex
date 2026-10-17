@@ -1,0 +1,31 @@
+% Rerank ceiling: share of issues whose every gold function is in the engine's first k definitions.
+% contributions-log sec. 8.20 (v1.4.0, NM_DEFINITIONS=300; Lite/Verified lists regenerated with the
+% release binary).
+\begin{table}[t]
+\centering
+\small
+\caption{Rerank ceiling of the engine (v1.4.0, no model): share of issues whose \emph{every} edited
+function is among the engine's first $k$ definitions, and whose every gold file is in its top 20 files.
+@5 is function \accat{5}. For scale, the strongest retrieve-and-rerank system of SweRank (a 7B
+retriever and a 32B reranker on GPU) reaches function \accat{5} 0.814 on the same 274 instances.}
+\label{tab:ceiling}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrccccc@{}}
+\toprule
+ & & \multicolumn{4}{c}{functions in first $k$} & files\\
+\cmidrule(lr){3-6}\cmidrule(l){7-7}
+set & $n$ & @5 & @30 & @100 & @300 & @20\\
+\midrule
+SWE-bench dev (tuning) & 210 & 0.324 & 0.495 & 0.633 & 0.776 & 0.751\\
+SWE-Gym (tuning) & 266 & 0.256 & 0.470 & 0.624 & 0.748 & 0.736\\
+\addlinespace
+Lite, LocAgent subset & 274 & 0.460 & 0.672 & 0.766 & \textbf{0.828} & 0.887\\
+Verified & 458 & 0.428 & 0.627 & 0.727 & \textbf{0.790} & 0.874\\
+\bottomrule
+\end{tabular}
+\par\smallskip
+{\footnotesize The once-per-version holdout runs stored the product default of 20 functions per
+issue. The 300-entry lists were regenerated with the same release binary; they reproduce the stored
+runs on 299/300 file lists and 294/300 top-20 function lists on Lite (Verified 496/499 and 492/499);
+the rest is residual nondeterminism.}
+\end{table}
