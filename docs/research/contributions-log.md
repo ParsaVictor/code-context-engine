@@ -691,6 +691,26 @@ gym p50 17.9 s (run while another CPU-heavy job held the machine; jina 6.2 s). T
 size in fp32; an int8 ONNX export would be the fair speed comparison. Licence cc-by-nc-4.0
 (non-commercial) — the engine cannot ship it as a default, unlike jina-code (Apache-2.0).
 
+**k=100 (pre-registered in the addendum before any number; same bar, w=0.5).** The engine's top 30
+holds every gold function for 0.50 / 0.47 of dev / gym issues, the top 100 for 0.63 / 0.62.
+
+| func Acc@5 | dev-fast | dev-rest | gym-a | gym-b | pooled (476) |
+|---|---|---|---|---|---|
+| engine | 0.308 | 0.329 | 0.258 | 0.254 | 0.286 |
+| SweRank vote k=30, w=0.5 | 0.346 | 0.361 | 0.318 | 0.306 | 0.332 |
+| SweRank vote k=100, w=0.5 | 0.346 (+0.038) | **0.335 (+0.006)** | 0.326 (+0.068) | 0.328 (+0.075) | 0.332 |
+| SweRank vote k=100, w=1 | 0.346 | 0.367 | 0.318 | 0.328 | – |
+| SweRank order alone, top 100 | 0.288 | 0.380 | 0.288 | 0.321 | – |
+
+Bar: **fails on dev-rest** (+0.006). Pooled vs engine +0.046 [0.021, 0.071], 30/8 (k=30: 24/2); vs the
+k=30 vote +0.000 (6/6) at @5, +0.002 at @1, +0.004 at @10. Widening the list adds as many losses as
+gains at w=0.5: 70 more candidates also bring 70 more chances to push a gold function out of the top 5.
+w=1 and dense-alone over the top 100 look better on dev-rest, but they are secondary, not tested
+variants. **Holdout choice by the rule fixed before the k=100 numbers: k=30, w=0.5.** Cost at k=100:
+p50 14.6 s (dev) / 20.0 s (gym) per issue with the k=30 texts cached, 6 threads, while a second copy of
+the run competed for the CPU (an orphaned process; its duplicate rows matched and were dropped) —
+upper bounds.
+
 ### 8.20 Rerank ceiling: the engine already finds the code (session 19, 2026-10-17)
 
 Share of issues whose every gold function is in the engine's first k (v1.4.0, `NM_DEFINITIONS=300`;
