@@ -647,3 +647,15 @@ the bar on gym-b, +0.000).
 Paired (274): @5 +0.026 [0.004, 0.051], 9 gained / 2 lost, sign test p = 0.065; @1 +0.029 (18/10).
 Same direction and size as dev+gym (+0.032). Gap to CodeRankEmbed (0.518 func@5, GPU, whole-repo
 index) −0.058 → −0.033, with 30 embeddings per issue on CPU instead of every function of the repository.
+
+**Verified, run once with the locked decision** (`dense-sl-verified.jsonl` over the stored v1.4.0 run):
+
+| | n | func Acc@1 | Acc@5 | Acc@10 |
+|---|---|---|---|---|
+| Verified with function gold, v1.4.0 | 459 | 0.198 | 0.429 [0.38,0.48] | 0.497 |
+| + dense vote | 459 | **0.237** | **0.458** [0.41,0.50] | **0.514** |
+| not in Lite, v1.4.0 → + dense | 375 | 0.189 → 0.208 | 0.397 → 0.435 | 0.464 → 0.483 |
+
+Paired (459): @1 +0.039 [0.013, 0.065], 28/10, p = 0.005; @5 +0.028 [0.009, 0.048], 17/4, p = 0.007;
+@10 +0.017, 8/0, p = 0.008. Every split — dev, gym-a, gym-b, Lite, Verified — moves the same way by
++0.02 to +0.06 at func Acc@5; the effect predicted on tuning data (+0.032) is what both holdouts show.

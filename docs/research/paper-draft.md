@@ -118,6 +118,7 @@ skipped, voting at double weight deepest-first.
 | engine v1.2.0 | – | 0.474 | 0.708 | 0.752 | – | – |
 | engine v1.3.0 | – | 0.500 [0.44,0.56] | 0.723 | 0.755 | 0.394 | 0.482 |
 | **engine v1.4.0** | – | **0.500** [0.44,0.56] | **0.723** | **0.755** | **0.460** [0.40,0.52] | **0.540** |
+| **engine v1.4.0 + dense short-list vote (opt-in)** | – | 0.500 | 0.723 | 0.755 | **0.485** [0.43,0.54] | **0.555** |
 | Jina-Code-v2 † | – | 0.434 | 0.712 | 0.803 | – | – |
 | CodeRankEmbed † | – | 0.526 | 0.777 | 0.847 | 0.518 | 0.588 |
 | Agentless + GPT-4o † | ✓ | 0.672 | 0.745 | 0.745 | – | – |
@@ -161,6 +162,20 @@ so its one run is also a holdout:
 
 The engine's advantage over BM25 (×2.3 at Acc@1) carries to repositories outside every set it
 was developed on.
+
+### 5.2c Dense vote on the engine's short list (decided on dev + SWE-Gym, run once on holdouts)
+
+jina-code-v2 (int8, CPU) embeds the issue and only the engine's top 30 functions; its order votes
+into the function list by RRF (w = 0.5). Decided on the tuning splits (pooled n = 476: func Acc@5
++0.032, p = 0.0007) and locked by commit before the holdouts:
+
+| set | n | func Acc@1 | func Acc@5 | func Acc@10 | paired @5 |
+|---|---|---|---|---|---|
+| Lite, LocAgent subset | 274 | 0.223 → 0.252 | 0.460 → 0.485 | 0.540 → 0.555 | +0.026 [0.004,0.051], 9/2 |
+| Verified | 459 | 0.198 → 0.237 | 0.429 → 0.458 | 0.497 → 0.514 | +0.028 [0.009,0.048], 17/4, p=0.007 |
+
+Thirty embeddings per issue replace a whole-repository index; the gap to CodeRankEmbed at func
+Acc@5 narrows from −0.058 to −0.033.
 
 ### 5.3 Ablation (Lite holdout, 276)
 
