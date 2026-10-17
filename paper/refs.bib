@@ -1,0 +1,411 @@
+% Bibliography for "Where to look". Author lists and titles of every arXiv entry were
+% read from the arXiv abstract page (citation_* meta tags) on 2026-10-17. Venues follow
+% docs/research/related-work-2026.md §2 (how each venue was confirmed is noted there).
+% Entries without an arXiv id (classic IR / bug localisation) are cited from their venue.
+
+% ---------------------------------------------------------------- benchmarks
+@inproceedings{jimenez2024swebench,
+  title         = {{SWE}-bench: Can Language Models Resolve Real-World {GitHub} Issues?},
+  author        = {Jimenez, Carlos E. and Yang, John and Wettig, Alexander and Yao, Shunyu and Pei, Kexin and Press, Ofir and Narasimhan, Karthik},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2024},
+  eprint        = {2310.06770},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  url           = {https://arxiv.org/abs/2310.06770}
+}
+
+@inproceedings{pan2025swegym,
+  title         = {Training Software Engineering Agents and Verifiers with {SWE-Gym}},
+  author        = {Pan, Jiayi and Wang, Xingyao and Neubig, Graham and Jaitly, Navdeep and Ji, Heng and Suhr, Alane and Zhang, Yizhe},
+  booktitle     = {International Conference on Machine Learning (ICML)},
+  year          = {2025},
+  eprint        = {2412.21139},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2412.21139}
+}
+
+@misc{zhang2025mulocbench,
+  title         = {A Benchmark for Localizing Code and Non-Code Issues in Software Projects},
+  author        = {Zhang, Zejun and Wang, Jian and Yang, Qingyun and Pan, Yifan and Tang, Yi and Li, Yi and Xing, Zhenchang and Zhang, Tian and Li, Xuandong and Zhang, Guoan},
+  year          = {2025},
+  eprint        = {2509.25242},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2509.25242}
+}
+
+% ---------------------------------------------------------------- LLM localisers and agents
+@inproceedings{chen2025locagent,
+  title         = {{LocAgent}: Graph-Guided {LLM} Agents for Code Localization},
+  author        = {Chen, Zhaoling and Tang, Xiangru and Deng, Gangda and Wu, Fang and Wu, Jialong and Jiang, Zhiwei and Prasanna, Viktor and Cohan, Arman and Wang, Xingyao},
+  booktitle     = {Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (ACL)},
+  year          = {2025},
+  eprint        = {2503.09089},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://aclanthology.org/2025.acl-long.426}
+}
+
+@inproceedings{xia2025agentless,
+  title         = {Agentless: Demystifying {LLM}-based Software Engineering Agents},
+  author        = {Xia, Chunqiu Steven and Deng, Yinlin and Dunn, Soren and Zhang, Lingming},
+  booktitle     = {ACM International Conference on the Foundations of Software Engineering (FSE)},
+  year          = {2025},
+  eprint        = {2407.01489},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2407.01489}
+}
+
+@inproceedings{yang2024sweagent,
+  title         = {{SWE-agent}: Agent-Computer Interfaces Enable Automated Software Engineering},
+  author        = {Yang, John and Jimenez, Carlos E. and Wettig, Alexander and Lieret, Kilian and Yao, Shunyu and Narasimhan, Karthik and Press, Ofir},
+  booktitle     = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year          = {2024},
+  eprint        = {2405.15793},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2405.15793}
+}
+
+@inproceedings{wang2025openhands,
+  title         = {{OpenHands}: An Open Platform for {AI} Software Developers as Generalist Agents},
+  author        = {Wang, Xingyao and Li, Boxuan and Song, Yufan and Xu, Frank F. and Tang, Xiangru and Zhuge, Mingchen and Pan, Jiayi and Song, Yueqi and Li, Bowen and Singh, Jaskirat and Tran, Hoang H. and Li, Fuqiang and Ma, Ren and Zheng, Mingzhang and Qian, Bill and Shao, Yanjun and Muennighoff, Niklas and Zhang, Yizhe and Hui, Binyuan and Lin, Junyang and Brennan, Robert and Peng, Hao and Ji, Heng and Neubig, Graham},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2025},
+  eprint        = {2407.16741},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2407.16741}
+}
+
+@misc{moatless,
+  title        = {{MoatlessTools}},
+  author       = {{Aide.dev}},
+  year         = {2024},
+  howpublished = {\url{https://github.com/aorwall/moatless-tools}},
+  note         = {Numbers as reported in LocAgent, Table~4}
+}
+
+@inproceedings{jiang2025cosil,
+  title         = {Issue Localization via {LLM}-Driven Iterative Code Graph Searching},
+  author        = {Jiang, Zhonghao and Ren, Xiaoxue and Yan, Meng and Jiang, Wei and Li, Yong and Liu, Zhongxin},
+  booktitle     = {IEEE/ACM International Conference on Automated Software Engineering (ASE)},
+  year          = {2025},
+  eprint        = {2503.22424},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2503.22424}
+}
+
+@inproceedings{yu2025orcaloca,
+  title         = {{OrcaLoca}: An {LLM} Agent Framework for Software Issue Localization},
+  author        = {Yu, Zhongming and Zhang, Hejia and Zhao, Yujie and Huang, Hanxian and Yao, Matrix and Ding, Ke and Zhao, Jishen},
+  booktitle     = {International Conference on Machine Learning (ICML)},
+  year          = {2025},
+  eprint        = {2502.00350},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2502.00350}
+}
+
+@inproceedings{ouyang2025repograph,
+  title         = {{RepoGraph}: Enhancing {AI} Software Engineering with Repository-level Code Graph},
+  author        = {Ouyang, Siru and Yu, Wenhao and Ma, Kaixin and Xiao, Zilin and Zhang, Zhihan and Jia, Mengzhao and Han, Jiawei and Zhang, Hongming and Yu, Dong},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2025},
+  eprint        = {2410.14684},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2410.14684}
+}
+
+@misc{yang2025kgcompass,
+  title         = {Enhancing Repository-Level Software Repair via Repository-Aware Knowledge Graphs},
+  author        = {Yang, Boyang and Ren, Jiadong and Jin, Shunfu and Liu, Yang and Liu, Feng and Le, Bach and Tian, Haoye},
+  year          = {2025},
+  eprint        = {2503.21710},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  note          = {KGCompass},
+  url           = {https://arxiv.org/abs/2503.21710}
+}
+
+@misc{wang2025repomem,
+  title         = {Improving Code Localization with Repository Memory},
+  author        = {Wang, Boshi and Xu, Weijian and Li, Yunsheng and Gao, Mei and Xie, Yujia and Sun, Huan and Chen, Dongdong},
+  year          = {2025},
+  eprint        = {2510.01003},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2510.01003}
+}
+
+@inproceedings{ma2026tooltrain,
+  title         = {Tool-integrated Reinforcement Learning for Repo Deep Search},
+  author        = {Ma, Zexiong and Peng, Chao and Zeng, Qunhong and Gao, Pengfei and Zou, Yanzhen and Xie, Bing},
+  booktitle     = {IEEE/ACM International Conference on Software Engineering (ICSE)},
+  year          = {2026},
+  eprint        = {2508.03012},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  note          = {ToolTrain / RepoSearcher},
+  url           = {https://arxiv.org/abs/2508.03012}
+}
+
+@misc{sutawika2026codescout,
+  title         = {{CodeScout}: An Effective Recipe for Reinforcement Learning of Code Search Agents},
+  author        = {Sutawika, Lintang and Soni, Aditya Bharat and R, Bharath Sriraam R and Gandhi, Apurva and Yassine, Taha and Vijayvargiya, Sanidhya and Li, Yuchen and Zhou, Xuhui and Zhang, Yilin and Maben, Leander Melroy and Neubig, Graham},
+  year          = {2026},
+  eprint        = {2603.17829},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2603.17829}
+}
+
+@inproceedings{xu2026fusesearch,
+  title         = {Learning Adaptive Parallel Execution for Efficient Code Localization},
+  author        = {Xu, Ke and Xiao, Siyang and Liang, Ming and Yu, Yichen and Wang, Zhixiang and Xu, Jingxuan and Chen, Dajun and Jiang, Wei and Li, Yong},
+  booktitle     = {Findings of the Association for Computational Linguistics (ACL)},
+  year          = {2026},
+  eprint        = {2601.19568},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  note          = {FuseSearch},
+  url           = {https://arxiv.org/abs/2601.19568}
+}
+
+@misc{he2026sweadept,
+  title         = {{SWE-Adept}: An {LLM}-Based Agentic Framework for Deep Codebase Analysis and Structured Issue Resolution},
+  author        = {He, Kang and Roy, Kaushik},
+  year          = {2026},
+  eprint        = {2603.01327},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2603.01327}
+}
+
+@inproceedings{tamoyan2026sherloc,
+  title         = {{SHERLOC}: Structured Diagnostic Localization for Code Repair Agents},
+  author        = {Tamoyan, Hovhannes and Narenthiran, Sean and Arakelyan, Erik and Mezini, Mira and Ginsburg, Boris},
+  booktitle     = {Conference on Empirical Methods in Natural Language Processing (EMNLP)},
+  year          = {2026},
+  eprint        = {2606.24820},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2606.24820}
+}
+
+@inproceedings{xie2025swefixer,
+  title         = {{SWE-Fixer}: Training Open-Source {LLMs} for Effective and Efficient {GitHub} Issue Resolution},
+  author        = {Xie, Chengxing and Li, Bowen and Gao, Chang and Du, He and Lam, Wai and Zou, Difan and Chen, Kai},
+  booktitle     = {Findings of the Association for Computational Linguistics (ACL)},
+  year          = {2025},
+  eprint        = {2501.05040},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://aclanthology.org/2025.findings-acl.62}
+}
+
+% ---------------------------------------------------------------- dense retrieval, rerankers, models
+@inproceedings{suresh2025cornstack,
+  title         = {{CoRNStack}: High-Quality Contrastive Data for Better Code Retrieval and Reranking},
+  author        = {Suresh, Tarun and Reddy, Revanth Gangi and Xu, Yifei and Nussbaum, Zach and Mulyar, Andriy and Duderstadt, Brandon and Ji, Heng},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2025},
+  eprint        = {2412.01007},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.IR},
+  note          = {CodeRankEmbed and CodeRankLLM},
+  url           = {https://arxiv.org/abs/2412.01007}
+}
+
+@inproceedings{reddy2026swerank,
+  title         = {{SweRank}: Software Issue Localization with Code Ranking},
+  author        = {Reddy, Revanth Gangi and Suresh, Tarun and Doo, JaeHyeok and Liu, Ye and Nguyen, Xuan Phi and Zhou, Yingbo and Yavuz, Semih and Xiong, Caiming and Ji, Heng and Joty, Shafiq},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2026},
+  eprint        = {2505.07849},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2505.07849}
+}
+
+@misc{reddy2025swerankplus,
+  title         = {{SweRank+}: Multilingual, Multi-Turn Code Ranking for Software Issue Localization},
+  author        = {Reddy, Revanth Gangi and Liu, Ye and Zhao, Wenting and Doo, JaeHyeok and Suresh, Tarun and Lee, Daniel and Xiong, Caiming and Zhou, Yingbo and Yavuz, Semih and Joty, Shafiq},
+  year          = {2025},
+  eprint        = {2512.20482},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2512.20482}
+}
+
+@inproceedings{fehr2025coret,
+  title         = {{CoRet}: Improved Retriever for Code Editing},
+  author        = {Fehr, Fabio and Sivaprasad, Prabhu Teja and Franceschi, Luca and Zappella, Giovanni},
+  booktitle     = {Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (ACL), Short Papers},
+  year          = {2025},
+  eprint        = {2505.24715},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2505.24715}
+}
+
+@article{chakraborty2025blaze,
+  title         = {{BLAZE}: Cross-Language and Cross-Project Bug Localization via Dynamic Chunking and Hard Example Learning},
+  author        = {Chakraborty, Partha and Alfadel, Mahmoud and Nagappan, Meiyappan},
+  journal       = {IEEE Transactions on Software Engineering},
+  year          = {2025},
+  doi           = {10.1109/TSE.2025.3579574},
+  eprint        = {2407.17631},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2407.17631}
+}
+
+@misc{gunther2023jina,
+  title         = {Jina Embeddings 2: 8192-Token General-Purpose Text Embeddings for Long Documents},
+  author        = {G{\"u}nther, Michael and Ong, Jackmin and Mohr, Isabelle and Abdessalem, Alaeddine and Abel, Tanguy and Akram, Mohammad Kalim and Guzman, Susana and Mastrapas, Georgios and Sturua, Saba and Wang, Bo and Werk, Maximilian and Wang, Nan and Xiao, Han},
+  year          = {2023},
+  eprint        = {2310.19923},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {The jina-embeddings-v2-base-code model used in this paper belongs to this family},
+  url           = {https://arxiv.org/abs/2310.19923}
+}
+
+@misc{wang2022e5,
+  title         = {Text Embeddings by Weakly-Supervised Contrastive Pre-training},
+  author        = {Wang, Liang and Yang, Nan and Huang, Xiaolong and Jiao, Binxing and Yang, Linjun and Jiang, Daxin and Majumder, Rangan and Wei, Furu},
+  year          = {2022},
+  eprint        = {2212.03533},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  url           = {https://arxiv.org/abs/2212.03533}
+}
+
+@inproceedings{zhang2024codesage,
+  title         = {Code Representation Learning at Scale},
+  author        = {Zhang, Dejiao and Ahmad, Wasi and Tan, Ming and Ding, Hantian and Nallapati, Ramesh and Roth, Dan and Ma, Xiaofei and Xiang, Bing},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2024},
+  eprint        = {2402.01935},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  note          = {CodeSage},
+  url           = {https://arxiv.org/abs/2402.01935}
+}
+
+@misc{hui2024qwen25coder,
+  title         = {{Qwen2.5-Coder} Technical Report},
+  author        = {Hui, Binyuan and Yang, Jian and Cui, Zeyu and Yang, Jiaxi and Liu, Dayiheng and Zhang, Lei and Liu, Tianyu and Zhang, Jiajun and Yu, Bowen and Lu, Keming and others},
+  year          = {2024},
+  eprint        = {2409.12186},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  url           = {https://arxiv.org/abs/2409.12186}
+}
+
+% ---------------------------------------------------------------- ranking machinery
+@inproceedings{robertson2004bm25f,
+  title     = {Simple {BM25} Extension to Multiple Weighted Fields},
+  author    = {Robertson, Stephen and Zaragoza, Hugo and Taylor, Michael},
+  booktitle = {Proceedings of the 13th ACM International Conference on Information and Knowledge Management (CIKM)},
+  pages     = {42--49},
+  year      = {2004},
+  doi       = {10.1145/1031171.1031181}
+}
+
+@inproceedings{cormack2009rrf,
+  title     = {Reciprocal Rank Fusion Outperforms {Condorcet} and Individual Rank Learning Methods},
+  author    = {Cormack, Gordon V. and Clarke, Charles L. A. and B{\"u}ttcher, Stefan},
+  booktitle = {Proceedings of the 32nd International ACM SIGIR Conference on Research and Development in Information Retrieval},
+  pages     = {758--759},
+  year      = {2009},
+  doi       = {10.1145/1571941.1572114}
+}
+
+@article{bruch2023fusion,
+  title         = {An Analysis of Fusion Functions for Hybrid Retrieval},
+  author        = {Bruch, Sebastian and Gai, Siyu and Ingber, Amir},
+  journal       = {ACM Transactions on Information Systems},
+  volume        = {42},
+  number        = {1},
+  year          = {2023},
+  doi           = {10.1145/3596512},
+  eprint        = {2210.11934},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.IR},
+  url           = {https://arxiv.org/abs/2210.11934}
+}
+
+@inproceedings{abduljaleel2004rm3,
+  title     = {{UMass} at {TREC} 2004: Novelty and {HARD}},
+  author    = {Abdul-Jaleel, Nasreen and Allan, James and Croft, W. Bruce and Diaz, Fernando and Larkey, Leah and Li, Xiaoyan and Smucker, Mark D. and Wade, Courtney},
+  booktitle = {Proceedings of the Thirteenth Text REtrieval Conference (TREC)},
+  year      = {2004},
+  note      = {Origin of the RM3 relevance model}
+}
+
+@book{efron1993bootstrap,
+  title     = {An Introduction to the Bootstrap},
+  author    = {Efron, Bradley and Tibshirani, Robert J.},
+  publisher = {Chapman \& Hall},
+  year      = {1993}
+}
+
+% ---------------------------------------------------------------- classic bug localisation
+@inproceedings{zhou2012buglocator,
+  title     = {Where Should the Bugs Be Fixed? More Accurate Information Retrieval-Based Bug Localization Based on Bug Reports},
+  author    = {Zhou, Jian and Zhang, Hongyu and Lo, David},
+  booktitle = {Proceedings of the 34th International Conference on Software Engineering (ICSE)},
+  pages     = {14--24},
+  year      = {2012},
+  doi       = {10.1109/ICSE.2012.6227210}
+}
+
+@inproceedings{wen2016locus,
+  title     = {Locus: Locating Bugs from Software Changes},
+  author    = {Wen, Ming and Wu, Rongxin and Cheung, Shing-Chi},
+  booktitle = {Proceedings of the 31st IEEE/ACM International Conference on Automated Software Engineering (ASE)},
+  pages     = {262--273},
+  year      = {2016},
+  doi       = {10.1145/2970276.2970359}
+}
+
+@inproceedings{rahman2018query,
+  title     = {Improving {IR}-Based Bug Localization with Context-Aware Query Reformulation},
+  author    = {Rahman, Mohammad Masudur and Roy, Chanchal K.},
+  booktitle = {Proceedings of the 26th ACM Joint Meeting on European Software Engineering Conference and Symposium on the Foundations of Software Engineering (ESEC/FSE)},
+  pages     = {621--632},
+  year      = {2018},
+  doi       = {10.1145/3236024.3236065}
+}
+
+% ---------------------------------------------------------------- tools
+@misc{aider_repomap,
+  title        = {Building a better repository map with tree-sitter},
+  author       = {Gauthier, Paul},
+  year         = {2023},
+  howpublished = {\url{https://aider.chat/2023/10/22/repomap.html}},
+  note         = {Aider's RepoMap}
+}
+
+@misc{llamacpp,
+  title        = {llama.cpp},
+  author       = {Gerganov, Georgi and others},
+  year         = {2023},
+  howpublished = {\url{https://github.com/ggml-org/llama.cpp}},
+  note         = {Release b11172 used in this paper}
+}
+
+@misc{neuromesh,
+  author       = {{NeuroMesh contributors}},
+  title        = {{NeuroMesh}: a local code-context engine (release v1.4.0)},
+  year         = {2026},
+  howpublished = {\url{https://github.com/ParsaVictor/code-context-engine}},
+  note         = {Fork of \url{https://github.com/pinoox/neuromesh}}
+}

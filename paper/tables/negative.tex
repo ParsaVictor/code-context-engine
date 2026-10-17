@@ -1,0 +1,30 @@
+% Negative results; contributions-log sec. 8.1, sec. 8.3, sec. 8.4, sec. 8.6, sec. 8.9, sec. 8.13, sec. 8.14, sec. 8.15, sec. 8.16, sec. 8.18.
+\begin{table*}[t]
+\centering
+\small
+\caption{Ideas that did not survive the protocol, with the measurement that rejected them. ``dev'' =
+SWE-bench dev (tuning split); the bar is file Acc@1 or function Acc@5 $\geq +0.02$ on both halves.}
+\label{tab:negative}
+\begin{tabular}{@{}p{0.36\textwidth}p{0.20\textwidth}p{0.38\textwidth}@{}}
+\toprule
+idea (inspiration) & where measured & effect\\
+\midrule
+Whole-repository dense chunk retrieval on CPU (CodeRankEmbed, Jina) & astroid, 3,364 chunks & 2.6 chunks/s (1,314\,s for one mid-sized repository); hours for django-sized ones\\
+Cross-encoder rerank of the top 10 files (jina-reranker-v2) & dev-fast, 59 issues & file Acc@3 0.492 $\to$ 0.373 on long reports; 8.0\,s p50 per issue\\
+Same cross-encoder on short questions & ripgrep, click; then fresh cobra & R@3 $+0.375$ / $+0.208$ on the two looked-at sets, $-0.084$ on the fresh one\\
+Graph-neighbour vote of the top three files (LocAgent-style expansion without an LLM) & dev-fast & file Acc@1 0.254 $\to$ 0.136\\
+Body term frequency in BM25F & dev-fast & file Acc@5 0.544 $\to$ 0.509\\
+Commit-history prior (BugLocator, Locus) & dev & file Acc@1 0.271 $\to$ 0.169 (dev-fast) even at weight 0.1\\
+Identifiers in the issue's code blocks $\to$ their definitions & dev & file Acc@1 drops; function Acc@5 $+0.019$ (below the bar)\\
+RM3 pseudo-relevance feedback on the definition ranking & dev & alone: function Acc@1 0.135 $\to$ 0.038 (dev-fast); as a vote no better than plain BM25\\
+Documentation sections as a bridge from question words to identifiers & four plain-language sets & R@3 down on three of four (ripgrep 0.500 $\to$ 0.375, axios 0.833 $\to$ 0.583)\\
+Local 3B LLM as file judge (Qwen2.5-Coder-3B, Agentless-style, one call) & 15 dev-fast issues & copies the engine order (0.200/0.467/0.600 unchanged); shuffled input 0.067/0.400/0.600; $\approx$105\,s per issue\\
+Learned reranker (logistic regression / boosted trees, 25 features, top 100 functions) & dev halves; dev $\to$ SWE-Gym & function Acc@5 $+0.000$ / $+0.019$ cross-half; $+0.000$ trained on dev, applied to SWE-Gym; the file-rank coefficient flips sign ($-0.61$ vs $+1.23$)\\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Evaluation slips we made and caught}}\\
+Gold match by plain suffix (no path-segment boundary) & cobra & BM25 R@3 printed 0.958 instead of 0.875\\
+Function denominator without short reports & Lite 274 & 244 instances and Acc@5 0.443 instead of 274 and 0.394 (v1.3.0)\\
+Prototype baseline taken from an older run & dev & every function-level delta re-measured against the true baseline\\
+\bottomrule
+\end{tabular}
+\end{table*}
