@@ -660,6 +660,37 @@ Paired (459): @1 +0.039 [0.013, 0.065], 28/10, p = 0.005; @5 +0.028 [0.009, 0.04
 @10 +0.017, 8/0, p = 0.008. Every split — dev, gym-a, gym-b, Lite, Verified — moves the same way by
 +0.02 to +0.06 at func Acc@5; the effect predicted on tuning data (+0.032) is what both holdouts show.
 
+### 8.19 SweRankEmbed-Small as the short-list embedder (session 19, 2026-10-17)
+
+**Question.** SweRankEmbed-Small (Salesforce, 137M NomicBERT, reports func Acc@5 0.631 on Lite-274 as a
+whole-repository retriever) in place of jina-code-v2 for the dense vote of §8.18, everything else fixed
+(top k=30 engine definitions, same texts, RRF k=60, w=0.5). Bar pre-registered in fca506a
+(`docs/research/prereg-s19-swerank.md`) before any number: func Acc@5 ≥ engine + 0.02 on each of
+dev-fast, dev-rest, gym-a, gym-b. No ONNX export exists; `scripts/research/swerank_embed.py` is a
+plain-torch re-implementation of the NomicBERT forward (no `trust_remote_code`), fp32 on CPU, CLS
+pooling, the model card's query prefix, 512-token cut.
+
+| func Acc@5 | dev-fast (52) | dev-rest (158) | gym-a (132) | gym-b (134) |
+|---|---|---|---|---|
+| engine | 0.308 | 0.329 | 0.258 | 0.254 |
+| + jina vote w=0.5 (§8.18) | 0.327 (+0.019) | 0.342 (+0.013) | 0.288 (+0.030) | 0.313 (+0.060) |
+| + SweRank vote w=0.5 | **0.346 (+0.038)** | **0.361 (+0.032)** | **0.318 (+0.061)** | **0.306 (+0.052)** |
+| + SweRank vote w=1 | 0.346 | 0.354 | 0.318 | 0.321 |
+| SweRank order alone (top 30) | 0.288 | 0.361 | 0.280 | 0.313 |
+| jina order alone (top 30) | 0.269 | 0.278 | 0.258 | 0.269 |
+
+Bar: **passes on all four halves** (jina did not on dev: +0.019 / +0.013). Pooled dev+gym (n=476,
+`paired.py`) vs engine: func@5 0.286 → 0.332, +0.046 [0.027, 0.067], 24 gained / 2 lost, p < 0.0001;
+func@10 +0.027 (13/0, p = 0.0002); func@1 +0.013 (12/6, p = 0.24). **Head-to-head vs the jina vote**
+(same w): func@5 0.317 → 0.332, +0.015 [−0.002, 0.032], 11/4, p = 0.12; func@1 −0.008 (9/13); func@10
++0.006 — better, not significantly. SweRank's own cosine order is far better than jina's (dev all
+0.343 vs 0.276), so the model ranks the short list well on its own, not only as a tie-breaker.
+
+Cost (CPU, 31 texts per issue, fp32 torch, 6 threads): dev p50 10.8 s / issue (jina int8 ONNX 10.3 s);
+gym p50 17.9 s (run while another CPU-heavy job held the machine; jina 6.2 s). The model is 2× jina's
+size in fp32; an int8 ONNX export would be the fair speed comparison. Licence cc-by-nc-4.0
+(non-commercial) — the engine cannot ship it as a default, unlike jina-code (Apache-2.0).
+
 ### 8.20 Rerank ceiling: the engine already finds the code (session 19, 2026-10-17)
 
 Share of issues whose every gold function is in the engine's first k (v1.4.0, `NM_DEFINITIONS=300`;
