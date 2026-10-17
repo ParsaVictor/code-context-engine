@@ -4,6 +4,9 @@ discordant pairs + paired bootstrap CI of the difference), pooling several
 
     py -3 paired.py --set dev-s18a-all.jsonl:dense-sl-dev.jsonl:func-gold-dev.json \
         --set gym-v140-all.jsonl:dense-sl-gym.jsonl:func-gold-gym.json [--w 0.5] [--k 5]
+
+A fourth field (`results:ext:gold:ext0`) compares against the engine fused with
+`ext0` at the same weight instead of the bare engine (vote vs vote).
 """
 import argparse
 import json
@@ -41,8 +44,9 @@ def main():
     a = ap.parse_args()
     pairs = []
     for spec in a.set:
-        rp, ep, gp = spec.split(":")
+        rp, ep, gp, *e0 = spec.split(":")
         res, ext, gold = load(rp), load(ep), json.load(open(gp, encoding="utf-8"))
+        ext0 = load(e0[0]) if e0 else None
         for iid, r in res.items():
             g = {tuple(x) for x in gold.get(iid, [])}
             if not g:
@@ -50,6 +54,9 @@ def main():
             base = [(d["path"], d["name"]) for d in r.get("definitions", [])]
             dense = [tuple(d) for d in ext.get(iid, {}).get("dense_defs", [])]
             new = rrf([base, dense], [1.0, a.w]) if dense else base
+            if ext0 is not None:
+                d0 = [tuple(d) for d in ext0.get(iid, {}).get("dense_defs", [])]
+                base = rrf([base, d0], [1.0, a.w]) if d0 else base
             pairs.append((hit(base, g, a.k), hit(new, g, a.k)))
     n = len(pairs)
     b = sum(x for x, _ in pairs) / n
