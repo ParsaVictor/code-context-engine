@@ -586,3 +586,46 @@ function-level effects on Lite-like data. Against published function-level numbe
 GPU-scale dense retriever halved (it was −0.12/−0.11 with v1.3.0).
 Installed as the dogfood binary (v1.3.0 kept as `neuromesh-v1.3.0-backup.exe`); MCP banner 1.4.0,
 exits on stdin EOF (probe with `NEUROMESH_NO_BROWSER=1`).
+
+### 8.18 Second tuning split from SWE-Gym; learned reranker rejected; dense short-list vote accepted (session 19, 2026-10-17)
+
+**Why a second split.** Dev (225) cannot resolve +0.02 (one dev-fast issue = 0.017) and its function
+gold is unlike Lite's. `scripts/research/gym_split.py` (committed in d1a0432 *before* any run on it)
+samples SWE-Gym (Pan et al. 2024): 7 repositories disjoint from Lite/Verified/dev (pydantic, hydra,
+conan, dvc, dask, moto, mypy), patches editing only existing non-test `.py` files, ≤40 per repository,
+`random.Random(19)`, halves gym-a / gym-b (140 each) alternating within each repository. Gold: 266 of
+280 have function gold, mean 3.4 functions (one function in 45%) — like dev, not like Lite.
+
+**v1.4.0 on SWE-Gym (release binary, run once, never tuned on these repositories — a third holdout):**
+
+| | file Acc@1 | @3 | @5 | @10 | func Acc@1 | @5 | @10 |
+|---|---|---|---|---|---|---|---|
+| BM25 gym-a / gym-b | 0.121 / 0.121 | 0.257 / 0.271 | 0.329 / 0.307 | 0.407 / 0.436 | – | – | – |
+| engine gym-a | 0.279 [0.21,0.36] | 0.450 | 0.536 | 0.650 | 0.152 | 0.258 | 0.333 |
+| engine gym-b | 0.271 [0.20,0.35] | 0.414 | 0.493 | 0.600 | 0.112 | 0.254 | 0.366 |
+
+The file-level gain over BM25 (×2.3 at Acc@1) holds on seven repositories the engine never saw.
+
+**Where function misses come from** (`func_miss.py`, dev): ordering 45% (every gold function in the
+300-entry list, not in the top 5; median rank 36), hit 32%, file miss 15%, coverage 8%.
+
+**Learned reranker (rejected).** `func_ltr.py`: logistic regression / gradient-boosted trees over 25
+features of the top-100 candidates (engine rank/score, file rank, rank in file, name/class/file
+mentions, traceback frames, token overlap/IDF, length, kind). Cross-half on dev: func@5 +0.000 /
++0.019 (logreg), fail. On gym logreg passes (+0.030/+0.030) but @1 drops (−0.038/−0.015), GBT fails
+(+0.068/+0.007); trained on all dev and applied to all gym: func@5 +0.000. The largest coefficients
+change sign between dev and gym (file rank −0.61 vs +1.23) — with a few hundred issues a learned
+reranker fits the split, not the task. Negative result.
+
+**Dense short-list vote (accepted).** The dev near miss of §8.16 (jina-code-v2 int8 on the engine's
+top-30 definitions, RRF vote w=0.5) re-measured on SWE-Gym with the same weight:
+
+| | file Acc@1 a / b | func Acc@1 a / b | func Acc@5 a / b | func Acc@10 a / b |
+|---|---|---|---|---|
+| engine | 0.279 / 0.271 | 0.152 / 0.112 | 0.258 / 0.254 | 0.333 / 0.366 |
+| + dense vote w=0.5 | 0.307 / 0.271 | 0.167 / 0.134 | **0.288 / 0.313** | 0.364 / 0.388 |
+
+Bar (func@5 ≥ +0.02 on both halves): **passes** (+0.030 / +0.059). Pooled with dev (n=476, `paired.py`):
+func@5 0.286 → 0.317, +0.032 [0.015, 0.050], 17 issues gained / 2 lost, sign test p = 0.0007;
+func@1 +0.021 (p = 0.08); func@10 +0.021 (p = 0.006). Decision (w=0.5, k=30) committed in 608acb4
+before the run on Lite / Verified. Cost ~6 s per issue on CPU (p50; embedding 30 definitions + issue).

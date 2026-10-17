@@ -12,13 +12,13 @@ retriever (CodeRankEmbed). We ask how far a local engine gets with neither: a pe
 graph, field-weighted lexical ranking, a definition-level ranking of long reports, and explicit
 report hygiene, all on a laptop CPU. On SWE-bench Lite, run once after tuning only on the SWE-bench
 dev split, the engine reaches file-level Acc@1/3/5 of 0.507/0.717/0.750 on 276 held-out issues
-(plain BM25 0.301/0.507/0.587) in 2.9 s per issue including a cold index — above a code embedding
-model at Acc@1 and level with Agentless+GPT-4o at Acc@5; on SWE-bench Verified's 407 issues outside
+(plain BM25 0.301/0.507/0.587) in 2.9 s per issue including a cold index — above Jina-Code-v2
+embeddings at Acc@1/3, within 0.03 of CodeRankEmbed at Acc@1, and level with Agentless+GPT-4o at Acc@5; on SWE-bench Verified's 407 issues outside
 Lite, 0.435/0.671/0.732 (BM25 0.194/0.373/0.477). We report every component's effect,
 negative results (dense retrieval on CPU, cross-encoder reranking, blind graph expansion, commit
 history, pseudo-relevance feedback, documentation bridges), and a holdout protocol that caught two
 results that looked-at sets had suggested and confirmed a third on a fresh repository. At function
-level the engine lists the edited function among its first five on 0.394 of LocAgent's 274 Lite
+level the engine lists every edited function among its first five on 0.460 of LocAgent's 274 Lite
 instances (BM25 0.318; CodeRankEmbed 0.518) with no model at all, 0.429 on Verified.
 
 ## 1. Introduction
