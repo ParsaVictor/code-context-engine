@@ -7,9 +7,12 @@ harness run with `NM_DEFINITIONS` ≥ k) and the issue with jina-code-v2 (int8
 ONNX), reorders them by cosine, and writes `dense_defs` / `dense_files` for
 `priors.py --prior ext`. Source text comes from the clone at the base commit
 (`git show`), so no checkout is needed. Embeddings are cached by text hash.
+`--model swerank-embed-small` swaps in SweRankEmbed-Small (torch, CLS pooling,
+query instruction prefix; `swerank_embed.py`) — use its own `--cache` file.
 
     py -3 scripts/research/dense_shortlist.py --results dev-s18a-all.jsonl --data devset/swe-dev.json
         --repos repos --out dense-sl-dev.jsonl [--k 30] [--cache emb-cache/shortlist.npz]
+        [--model jina-code-v2|swerank-embed-small]
 """
 import argparse
 import json
@@ -32,6 +35,7 @@ def main():
     ap.add_argument("--cache", default="")
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--subset", default="")
+    ap.add_argument("--model", default="jina-code-v2", choices=["jina-code-v2", "swerank-embed-small"])
     args = ap.parse_args()
     rows = {r["instance_id"]: r for r in json.load(open(args.data, encoding="utf-8"))}
     res = [json.loads(l) for l in open(args.results, encoding="utf-8") if l.strip()]
@@ -42,7 +46,13 @@ def main():
     done = set()
     if os.path.exists(args.out):
         done = {json.loads(l)["instance_id"] for l in open(args.out, encoding="utf-8") if l.strip()}
-    emb = Embedder("jina-code-v2", 512, threads=args.threads)
+    prefix = ""
+    if args.model == "jina-code-v2":
+        emb = Embedder("jina-code-v2", 512, threads=args.threads)
+    else:
+        from swerank_embed import QUERY_PREFIX, SweRankEmbedder
+        emb = SweRankEmbedder(args.model, 512, threads=args.threads)
+        prefix = QUERY_PREFIX
     cache = Cache(args.cache) if args.cache else None
     with open(args.out, "a", encoding="utf-8") as out:
         for n, r in enumerate(res, 1):
@@ -59,7 +69,7 @@ def main():
                 a, b = d["lines"]
                 body = "\n".join(lines[max(a - 1, 0):b])
                 texts.append(f"{d['path']}\n{d['name']}\n{body}"[:1500])
-            query = row["problem_statement"][:4000]
+            query = prefix + row["problem_statement"][:4000]
             t0 = time.time()
             todo = [t for t in [query] + texts if cache is None or key(t) not in cache.vec]
             if todo:
